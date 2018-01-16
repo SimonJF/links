@@ -1,0 +1,118 @@
+
+typename TwoBuyer(Buyer1, Buyer2, Seller) = {|
+  Buyer1 -> Seller: BookTitle;
+  Seller -> Buyer1: Quote;
+  Seller -> Buyer2: Quote;
+  Buyer2 -> Seller: {
+    OK:
+      Buyer2 -> Seller: Address;
+      Seller -> Buyer2: Date;
+      End
+    QUIT: End
+  }
+|}
+
+
+sig ap : AP(TwoBuyer)
+var ap = new();
+
+module Buyer1Impl {
+
+  sig start : () ~> ()
+  fun start() {
+    ignore(spawn {
+      var b1 = connect(ap, Buyer1);
+      communicate(b1)
+    })
+  }
+
+
+  sig communicate : (Buyer1) ~> ()
+  fun communicate(b1) {
+    var b1 = send("The Prince", Seller, b1);
+    log("Sent book title");
+
+    var (quote, b1) = receive(b1);
+    log("Received quote: " ^^ intToString(quote));
+
+    var _ = send(quote / 2, Buyer2, b1);
+    log("Sent quote: " ^^ intToString(quote / 2));
+
+    print("Buyer 1 finished");
+  }
+
+}
+
+module Buyer2Impl {
+  sig start : () ~> ()
+  fun start() {
+    ignore(spawn {
+      var b2 = connect(ap, Buyer2);
+      communicate(b2)
+    })
+  }
+
+  sig communicate : (Buyer2) ~> ()
+  fun communicate(b2) {
+    var (quote, b2) = receive(b2);
+    var (contrib, b2) = receive(b2);
+
+    if (contrib >= quote / 2) {
+      var seller = select OK b2;
+      print("Selected OK");
+
+      var b2 = send("10 Crichton Street, Edinburgh", Buyer1, b2);
+      print("Sent address");
+
+      var (date, _) = receive(b2);
+      log("Received delivery date: " ^^ date)
+    } else {
+      var _ = select QUIT b2;
+      print("Selected QUIT")
+    }
+  }
+}
+
+module SellerImpl {
+
+
+  fun log(msg) {
+    print("SELLER: " ^^ msg);
+  }
+
+  sig start : () ~> ()
+  fun start() {
+    ignore(spawn {
+      var seller = connect(ap, Seller);
+      communicate(seller)
+    });
+  }
+
+  sig communicate : (Seller) ~> ()
+  fun communicate(seller) {
+
+    var (title, seller) = receive(seller);
+    log("Received title " ^^ title ^^ " from buyer 1");
+    var cost = 100;
+
+    var _ = send(cost / 2, Buyer1, seller);
+    log("Sent cost to buyer 1");
+    var seller = send(cost / 2, Buyer2, seller);
+    log("Sent cost to buyer 2");
+
+    offer(seller) {
+      case OK(seller) ->
+        log("Received OK");
+
+        var (address, seller) = receive(seller);
+        log("Received address: " ^^ address);
+
+        var _ = send("Tomorrow", Buyer2, seller);
+        log("Done")
+
+      case QUIT(_) ->
+        log("Received QUIT")
+    }
+  }
+
+}

@@ -1,0 +1,146 @@
+# Three participants: Buyer1, Buyer2, Seller
+# Buyer1 sends a book title to seller. Seller sends a quote to buyer1 and buyer2.
+# Buyer1 tells buyer2 how much can be contributed.
+# Buyer2 notifies seller if it accepts quote. If so, it sends address, then gets
+# purchase date.
+
+typename BookTitle = String;
+typename Quote = Int;
+typename Date = String;
+typename Contribution = Int;
+typename Address = String;
+
+typename Buyer1Seller = !BookTitle . ?Quote . End;
+typename Buyer2Seller = ?Quote . [+| OK: !Address . ?Date . End, QUIT: End |+];
+typename Buyer1Buyer2 = !Contribution . End;
+
+sig apB1S : AP(Buyer1Seller)
+var apB1S = new();
+
+sig apB2S : AP(Buyer2Seller)
+var apB2S = new();
+
+sig apB1B2 : AP(Buyer1Buyer2)
+var apB1B2 = new();
+
+module Buyer1 {
+
+  fun log(msg) {
+    print("BUYER 1: " ^^ msg);
+  }
+
+  sig start : () ~> ()
+  fun start() {
+    ignore(spawn {
+      var seller = accept(apB1S);
+      var buyer2 = accept(apB1B2);
+      log("Session initiated");
+      communicate(seller, buyer2)
+    });
+  }
+
+  sig communicate : (Buyer1Seller, Buyer1Buyer2) ~> ()
+  fun communicate(seller, buyer2) {
+    var seller = send("The Prince", seller);
+    log("Sent book title");
+
+    var (quote, seller) = receive(seller);
+    log("Received quote: " ^^ intToString(quote));
+
+    var _ = send(quote / 2, buyer2);
+    log("Sent quote: " ^^ intToString(quote / 2));
+
+    print("Buyer 1 finished");
+  }
+
+}
+
+module Buyer2 {
+
+  fun log(msg) {
+    print("BUYER 2: " ^^ msg);
+  }
+
+  sig start : () ~> ()
+  fun start() {
+    ignore(spawn {
+      var seller = accept(apB2S);
+      var buyer1 = request(apB1B2);
+      log("Session initiated");
+      communicate(seller, buyer1)
+    });
+  }
+
+  sig communicate : (Buyer2Seller, ~Buyer1Buyer2) ~> ()
+  fun communicate(seller, buyer1) {
+    var (quote, seller) = receive(seller);
+    var (contrib, buyer1) = receive(buyer1);
+
+    if (contrib >= quote / 2) {
+      var seller = select OK seller;
+      print("Selected OK");
+
+      var seller = send("10 Crichton Street, Edinburgh", seller);
+      print("Sent address");
+
+      var (date, _) = receive(seller);
+      log("Received delivery date: " ^^ date)
+    } else {
+      var _ = select QUIT seller;
+      print("Selected QUIT")
+    }
+  }
+
+}
+
+module Seller {
+
+  fun log(msg) {
+    print("SELLER: " ^^ msg);
+  }
+
+  sig start : () ~> ()
+  fun start() {
+    ignore(spawn {
+      var buyer1 = request(apB1S);
+      var buyer2 = request(apB2S);
+      log("Session initiated");
+      communicate(buyer1, buyer2)
+    });
+  }
+
+  sig communicate : (~Buyer1Seller, ~Buyer2Seller) ~> ()
+  fun communicate(buyer1, buyer2) {
+
+    var (title, buyer1) = receive(buyer1);
+    log("Received title " ^^ title ^^ " from buyer 1");
+    var cost = 100;
+
+    var _ = send(cost / 2, buyer1);
+    log("Sent cost to buyer 1");
+    var buyer2 = send(cost / 2, buyer2);
+    log("Sent cost to buyer 2");
+
+    offer(buyer2) {
+      case OK(buyer2) ->
+        log("Received OK");
+
+        var (address, buyer2) = receive(buyer2);
+        log("Received address: " ^^ address);
+
+        var _ = send("Tomorrow", buyer2);
+        log("Done")
+
+      case QUIT(_) ->
+        log("Received QUIT")
+    }
+  }
+}
+
+fun main() {
+  Buyer1.start();
+  Buyer2.start();
+  Seller.start()
+}
+
+main()
