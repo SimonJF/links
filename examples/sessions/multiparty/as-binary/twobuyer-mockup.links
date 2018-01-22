@@ -32,7 +32,7 @@ module Buyer1Impl {
     var b1 = send("The Prince", Seller, b1);
     log("Sent book title");
 
-    var (quote, b1) = receive(b1);
+    var (quote, b1) = receive(Seller, b1);
     log("Received quote: " ^^ intToString(quote));
 
     var _ = send(quote / 2, Buyer2, b1);
@@ -54,8 +54,8 @@ module Buyer2Impl {
 
   sig communicate : (Buyer2) ~> ()
   fun communicate(b2) {
-    var (quote, b2) = receive(b2);
-    var (contrib, b2) = receive(b2);
+    var (quote, b2) = receive(Seller, b2);
+    var (contrib, b2) = receive(Buyer1, b2);
 
     if (contrib >= quote / 2) {
       var seller = select OK b2;
@@ -64,7 +64,7 @@ module Buyer2Impl {
       var b2 = send("10 Crichton Street, Edinburgh", Buyer1, b2);
       print("Sent address");
 
-      var (date, _) = receive(b2);
+      var (date, _) = receive(Seller, b2);
       log("Received delivery date: " ^^ date)
     } else {
       var _ = select QUIT b2;
@@ -74,7 +74,6 @@ module Buyer2Impl {
 }
 
 module SellerImpl {
-
 
   fun log(msg) {
     print("SELLER: " ^^ msg);
@@ -104,7 +103,7 @@ module SellerImpl {
       case OK(seller) ->
         log("Received OK");
 
-        var (address, seller) = receive(seller);
+        var (address, seller) = receive(Buyer2, seller);
         log("Received address: " ^^ address);
 
         var _ = send("Tomorrow", Buyer2, seller);
@@ -116,3 +115,12 @@ module SellerImpl {
   }
 
 }
+
+
+fun main() {
+  Buyer1.start();
+  Buyer2.start();
+  Seller.start()
+}
+
+main()
