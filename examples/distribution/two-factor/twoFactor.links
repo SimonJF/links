@@ -1,0 +1,174 @@
+typename Username = String;
+typename Password = String;
+typename ChallengeKey = Int;
+typename Response = Int;
+typename Secret = String;
+
+typename TwoFactorServer =
+  ?(Username, Password).[+|
+    Authenticated: ServerMain,
+    Challenge: !ChallengeKey.?Response.
+      [+| Authenticated: ServerMain, AccessDenied: End |+],
+    AccessDenied: End |+];
+
+typename ServerMain = !Secret.End;
+typename TwoFactorClient = ~TwoFactorServer;
+typename ClientMain = ~ServerMain;
+
+
+
+module Server {
+
+  sig checkDetails : (Username, Password) ~> Bool
+  fun checkDetails(username, password) {
+    (username == "Alice") && (password == "hunter2")
+  }
+
+  sig checkDetailsExn : (Username, Password) ~> Bool
+  fun checkDetailsExn(username, password) {
+    raise
+  }
+
+  sig serverMain : (ServerMain) ~> ()
+  fun serverMain(s) {
+    var _ = send("Hello! This is a secret!", s);
+    ()
+  }
+
+  sig twoFactorServer : (TwoFactorServer) ~%~> ()
+  fun twoFactorServer(s) {
+    var ((username, password), s) = receive(s);
+    if (checkDetails(username, password)) {
+      var s = select Authenticated s;
+      serverMain(s);
+    } else {
+      var _ = select AccessDenied s;
+      ()
+    }
+  }
+
+  sig twoFactorServerExn : (TwoFactorServer) ~> ()
+  fun twoFactorServerExn(s) {
+    var ((username, password), s) = receive(s);
+    var res = try checkDetails(username, password) as res in {
+      Some(res)
+    } otherwise {
+      None
+    };
+
+    switch (res) {
+      case Some(isAuthenticated) ->
+        if (isAuthenticated) {
+          var s = select Authenticated s;
+          serverMain(s);
+        } else {
+          var _ = select AccessDenied s;
+          ()
+        }
+      case None ->
+        cancel(s);
+        print("An exception occurred!")
+    }
+  }
+}
+
+module Client {
+
+  fun getInput(dom_id) {
+    var textNode = getNodeById(dom_id);
+    domGetPropertyFromRef(textNode, "value")
+  }
+
+  ## Client stuff
+  sig setStatus : (String) ~> ()
+  fun setStatus(status) {
+    var statusNode = stringToXml(status);
+    domReplaceChildren(statusNode, getNodeById("statusText"))
+  }
+
+  sig loginFailed : () ~> ()
+  fun loginFailed() {
+    setStatus("Login failed!")
+  }
+
+  sig clientMain : (ClientMain) ~> ()
+  fun clientMain(s) {
+    var (secret, _) = receive(s);
+    setStatus("Success! Secret: " ^^ secret)
+  }
+
+  sig generateResponse : (ChallengeKey) -> Response
+  fun generateResponse(key) {
+    key + 1
+  }
+
+  sig twoFactorClient : (String, String, TwoFactorClient) ~> ()
+  fun twoFactorClient(username, password, s) {
+    var s = send((username, password), s);
+    offer(s) {
+      case Authenticated(s) -> clientMain(s)
+      case Challenge(s) ->
+        var (key, s) = receive(s);
+        var s = send(generateResponse(key), s);
+        offer(s) {
+          case Authenticated(s) -> clientMain(s)
+          case AccessDenied(_) -> loginFailed()
+        }
+      case AccessDenied(_) -> loginFailed()
+    }
+  }
+
+
+  sig makePage : () ~> Page
+  fun makePage() {
+    var clientEP = fork (fun(serverEP) { Server.twoFactorServer(serverEP) });
+
+
+    fun hideForm() {
+      domReplaceChildren(<#></#>, getNodeById("pageBody"))
+    }
+
+    var hndlr = spawnClient {
+      receive { case _ ->
+        var username = getInput("username");
+        var password = getInput("password");
+        hideForm();
+        twoFactorClient(username, password, clientEP)
+      }
+    };
+
+    var _ = spawnClient {
+      var pageBody =
+        <#>
+          <form l:onsubmit="{ hndlr ! () }">
+            <p>Username: <input type="text" id="username"></input></p>
+            <p>Password: <input type="text" id="password"></input></p>
+            <input type="submit" value="Submit"></input>
+          </form>
+        </#>;
+
+      fun showForm() {
+        domReplaceChildren(pageBody, getNodeById("pageBody"))
+      }
+    showForm() };
+
+    page
+      <html>
+        <body>
+          <h1>Two-Factor Authentication</h1>
+          <div id="status">
+            <p>Status: <div id="statusText">Not logged in.</div></p>
+          </div>
+          <div id="pageBody"></div>
+        </body>
+      </html>
+  }
+}
+
+fun main() {
+  addRoute("/", fun(_) { Client.makePage() });
+  serveWebsockets();
+  servePages()
+}
+
+main()
