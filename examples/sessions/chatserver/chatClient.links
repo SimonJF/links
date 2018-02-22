@@ -37,6 +37,11 @@ fun join(nick) {
   outputMessage(<p><b>{stringToXml(nick)}</b> just joined</p>)
 }
 
+sig weJoined : (Nickname) ~> ()
+fun weJoined(nick) {
+  outputMessage(<p>Joined as <b>{stringToXml(nick)}</b></p>)
+}
+
 sig newTopic : (Topic) ~> ()
 fun newTopic(topic) {
   domReplaceChildren(
@@ -103,8 +108,8 @@ fun outgoingLoop(ap, s) {
   }
 }
 
-sig beginChat : (Topic, [Nickname], ClientReceive, ClientSend) ~> ()
-fun beginChat(topic, nicks, incoming, outgoing) {
+sig beginChat : (Nickname, Topic, [Nickname], ClientReceive, ClientSend) ~> ()
+fun beginChat(nick, topic, nicks, incoming, outgoing) {
   var ap = (new() : AP(?Message.End));
 
   # spawn the incoming and outgoing message handlers
@@ -128,7 +133,8 @@ fun beginChat(topic, nicks, incoming, outgoing) {
     </div>;
 
   # remove the name request box, put the chatbox in, and we can get going
-  domReplaceChildren(box, getNodeById("main"))
+  domReplaceChildren(box, getNodeById("main"));
+  weJoined(nick)
 }
 
 sig connect : () ~> ()
@@ -145,7 +151,7 @@ fun connect() {
       case Join(s) ->
         var ((topic, nicks, incoming), s) = receive(s);
         debug("received data");
-        beginChat(topic, nicks, incoming, s)
+        beginChat(nick, topic, nicks, incoming, s)
     }
   })
 }
@@ -163,17 +169,9 @@ fun mainPage() {
         <link href="css/abcd.css" rel="stylesheet"></link>
       </head>
 
-      <div class="navbar-wrapper">
-        <div class="container">
-          <div id="navbar" class="navbar navbar-inverse navbar-fixed-top" role="navigation">
-          </div>
-        </div>
-      </div>
-
       <div class ="jumbotron">
         <div class="container">
           <h1>Links Session-Typed Chat</h1>
-          <hr>...complete with totally original stylesheet</hr>
         </div>
       </div>
 
