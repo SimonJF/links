@@ -1,5 +1,10 @@
 (install
   (section lib)
   (files (binaryTree.links as stdlib/binaryTree.links)
-         (comparators.links as stdlib/comparators.links))
+         (comparators.links as stdlib/comparators.links)
+         (attrs.links as stdlib/attrs.links)
+         (events.links as stdlib/events.links)
+         (tags.links as stdlib/tags.links)
+         (virtualDom.links as stdlib/virtualDom.links)
+  )
   (package links))

@@ -1,0 +1,114 @@
+### VDOM STUFF ###
+
+# Doc Type
+
+typename VirtualHandler(a) =
+  [| StringHandler: (String, (String) {}~> a)
+   | UnitHandler: (String, () {}~> a)
+   | TupleIntHandler: (String, ((Int,Int)) {}~> a)
+   | TimeHandler: (Int, () {}~> a)
+   | AnimationFrameHandler: ((a) {}~> a) |];
+
+typename Doc(a) =
+  [| DocTextNode: (String)
+   | DocTagNode:
+      (tagName: String, attrs: [(String, String)], eventHandlers: [VirtualHandler(a)],
+       children: [Doc(a)])
+   |];
+
+# Needed to ensure that virtual-dom is open
+module VirtualDom {
+  alien javascript "/lib/virtual-dom.js" {
+    dummy : ();
+  }
+}
+
+typename Sub(a) = [| EmptySub | HandlerSub : (String, VirtualHandler(a)) | Sub : (a) |];
+
+
+# Loads the "vdom.js" file, exposes runDom and updateDom.
+module VDom {
+  alien javascript "/lib/vdom.js" {
+    runDom : forall a . (String, Doc(a), Process({hear:a, wild}), [Sub(a)]) ~%e~> ();
+    updateDom : forall a . (Doc(a)) ~%e~> ();
+    updateSubscriptions : forall a . (([Sub(a)],[Sub(a)])) ~%e~> ();
+    getUniqueID : forall a . (VirtualHandler(a)) ~%e~> (String);
+    # diffSubs : forall a . (VirtualHandler(a)) ~%e~> (String);
+  }
+}
+### SUBSCRIPTIONS ###
+
+
+fun uniqueID(hdlr) {
+  VDom.getUniqueID(hdlr)
+}
+
+fun getKeyDownCode(f) {
+  var hdler = StringHandler("keydown", f);
+  HandlerSub(uniqueID(hdler), hdler)
+}
+
+fun getKeyUpCode(f) {
+  var hdler = StringHandler("keyup", f);
+  HandlerSub(uniqueID(hdler), hdler)
+}
+
+fun getKeyPressCode(f) {
+  var hdler = StringHandler("keypress", f);
+  HandlerSub(uniqueID(hdler), hdler)
+}
+
+fun getMousePos(f) {
+  var hdler = TupleIntHandler("mousemove", f);
+  HandlerSub(uniqueID(hdler), hdler)
+}
+
+fun getEvery(interval, f) {
+  var hdler = TimeHandler(interval, f);
+  HandlerSub(uniqueID(hdler), hdler)
+}
+
+fun animationFrame(f) {
+  var hdler = UnitHandler("animationFrame", f);
+  HandlerSub(uniqueID(hdler), hdler)
+}
+
+######
+
+fun textDoc(str) {
+  DocTextNode(str)
+}
+
+# sig tag : (String, [(String, String)], [VirtualHandler(a)], [Doc(a)]) -> Doc(a)
+fun tag(nameOfTag, attrsOfTag, handlers, childrenOfTag) {
+  DocTagNode((tagName=nameOfTag, attrs=attrsOfTag, eventHandlers=handlers, children=childrenOfTag))
+}
+
+fun attr(k, v) {
+  (k, v)
+}
+
+# Main event loop
+fun evtLoop(updt, render, model, prevSubscriptions, subscriptionsFn) {
+  receive {
+    case msg ->
+      var newModel = updt(msg, model);
+      # Get new subscriptions
+      var newSubscriptions = subscriptionsFn(newModel);
+      # Update subscriptions on the DOM (FFI call)
+      VDom.updateSubscriptions((prevSubscriptions, newSubscriptions));
+      # Update DOM
+      VDom.updateDom(render(newModel));
+      # Loop with new subscriptions
+      evtLoop(updt, render, newModel, newSubscriptions, subscriptionsFn)
+  }
+}
+
+# User-facing function
+fun runVDom(placeholder, view, updt, model, subscriptions) {
+  var evtHandler = spawnClient {
+    evtLoop(updt, view, model, subscriptions(model), subscriptions)
+  };
+  var _ = spawnClient { VDom.runDom(placeholder, view(model), evtHandler, subscriptions(model)) };
+  evtHandler
+}

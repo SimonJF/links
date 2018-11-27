@@ -1,0 +1,52 @@
+open Tags;
+open Attrs;
+open Events;
+open VirtualDom;
+
+typename Model = (keyPressed : String);
+typename Msg = [| KeyPressed : String |];
+
+fun keyCodeHandler() {
+  getKeyUpCode(fun(keycode) {
+    KeyPressed(keycode)
+  })
+}
+
+sig updt : (Msg, Model) ~%e~> Model
+fun updt(msg, model) {
+  switch(msg) {
+    case KeyPressed(keycode) ->
+      (model with keyPressed = keycode)
+  }
+}
+
+sig view : (Model) ~%e~> Doc(Msg)
+fun view(model) {
+    div ([id ("testdiv"), style ("width:100%;height:100%")],[],
+    [textDoc("Key pressed: "),textDoc(model.keyPressed)])
+}
+
+fun subscriptions(model) {
+  [keyCodeHandler()]
+}
+
+fun mainPage(_) {
+  var initialModel = (keyPressed = "None");
+  var evtHandler = runVDom("placeholder", view, updt, initialModel, subscriptions);
+  page
+  <html>
+    <head>
+      <title>Links - Subscriptions</title>
+    </head>
+    <body>
+      <div id="placeholder"></div>
+    </body>
+  </html>
+}
+
+fun main() {
+  addRoute("/", mainPage);
+  servePages()
+}
+
+main()
