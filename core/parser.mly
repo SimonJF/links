@@ -970,7 +970,7 @@ binding:
                                                                                   None)) }
 | typed_handler_binding                                        { with_pos $loc (`Handler $1) }
 | typedecl SEMICOLON | links_module | alien_block
-| links_open SEMICOLON { $1 }
+| links_open SEMICOLON                                         { $1 }
 
 bindings:
 | binding                                                      { [$1]      }
