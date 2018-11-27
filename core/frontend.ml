@@ -39,12 +39,12 @@ struct
   let program =
     fun tyenv pos_context program ->
       let program = (ResolvePositions.resolve_positions pos_context)#program program in
-      let program = DesugarAlienBlocks.transform_alien_blocks program in
       (* Module-y things *)
       let (program, ffi_files) =
         if ModuleUtils.contains_modules program then
           if Settings.get_value Basicsettings.modules then
             let prog_with_deps = Chaser.add_dependencies program in
+            let prog_with_deps = DesugarAlienBlocks.transform_alien_blocks prog_with_deps in
             let ffi_files = ModuleUtils.get_ffi_files prog_with_deps in
             (DesugarModules.desugarModules prog_with_deps, ffi_files)
           else
