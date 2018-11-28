@@ -5,11 +5,17 @@ open Events;
 
 typename Entry = (description : String, completed : Bool, editing : Bool, id : Int);
 typename Model = (entries : [Entry], field : String, uid : Int, visibility : String);
-typename Msg = [| NoOp | UpdateField : String | EditingEntry : (Int,Bool) | UpdateEntry : (Int,String) | Add | Delete : Int | DeleteComplete | Check : (Int,Bool) | CheckAll : Bool | ChangeVisibility : String |];
-
-fun getKeycode(f) {
-  StringHandler("keycode", f)
-}
+typename Msg =
+  [| NoOp
+   | UpdateField : String
+   | EditingEntry : (Int,Bool)
+   | UpdateEntry : (Int,String)
+   | Add
+   | Delete : Int
+   | DeleteComplete
+   | Check : (Int,Bool)
+   | CheckAll : Bool
+   | ChangeVisibility : String |];
 
 fun updateFieldHandler() {
   onInput(fun (str) { UpdateField(str) })
@@ -63,20 +69,20 @@ fun editingHandler(id, tf) {
   onDoubleClick(fun () { EditingEntry(id, tf) })
 }
 
-#sig newEntry : (String,Int) -> Entry
+sig newEntry : (String,Int) ~> Entry
 fun newEntry(desc, idToSet) {
-  (description = desc, completed = false, editing = false, id = idToSet) : Entry
+  (description = desc, completed = false, editing = false, id = idToSet)
 }
 
 fun getUpdatedEntries(model) {
   if (model.field == "") {
     model.entries
   } else {
-    model.entries++[newEntry(model.field, model.uid)]
+    model.entries ++ [newEntry(model.field, model.uid)]
   }
 }
 
-#sig updt : (Msg, Model) ~%e~> Model
+sig updt : (Msg, Model) ~%e~> Model
 fun updt(msg, model) {
   switch (msg) {
     case NoOp ->
@@ -139,27 +145,35 @@ sig viewInput : (String) -> Doc(Msg)
 fun viewInput(task) {
   header ([class("header")], [], [
     h1 ([], [], [textDoc("todos")]),
-    input ([type ("text"), class ("new-todo"), placeholder ("What needs to be done?"), name ("newTodo"), id ("newTodo"), value(task)],
+    input ([type ("text"), class ("new-todo"), placeholder ("What needs to be done?"), name ("newTodo"), id ("newTodo"), text(task)],
     [updateFieldHandler(), enterHandler()], [])
   ])
 }
 
+sig viewEntry : (Entry) ~> Doc(Msg)
 fun viewEntry(todo) {
-  var classes = classList([("completed", todo.completed),("editing",todo.editing)]);
+  var classes =
+    classList([("completed", todo.completed), ("editing",todo.editing)]);
   li ([class (classes)],[],[
+
     div ([class ("view")], [], [
-      input ([type ("checkbox"), name ("toggle"), class ("toggle"), checked (todo.completed)], [checkEntryHandler(todo.id, not(todo.completed))], []),
+      input ([type ("checkbox"), name ("toggle"), class ("toggle"), checked (todo.completed)],
+             [checkEntryHandler(todo.id, not(todo.completed))], []),
       label ([],[editingHandler(todo.id, true)],[textDoc(todo.description)]),
       span ([class ("destroy")], [deleteHandler(todo.id)], [])
     ]),
-    input ([class ("edit"), value (todo.description), name ("title"), id ("todo-" ^^ intToString(todo.id))],
-    [updateEntryHandler(todo.id), blurHandler(todo.id, false), editingEnterHandler(todo.id, false)],[])
-  ])
-}
 
-sig viewKeyedEntry : (Entry) ~> Doc(Msg)
-fun viewKeyedEntry(todo) {
-  viewEntry(todo)
+    input (
+      [class ("edit"),
+       value (todo.description),
+       name ("title"),
+       id ("todo-" ^^ intToString(todo.id))
+      ],
+      [updateEntryHandler(todo.id),
+       blurHandler(todo.id, false),
+       editingEnterHandler(todo.id, false)
+      ], [])
+  ])
 }
 
 sig viewEntries : (String, [Entry]) ~> Doc(Msg)
@@ -174,23 +188,10 @@ fun viewEntries(visibility, entries) {
         true
     }
   };
-
-  var incompleteList = for (x <- entries) { if (x.completed == false) { [x.completed] } else { [] } };
-  var allCompleted = if (length(incompleteList) == 0) {
-    true
-  } else {
-    false
-  };
-
-  var cssVisibility = if (length(entries) == 0) {
-      "visibility:hidden"
-    } else {
-      "visibility:visible"
-    };
-
-  section ([class ("main"), style (cssVisibility)], [], [
-    input ([type ("checkbox"), id ("toggle-all"), class ("toggle-all")], [checkAllHandler(not(allCompleted))], []),
-    ul ([class ("todo-list")],[],map(viewKeyedEntry, filter(isVisible, entries)))
+  var allCompleted = length(filter(fun(x) { not(x.completed) }, entries)) == 0;
+  section ([class ("main")], [], [
+      input ([type ("checkbox"), id ("toggle-all"), class ("toggle-all")], [checkAllHandler(not(allCompleted))], []),
+      ul ([class ("todo-list")],[],map(viewEntry, filter(isVisible, entries)))
   ])
 }
 
@@ -226,7 +227,7 @@ fun viewControlsFilters(visibility) {
 
 sig viewControls : (String, [Entry]) ~> Doc(Msg)
 fun viewControls(visibility, entries) {
-  var entriesCompleted = length(for (x <- entries) { if (x.completed == true) { [x.completed] } else { [] } });
+  var entriesCompleted = length(filter(fun(x) { x.completed }, entries));
   var entriesLeft = length(entries) - entriesCompleted;
   var entriesEmpty = if (length(entries) == 0) {
     true
