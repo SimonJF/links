@@ -1,0 +1,377 @@
+open ChatSessions
+
+
+# Model: Can be one of three states.
+#  1. Not connected to a room
+#  2. Connected as "ordinary" user
+#  3. Connected as moderator
+typename RoomInfo = (roomName: RoomName, nicknames: [Nickname], topic: Topic);
+
+fun mkRoomInfo(name, topic, nicks) {
+  (roomName=name, nicknames=nicks, topic=topic)
+}
+
+typename Error = [| ErrInvalidName | ErrNameInUse | ErrBadRoom |];
+
+# TODO: Generalise these to named records?
+typename Model =
+      # [RoomName]: rooms on server. RoomName: currently-selected room
+  [|  NotConnected : (Nickname, [RoomName], RoomName, Maybe(Error), ClientSelect)
+   |  Connected : (Nickname, ClientSend, RoomInfo)
+   |  ConnectedAsModerator : (Nickname, ClientSend, ModeratorSend, RoomInfo) |];
+
+# Messages from the UI
+typename Message =
+  [|  # Login screen messages
+      UpdateNickname: Nickname
+   |  UpdateSelectedRoom: RoomName
+   |  SubmitJoinRoom
+      # Chat screen messages
+   |  UpdateChatBox: Message
+   |  SubmitChat
+      # Moderator messages
+   |  UpdateSelection: Nickname
+   |  Kick
+   |  Mute
+   |  MakeModerator
+      # Incoming session messages from the server
+   |  SessionIncomingChat: (Nickname, Message, ClientReceive)
+   |  SessionNewUser: (Nickname, ClientReceive)
+   |  SessionNewTopic: (Topic, ClientReceive)
+   |  SessionUserLeft: (Nickname, ClientReceive)
+   |  SessionUserMuted: (Nickname, ClientReceive)
+   |  SessionBecomeModerator: (Nickname, ModeratorSend, ClientReceive)
+   |  SessionKick |];
+
+sig updt : (Message, Model) ~> Model
+fun updt(msg, model) {
+
+  # Some messages only make sense at certain stages in the application.
+  # I wonder whether we could generalise the architecture such that the
+  # event loop only needed to consider messages relevant in the current
+  # state?
+
+  # Operation on the NotConnected state
+  fun withNotConnected(f, model) {
+    switch(model) {
+      case NotConnected(nick, room, err) -> f(nick, room, err)
+      case _ -> model
+    }
+  }
+
+  sig clientReceive : (ClientReceive) ~> Message
+  fun clientReceive(cr) {
+    offer(cr) {
+      IncomingChatMessage(cr) ->
+        var ((nick, msg), cr) = receive(cr);
+        SessionIncomingChat(nick, msg, cr)
+      NewUser(cr) ->
+        var (nick, cr) = receive(cr);
+        SessionNewUser(nick, cr)
+      SessionNewTopic(topic, cr) ->
+        var (topic, cr) = receive(cr);
+        SessionNewTopic(topic, cr)
+################# TODO: GO FROM HERE
+      NewTopic : ?(Topic) . ClientReceive,
+      UserLeft : ?(Nickname) . ClientReceive,
+      UserMuted : ?(Nickname) . ClientReceive,
+      UserUnmuted : ?(Nickname) . ClientReceive,
+      BecomeModerator : ?ModeratorSend . ClientReceive,
+      Kick : End
+    }
+  }
+
+  switch(msg) {
+    case UpdateNickname(newNick) ->
+      withNotConnected(fun(_, roomList, room, err, cs) {
+        NotConnected(newNick, roomList, room, err, cs)
+      }, model)
+    case UpdateJoinRoomBox(newRoom) ->
+      withNotConnected(fun(nick, roomList, _, err, cs) {
+        NotConnected(nick, roomList, newRoom, err, cs)
+      }, model)
+    case SubmitJoinRoom ->
+      withNotConnected(fun(nick, roomList, room, err, cs) {
+        # Doing this inline for now. I wonder whether doing synchronous
+        # communication in the update loop is actually a good idea.
+        # The advantage is that we don't have to pollute the event loop
+        # with more messages. The disadvantage is that other UI messages
+        # are blocked.
+        var cs = send((nick, room), cs);
+        offer(cs) {
+          case JoinedOK(s) ->
+            var ((topic, nicks, cr), s) = receive(s);
+            # TODO: Implement `subscribe` functionality to subscribe CR for updates.
+            # It might make a little more sense to have this as a "command" a la Elm,
+            # because then it'll be processed in the event loop -- which has access
+            # to the event loop PID and can direct messages correctly.
+            (Connected(nick, cs, mkRoomInfo(room, topic, nicks)), Cmd.Spawn(linfun() { clientReceive(cr) }))
+          case JoinedOKAsModerator(s) ->
+            var ((topic, nicks, cr, ms), s) = receive(s);
+            subscribe(clientReceive(cr));
+            ConnectedAsModerator(nick
+          case Nope(s) ->
+            # Grab error to display
+            var (err, _) = receive(s);
+            var displayErr =
+              switch(err) {
+                case NameInUse -> ErrNameInUse
+                case BadRoom -> ErrBadRoom
+              };
+            # Reconnect to get new session and rooms
+            var cs = request(wap);
+            var (rooms, cs) = receive(cs);
+            NotConnected("", rooms, "", Just(displayErr), cs)
+        }
+      })
+    case UpdateChatBox(newMessage) -> model
+    case UpdateNickname(newNick) -> model
+    case UpdateNickname(newNick) -> model
+    case UpdateNickname(newNick) -> model
+    case UpdateNickname(newNick) -> model
+    case UpdateNickname(newNick) -> model
+    case UpdateNickname(newNick) -> model
+    case UpdateNickname(newNick) -> model
+    case UpdateNickname(newNick) -> model
+    case UpdateNickname(newNick) -> model
+  }
+}
+
+sig render : (Model) ~> Doc(Message)
+fun render(model) {
+  open Tags;
+
+  # dummy for now
+  div([], [], [])
+}
+
+
+
+  fun displayChat(room, topic, nicknames, clientSend, clientReceive, moderatorChan) {
+
+    fun chatBox(outgoingAP) {
+      fun submit() {
+        OutgoingMessageHandler.chatMessage(outgoingAP, DomFunctions.getInputContents(DomFunctions.chat_box_id));
+        DomFunctions.clearInput(DomFunctions.chat_box_id)
+      }
+
+      <#>
+        <div id="chatBox">
+          <div id="admin_placeholder"></div>
+          <div id="topic"><p><span class="lead"><b>Room: </b>{stringToXml(room)}</span></p></div>
+          <div id="topic"><p><span class="lead"><b>Topic: </b>{stringToXml(topic)}</span></p></div>
+          <div id="msgs" style="overflow-y:scroll; width:100%; height:400px;"></div>
+          <div>
+            <form l:onsubmit="{submit()}">
+              <input id="{DomFunctions.chat_box_id}" type="text" style="width:100%"></input>
+            </form>
+          </div>
+        </div>
+      </#>
+    }
+
+    var (isMod, moderatorChan) =
+      switch(moderatorChan) {
+        case Just(c) -> (true, Just(c))
+        case Nothing -> (false, Nothing)
+      };
+
+    # Spawn process which sends messages to the server
+    var outgoingAP = OutgoingMessageHandler.init(clientSend, moderatorChan);
+
+    # Spawn process which handles incoming messages from the server
+    IncomingMessageHandler.init(outgoingAP, clientReceive, isMod, nicknames);
+
+    # Finally, remove the name request box, put the chatbox in, put mod form in
+    # if required, and start off
+    domReplaceChildren(chatBox(outgoingAP), getNodeById("main"));
+
+    if (isMod) {
+      DomFunctions.addAdminForm(outgoingAP, nicknames)
+    } else {
+      ()
+    }
+  }
+
+  fun chooseRoom(ap) {
+    var roomFormAP = new();
+
+    fun submitRoom() {
+      ignore(request(roomFormAP));
+    }
+
+    fun errToString(err) {
+      switch(err) {
+        case NameInUse -> "That nickname is already in use."
+        case BadRoom -> "There was an error connecting to that room."
+      }
+    }
+
+    fun roomSelectLoop(s, roomCount) {
+      fun getRoomName(n) {
+        if (n == roomCount) {
+          DomFunctions.getInputContents("newRoomName")
+        } else {
+          var domRef = getNodeById("room" ^^ intToString(n));
+          # Stringly-typed, gotta love it
+          if (domGetPropertyFromRef(domRef, "checked") == "true") {
+            domGetPropertyFromRef(domRef, "value")
+          } else {
+            getRoomName(n + 1)
+          }
+        }
+      }
+
+      # Wait for the form to be submitted
+      ignore(accept(roomFormAP));
+      var nickname = DomFunctions.getInputContents("nickname");
+      var roomName = getRoomName(0);
+      if (roomName == "" || nickname == "") {
+        print("Please enter a valid room name and nickname");
+        roomSelectLoop(s, roomCount)
+      } else {
+        var s = send((roomName, nickname), s);
+        offer(s) {
+          case JoinedOK(s) ->
+            var ((topic, nicknames, clientReceive), s) = receive(s);
+            displayChat(roomName, topic, nicknames, s, clientReceive, Nothing)
+          case JoinedOKAsModerator(s) ->
+            var ((topic, nicknames, clientReceive, modSend), s) = receive(s);
+            displayChat(roomName,  topic, nicknames, s, clientReceive, Just(modSend))
+          case Nope(s) ->
+            var (err, _) = receive(s);
+            print(errToString(err));
+            # Try again.
+            chooseRoom(ap)
+        }
+      }
+    }
+
+    fun makeRoomForm(rooms) {
+      fun makeRadioRec(rooms, i) {
+        switch(rooms) {
+          case [] ->
+            if (i == 0) {
+            <#>
+             <div class="radio">
+                <label>
+                  <input type="radio" name="roomName" id="newRoom" value="newRoom" checked="checked" />
+                  New Room
+                  <input type="text" id="newRoomName" ></input>
+                </label>
+              </div>
+            </#>
+            } else {
+            <#>
+             <div class="radio">
+                <label>
+                  <input type="radio" name="roomName"
+                    id="newRoom" value="newRoom"  />
+                  New Room
+                  <input type="text" id="newRoomName" />
+                </label>
+              </div>
+            </#>
+            }
+          case x::xs ->
+            var roomId = "room" ^^ (intToString(i));
+            # If radio button is the first, it's checked by default
+            var component =
+              if (i == 0) {
+                <#>
+                  <input type="radio" name="roomName"
+                    id="{roomId}" value="{x}" checked="checked" />
+                </#>
+              } else {
+                <#>
+                  <input type="radio" name="roomName"
+                    id="{roomId}" value="{x}" />
+                </#>
+              };
+
+            <#>
+              <div class="radio">
+                <label>
+                  { component }
+                  { stringToXml(x) }
+                </label>
+              </div>
+              { makeRadioRec(xs, i + 1) }
+            </#>
+        }
+      }
+      <#>
+        <form id="roomForm" l:onsubmit="{ submitRoom() }">
+            <div>
+              <label for="nickname">
+                Nickname
+              </label>
+              <input type="text" id="nickname" autofocus="true" />
+            </div>
+            { makeRadioRec(rooms, 0) }
+            <div>
+              <input type="submit" name="submitButton" value="Join" />
+            </div>
+        </form>
+      </#>
+    }
+
+    # At submission, sends the room name and nickname to the server,
+    # checks the response from the server, and either shows an error
+    # and repeats, or proceeds to the main chat application
+    # get all available rooms from the server and pick one via radio buttons
+
+    # First: request from the AP to get a ClientConnect AP
+    var (s: ClientConnect) = request(wap);
+    # Next, grab the list of rooms
+    var (rooms, s) = receive(s);
+
+    # Next, populate the placeholder with the received rooms
+    var generated_radio_dom = makeRoomForm(rooms);
+    domReplaceChildren(generated_radio_dom, getNodeById("room_placeholder"));
+
+    # Finally, handle room selection
+    roomSelectLoop(s, length(rooms));
+  }
+
+  fun start() {
+    var _ = spawnClient { chooseRoom(wap) };
+    page
+      <html>
+        <head>
+          <title>Extended Links Chat Application</title>
+          <link href="http://fonts.googleapis.com/css?family=Merriweather:400,300italic,300" rel="stylesheet" type="text/css"></link>
+          <link href="http://fonts.googleapis.com/css?family=Kotta+One" rel="stylesheet" type="text/css"></link>
+          <link href="http://fonts.googleapis.com/css?family=Lora" rel="stylesheet" type="text/css"></link>
+          <link href="css/bootstrap.min.css" rel="stylesheet"></link>
+          <link href="css/abcd.css" rel="stylesheet"></link>
+        </head>
+
+        <div class="navbar-wrapper">
+          <div class="container">
+            <div id="navbar" class="navbar navbar-inverse navbar-fixed-top" role="navigation">
+            </div>
+          </div>
+        </div>
+
+        <div class ="jumbotron">
+          <div class="container">
+            <h1>Links Session-Typed Chat</h1>
+            <hr>...complete with totally original stylesheet</hr>
+          </div>
+        </div>
+
+
+        <div id="main" class="container marketing">
+          <div class="row featurette">
+            <div id="placeholder"></div>
+            <div id="roomSelect">
+              <p> Choose one of the existing rooms or create a new one.</p>
+              <div id="room_placeholder"></div>
+            </div>
+          </div>
+        </div>
+      </html>
+  }
+  start()
+}
