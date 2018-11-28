@@ -11,7 +11,12 @@ fun mkRoomInfo(name, topic, nicks) {
   (roomName=name, nicknames=nicks, topic=topic)
 }
 
-typename Error = [| ErrInvalidName | ErrNameInUse | ErrBadRoom |];
+typename Error =
+  [| ErrInvalidName
+   | ErrNameInUse
+   | ErrBadRoom
+   | ErrKicked
+   |];
 
 # TODO: Generalise these to named records?
 typename Model =
@@ -30,10 +35,10 @@ typename Message =
    |  UpdateChatBox: Message
    |  SubmitChat
       # Moderator messages
-   |  UpdateSelection: Nickname
-   |  Kick
-   |  Mute
-   |  MakeModerator
+   |  ModUpdateSelection: Nickname
+   |  ModKick
+   |  ModMute
+   |  ModMakeModerator
       # Incoming session messages from the server
    |  SessionIncomingChat: (Nickname, Message, ClientReceive)
    |  SessionNewUser: (Nickname, ClientReceive)
@@ -68,16 +73,22 @@ fun updt(msg, model) {
       NewUser(cr) ->
         var (nick, cr) = receive(cr);
         SessionNewUser(nick, cr)
-      SessionNewTopic(topic, cr) ->
+      NewTopic(topic, cr) ->
         var (topic, cr) = receive(cr);
         SessionNewTopic(topic, cr)
-################# TODO: GO FROM HERE
-      NewTopic : ?(Topic) . ClientReceive,
-      UserLeft : ?(Nickname) . ClientReceive,
-      UserMuted : ?(Nickname) . ClientReceive,
-      UserUnmuted : ?(Nickname) . ClientReceive,
-      BecomeModerator : ?ModeratorSend . ClientReceive,
-      Kick : End
+      UserLeft(cr) ->
+        var (nick, cr) = receive(cr);
+        SessionUserLeft(topic, cr)
+      UserMuted(cr) ->
+        var (nick, cr) = receive(cr);
+        SessionUserMuted(topic, cr)
+      UserUnmuted(cr) ->
+        var (nick, cr) = receive(cr);
+        SessionUserUnmuted(topic, cr)
+      BecomeModerator(cr) ->
+        var (ms, cr) = receive(cr);
+        SessionBecomeModerator(ms, cr)
+      Kick(_) -> SessionKick
     }
   }
 
@@ -125,15 +136,42 @@ fun updt(msg, model) {
         }
       })
     case UpdateChatBox(newMessage) -> model
-    case UpdateNickname(newNick) -> model
-    case UpdateNickname(newNick) -> model
-    case UpdateNickname(newNick) -> model
-    case UpdateNickname(newNick) -> model
-    case UpdateNickname(newNick) -> model
-    case UpdateNickname(newNick) -> model
-    case UpdateNickname(newNick) -> model
-    case UpdateNickname(newNick) -> model
-    case UpdateNickname(newNick) -> model
+    case SubmitChat -> model
+    case ModUpdateSelection(newNick) -> model
+    case ModKick -> model
+    case ModMute -> model
+    case ModMakeModerator -> model
+    case SessionIncomingChat(nick, msg, cr) -> model
+    case SessionNewUser(nick, cr) -> model
+    case SessionNewTopic(topic, cr) -> model
+    case SessionUserLeft(nick, cr) -> model
+    case SessionUserLeft(nick, cr) -> model
+    case SessionBecomeModerator(ms, cr) ->
+      switch(model) {
+        case Connected(nick, cs, ri) ->
+          (ConnectedAsModerator(nick, cs, ms, ri),
+           Cmd.Spawn(linfun() { clientReceive(cr) }))
+        case other ->
+          # Nothing doing
+          cancel(ms);
+          (other, Cmd.Spawn(linfun() { clientReceive(cr) }))
+      }
+      ConnectedAsModerator(nick, cs, ms, ri)
+    case SessionKick ->
+      switch(model) {
+        # Nothing doing.
+        case NotConnected(nick, rooms, roomsel, err, cs) ->
+          NotConnected(nick, rooms, roomsel, err, cs)
+        case Connected(nick, cs, ri) ->
+          cancel(cs);
+          var cs = request(wap);
+          var (rooms, cs) = receive(cs);
+          NotConnected("", rooms, "", Just(ErrKicked), cs)
+        case ConnectedAsModerator(nick, cs, ms, ri) ->
+          cancel(cs);
+          cancel(ms);
+          NotConnected("", rooms, "", Just(ErrKicked), cs)
+      }
   }
 }
 
