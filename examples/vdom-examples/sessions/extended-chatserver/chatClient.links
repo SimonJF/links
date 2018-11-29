@@ -1,14 +1,21 @@
 open ChatSessions
 
+typename ChatMessage = [| Chat: (Nickname, Message), Log: Message |]
 
 # Model: Can be one of three states.
 #  1. Not connected to a room
 #  2. Connected as "ordinary" user
 #  3. Connected as moderator
-typename RoomInfo = (roomName: RoomName, nicknames: [Nickname], topic: Topic);
+typename RoomInfo =
+  (roomName: RoomName,
+   nicknames: [Nickname],
+   topic: Topic,
+   messages: [ChatMessage],
+   currentChatMessage: "");
 
+sig mkRoomInfo : (RoomName, Topic, [Nickname]) -> RoomInfo
 fun mkRoomInfo(name, topic, nicks) {
-  (roomName=name, nicknames=nicks, topic=topic)
+  (roomName=name, nicknames=nicks, topic=topic, messages=[], currentChatMessage=[])
 }
 
 typename Error =
@@ -18,12 +25,15 @@ typename Error =
    | ErrKicked
    |];
 
-# TODO: Generalise these to named records?
+# TODO: Generalise these to named records? How will that work with linearity?
 typename Model =
       # [RoomName]: rooms on server. RoomName: currently-selected room
   [|  NotConnected : (Nickname, [RoomName], RoomName, Maybe(Error), ClientSelect)
-   |  Connected : (Nickname, ClientSend, RoomInfo)
-   |  ConnectedAsModerator : (Nickname, ClientSend, ModeratorSend, RoomInfo) |];
+   |  Connected :
+        (Nickname,
+         ClientSend,
+         Maybe(ModeratorSend, Nickname), # Moderator channel, selected user
+         RoomInfo) |]
 
 # Messages from the UI
 typename Message =
@@ -60,36 +70,48 @@ fun updt(msg, model) {
   fun withNotConnected(f, model) {
     switch(model) {
       case NotConnected(nick, room, err) -> f(nick, room, err)
-      case _ -> model
+      case model -> model
     }
   }
 
-  sig clientReceive : (ClientReceive) ~> Message
-  fun clientReceive(cr) {
-    offer(cr) {
-      IncomingChatMessage(cr) ->
-        var ((nick, msg), cr) = receive(cr);
-        SessionIncomingChat(nick, msg, cr)
-      NewUser(cr) ->
-        var (nick, cr) = receive(cr);
-        SessionNewUser(nick, cr)
-      NewTopic(topic, cr) ->
-        var (topic, cr) = receive(cr);
-        SessionNewTopic(topic, cr)
-      UserLeft(cr) ->
-        var (nick, cr) = receive(cr);
-        SessionUserLeft(topic, cr)
-      UserMuted(cr) ->
-        var (nick, cr) = receive(cr);
-        SessionUserMuted(topic, cr)
-      UserUnmuted(cr) ->
-        var (nick, cr) = receive(cr);
-        SessionUserUnmuted(topic, cr)
-      BecomeModerator(cr) ->
-        var (ms, cr) = receive(cr);
-        SessionBecomeModerator(ms, cr)
-      Kick(_) -> SessionKick
+  # Operation on the Connected state
+  fun withConnected(f, model) {
+    switch(model) {
+      case Connected(nick, cs, mi, ri) -> f(nick, cs, mi, ri)
+      case model -> model
     }
+  }
+
+  sig subscribeClient : (ClientReceive) ~> Cmd.Command
+  fun subscribeClient(cr) {
+    sig clientReceive : (ClientReceive) ~> Message
+    fun clientReceive(cr) {
+      offer(cr) {
+        IncomingChatMessage(cr) ->
+          var ((nick, msg), cr) = receive(cr);
+          SessionIncomingChat(nick, msg, cr)
+        NewUser(cr) ->
+          var (nick, cr) = receive(cr);
+          SessionNewUser(nick, cr)
+        NewTopic(topic, cr) ->
+          var (topic, cr) = receive(cr);
+          SessionNewTopic(topic, cr)
+        UserLeft(cr) ->
+          var (nick, cr) = receive(cr);
+          SessionUserLeft(topic, cr)
+        UserMuted(cr) ->
+          var (nick, cr) = receive(cr);
+          SessionUserMuted(topic, cr)
+        UserUnmuted(cr) ->
+          var (nick, cr) = receive(cr);
+          SessionUserUnmuted(topic, cr)
+        BecomeModerator(cr) ->
+          var (ms, cr) = receive(cr);
+          SessionBecomeModerator(ms, cr)
+        Kick(_) -> SessionKick
+      }
+    }
+    Cmd.Spawn(fun(cr) { clientReceive(cr) })
   }
 
   switch(msg) {
@@ -103,24 +125,25 @@ fun updt(msg, model) {
       }, model)
     case SubmitJoinRoom ->
       withNotConnected(fun(nick, roomList, room, err, cs) {
-        # Doing this inline for now. I wonder whether doing synchronous
-        # communication in the update loop is actually a good idea.
-        # The advantage is that we don't have to pollute the event loop
-        # with more messages. The disadvantage is that other UI messages
-        # are blocked.
         var cs = send((nick, room), cs);
         offer(cs) {
           case JoinedOK(s) ->
+            # TODO: We could subscribe to this, and have a "Loading" state
+            # in between. This is likely better than doing a blocking receive
+            # in the event loop! But one step at a time.
             var ((topic, nicks, cr), s) = receive(s);
             # TODO: Implement `subscribe` functionality to subscribe CR for updates.
             # It might make a little more sense to have this as a "command" a la Elm,
             # because then it'll be processed in the event loop -- which has access
             # to the event loop PID and can direct messages correctly.
-            (Connected(nick, cs, mkRoomInfo(room, topic, nicks)), Cmd.Spawn(linfun() { clientReceive(cr) }))
+            (Connected(nick, cs, Nothing, mkRoomInfo(room, topic, nicks)),
+             subscribeClient(cr))
           case JoinedOKAsModerator(s) ->
             var ((topic, nicks, cr, ms), s) = receive(s);
             subscribe(clientReceive(cr));
-            ConnectedAsModerator(nick
+            (Connected(nick, cs, Just(ms),
+               mkRoomInfo(room, topic, nicks)),
+             subscribeClient(cr))
           case Nope(s) ->
             # Grab error to display
             var (err, _) = receive(s);
@@ -132,45 +155,109 @@ fun updt(msg, model) {
             # Reconnect to get new session and rooms
             var cs = request(wap);
             var (rooms, cs) = receive(cs);
-            NotConnected("", rooms, "", Just(displayErr), cs)
+            (NotConnected("", rooms, "", Just(displayErr), cs), Cmd.None)
         }
       })
-    case UpdateChatBox(newMessage) -> model
-    case SubmitChat -> model
-    case ModUpdateSelection(newNick) -> model
-    case ModKick -> model
-    case ModMute -> model
-    case ModMakeModerator -> model
-    case SessionIncomingChat(nick, msg, cr) -> model
-    case SessionNewUser(nick, cr) -> model
-    case SessionNewTopic(topic, cr) -> model
-    case SessionUserLeft(nick, cr) -> model
-    case SessionUserLeft(nick, cr) -> model
+    case UpdateChatBox(newMessage) ->
+      switch(model) {
+        Connected(nick, cs, ms, ri) ->
+          (Connected(nick, cs, ms, (ri with chatMessage=newMessage)), Cmd.None)
+        other -> (other, Cmd.None)
+      }
+    case SubmitChat ->
+      switch(model) {
+        Connected(nick, cs, ms, ri) ->
+          var cs = select ChatMessage cs;
+          var cs = send(ri.chatMessage, cs);
+          (Connected(nick, cs, ms, (ri with chatMessage="")), Cmd.None)
+        other -> (other, Cmd.None)
+
+      }
+    case ModUpdateSelection(newSelected) ->
+      switch(model) {
+        Connected(nick, cs, Just(ms, oldSelected), ri) ->
+          Connected(nick, cs, Just(ms, newSelected), ri)
+        other -> other
+      }
+    case ModKick ->
+      switch(model) {
+        Connected(nick, cs, Just(ms, selected), ri) ->
+          var ms = select KickUser ms;
+          var ms = send(selected, ms);
+          var newSelected =
+            switch(ri.nicks) { case [] -> "" case x::xs -> x };
+          Connected(nick, cs, Just(ms, newSelected), ri)
+        other -> other
+      }
+    case ModMute ->
+      switch(model) {
+        Connected(nick, cs, Just(ms, selected), ri) ->
+          var ms = select MuteUser ms;
+          var ms = send(selected, ms);
+          Connected(nick, cs, Just(ms, selected), ri)
+        other -> other
+      }
+    case ModMakeModerator ->
+      switch(model) {
+        Connected(nick, cs, Just(ms, selected), ri) ->
+          var ms = select MakeModerator ms;
+          var ms = send(selected, ms);
+          Connected(nick, cs, Just(ms, selected), ri)
+        other -> other
+      }
+    case SessionIncomingChat(nick, msg, cr) ->
+      switch(model) {
+        Connected(nick, cs, mi, ri) ->
+          Connected(nick, cs, mi, addChatMessage(nick, msg, ri))
+        other -> other
+      }
+    case SessionNewUser(nick, cr) ->
+      switch(model) {
+        Connected(nick, cs, mi, ri) ->
+          Connected(nick, cs, mi, addUserJoinedMessage(nick, ri))
+        other -> other
+      }
+    case SessionNewTopic(topic, cr) ->
+      switch(model) {
+        Connected(nick, cs, mi, ri) ->
+          Connected(nick, cs, mi, changeTopic(newTopic, ri))
+        other -> other
+      }
+    case SessionUserLeft(nick, cr) ->
+      switch(model) {
+        Connected(nick, cs, mi, ri) ->
+          #var newNicks = filter(fun(x) { x <> nick }, ri.nicks)
+          Connected(nick, cs, mi, userLeft(nick, ri))
+        other -> other
+      }
     case SessionBecomeModerator(ms, cr) ->
       switch(model) {
-        case Connected(nick, cs, ri) ->
-          (ConnectedAsModerator(nick, cs, ms, ri),
-           Cmd.Spawn(linfun() { clientReceive(cr) }))
+        case Connected(nick, cs, Nothing, ri) ->
+          (Connected(nick, cs, Just(ms), ri),
+           subscribeClient(cr))
+        case Connected(nick, cs, Just(old), ri) ->
+          # We've been given a new moderator channel. This would be
+          # odd but we have to account for it. Cancel the old one,
+          # and install the new one.
+          cancel(old);
+          (Connected(nick, cs, Just(ms), ri),
+           subscribeClient(cr))
         case other ->
           # Nothing doing
           cancel(ms);
-          (other, Cmd.Spawn(linfun() { clientReceive(cr) }))
+          (other, subscribeClient(cr))
       }
-      ConnectedAsModerator(nick, cs, ms, ri)
     case SessionKick ->
       switch(model) {
         # Nothing doing.
         case NotConnected(nick, rooms, roomsel, err, cs) ->
-          NotConnected(nick, rooms, roomsel, err, cs)
-        case Connected(nick, cs, ri) ->
-          cancel(cs);
-          var cs = request(wap);
-          var (rooms, cs) = receive(cs);
-          NotConnected("", rooms, "", Just(ErrKicked), cs)
-        case ConnectedAsModerator(nick, cs, ms, ri) ->
+          (NotConnected(nick, rooms, roomsel, err, cs), Cmd.None)
+        case Connected(nick, cs, ms, ri) ->
           cancel(cs);
           cancel(ms);
-          NotConnected("", rooms, "", Just(ErrKicked), cs)
+          var cs = request(wap);
+          var (rooms, cs) = receive(cs);
+          (NotConnected("", rooms, "", Just(ErrKicked), cs), Cmd.None)
       }
   }
 }
