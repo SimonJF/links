@@ -1,4 +1,5 @@
-open ChatSessions
+open ChatSessions;
+open VirtualDom;
 
 typename ChatMessage = [| Chat: (Nickname, Message), Log: Message |]
 
@@ -25,7 +26,6 @@ typename Error =
    | ErrKicked
    |];
 
-# TODO: Generalise these to named records? How will that work with linearity?
 typename Model =
       # [RoomName]: rooms on server. RoomName: currently-selected room
   [|  NotConnected : (Nickname, [RoomName], RoomName, Maybe(Error), ClientSelect)
@@ -34,6 +34,53 @@ typename Model =
          ClientSend,
          Maybe(ModeratorSend, Nickname), # Moderator channel, selected user
          RoomInfo) |]
+
+# Model used to show the HTML page
+typename UnrestrictedModel =
+  [| NotConnected : (Nickname, [RoomName], RoomName, Maybe(Error))
+   | Connected: (Nickname, Maybe(Nickname), RoomInfo) |]
+
+# This is rather boilerplatey.
+# It would be nice to have some way of deriving this automatically,
+# or not requiring the function altogether.
+sig extract : Model ~> (Model, UnrestrictedModel)
+fun extract(model) {
+  switch(model) {
+    case NotConnected(nick, rooms, selRoom, err, cs) ->
+      var lin = NotConnected(nick, rooms, selRoom, err, cs);
+      var unr = NotConnected(nick, rooms, selRoom, err);
+      (lin, unr)
+    case Connected(nick, cs, mi, ri) ->
+      switch(mi) {
+        case Just(ms, selNick) ->
+          var lin = Connected(nick, cs, Just(ms, selNick), ri);
+          var unr = Connected(nick, cs, Just(selNick), ri);
+          (lin, unr)
+        case Nothing ->
+          var lin = Connected(nick, cs, mi, ri);
+          var unr = Connected(nick, Nothing, ri);
+          (lin, unr)
+      }
+  }
+}
+
+# We actually only need one extra function.
+# The `extract` function, given a linear model, projects out the unrestricted
+# part.
+# extract : Model -> (Model, UnrestrictedModel)
+# var mod = update(mod, msg);
+# var (mod, unrMod) = extract(mod);
+# var tree = render(unrMod);
+# loop(mod)
+
+# runVDom :
+#   (Model, # Initial model
+#    Message ~> Model, # Update function
+#    Model ~> (LinearModel, UnrestrictedModel),
+#    UnrestrictedModel ~> Doc(Message))
+#
+# updt : Message -> Model
+# render : UnrestrictedModel -> UnrestrictedModel
 
 # Messages from the UI
 typename Message =
@@ -78,7 +125,15 @@ fun updt(msg, model) {
   fun withConnected(f, model) {
     switch(model) {
       case Connected(nick, cs, mi, ri) -> f(nick, cs, mi, ri)
-      case model -> model
+      case model -> (model, Cmd.None)
+    }
+  }
+
+  fun withMod(f, model) {
+    switch(model) {
+      Connected(nick, cs, Just(ms, selected), ri) ->
+        f(nick, cs, ms, selected, ri)
+      other -> (other, Cmd.None)
     }
   }
 
@@ -159,77 +214,59 @@ fun updt(msg, model) {
         }
       })
     case UpdateChatBox(newMessage) ->
-      switch(model) {
-        Connected(nick, cs, ms, ri) ->
+      withConnected(fun(nick, cs, ms, ri) {
           (Connected(nick, cs, ms, (ri with chatMessage=newMessage)), Cmd.None)
-        other -> (other, Cmd.None)
-      }
+      }, model)
     case SubmitChat ->
-      switch(model) {
-        Connected(nick, cs, ms, ri) ->
+      withConnected(fun(nick, cs, ms, ri) {
           var cs = select ChatMessage cs;
           var cs = send(ri.chatMessage, cs);
           (Connected(nick, cs, ms, (ri with chatMessage="")), Cmd.None)
-        other -> (other, Cmd.None)
-
-      }
+      }, model)
     case ModUpdateSelection(newSelected) ->
-      switch(model) {
-        Connected(nick, cs, Just(ms, oldSelected), ri) ->
-          Connected(nick, cs, Just(ms, newSelected), ri)
-        other -> other
-      }
+      withMod(fun(nick, cs, ms, _, ri) {
+        (Connected(nick, cs, Just(ms, newSelected), ri), Cmd.None)
+      }, model)
     case ModKick ->
-      switch(model) {
-        Connected(nick, cs, Just(ms, selected), ri) ->
-          var ms = select KickUser ms;
-          var ms = send(selected, ms);
-          var newSelected =
-            switch(ri.nicks) { case [] -> "" case x::xs -> x };
-          Connected(nick, cs, Just(ms, newSelected), ri)
-        other -> other
+      withMod(fun(nick, cs, ms, selected, ri) {
+        var ms = select KickUser ms;
+        var ms = send(selected, ms);
+        var newSelected =
+          switch(ri.nicks) { case [] -> "" case x::xs -> x };
+        (Connected(nick, cs, Just(ms, newSelected), ri), Cmd.None)
       }
     case ModMute ->
-      switch(model) {
-        Connected(nick, cs, Just(ms, selected), ri) ->
-          var ms = select MuteUser ms;
-          var ms = send(selected, ms);
-          Connected(nick, cs, Just(ms, selected), ri)
-        other -> other
-      }
+      withMod(fun(nick, cs, ms, selected, ri) {
+        var ms = select MuteUser ms;
+        var ms = send(selected, ms);
+        Connected(nick, cs, Just(ms, selected), ri)
+      }, Cmd.None)
     case ModMakeModerator ->
-      switch(model) {
-        Connected(nick, cs, Just(ms, selected), ri) ->
-          var ms = select MakeModerator ms;
-          var ms = send(selected, ms);
-          Connected(nick, cs, Just(ms, selected), ri)
-        other -> other
-      }
-    case SessionIncomingChat(nick, msg, cr) ->
-      switch(model) {
-        Connected(nick, cs, mi, ri) ->
-          Connected(nick, cs, mi, addChatMessage(nick, msg, ri))
-        other -> other
-      }
-    case SessionNewUser(nick, cr) ->
-      switch(model) {
-        Connected(nick, cs, mi, ri) ->
-          Connected(nick, cs, mi, addUserJoinedMessage(nick, ri))
-        other -> other
-      }
+      withMod(fun(nick, cs, ms, selected, ri) {
+        var ms = select MakeModerator ms;
+        var ms = send(selected, ms);
+        (Connected(nick, cs, Just(ms, selected), ri), Cmd.None)
+      }, model)
+    case SessionIncomingChat(sender, msg, cr) ->
+      withConnected(fun(nick, cs, mi, ri) {
+        (Connected(nick, cs, mi, addChatMessage(sender, msg, ri)),
+         subscribeClient(cr))
+      }, model)
+    case SessionNewUser(newUser, cr) ->
+      withConnected(fun(nick, cs, mi, ri) {
+        (Connected(nick, cs, mi, addUserJoinedMessage(newUser, ri)),
+          subscribeClient(cr))
+        }, model)
     case SessionNewTopic(topic, cr) ->
-      switch(model) {
-        Connected(nick, cs, mi, ri) ->
-          Connected(nick, cs, mi, changeTopic(newTopic, ri))
-        other -> other
-      }
-    case SessionUserLeft(nick, cr) ->
-      switch(model) {
-        Connected(nick, cs, mi, ri) ->
+      withConnected(fun(nick, cs, mi, ri) {
+        (Connected(nick, cs, mi, changeTopic(newTopic, ri)),
+          subscribeClient(cr))
+      }, model)
+    case SessionUserLeft(leaver, cr) ->
+      withConnected(fun(nick, cs, mi, ri) {
           #var newNicks = filter(fun(x) { x <> nick }, ri.nicks)
-          Connected(nick, cs, mi, userLeft(nick, ri))
-        other -> other
-      }
+          Connected(nick, cs, mi, userLeft(leaver, ri))
+      }, model)
     case SessionBecomeModerator(ms, cr) ->
       switch(model) {
         case Connected(nick, cs, Nothing, ri) ->
@@ -252,9 +289,14 @@ fun updt(msg, model) {
         # Nothing doing.
         case NotConnected(nick, rooms, roomsel, err, cs) ->
           (NotConnected(nick, rooms, roomsel, err, cs), Cmd.None)
-        case Connected(nick, cs, ms, ri) ->
+        case Connected(_, cs, Just(ms, _), _) ->
           cancel(cs);
           cancel(ms);
+          var cs = request(wap);
+          var (rooms, cs) = receive(cs);
+          (NotConnected("", rooms, "", Just(ErrKicked), cs), Cmd.None)
+        case Connected(nick, cs, None, ri) ->
+          cancel(cs);
           var cs = request(wap);
           var (rooms, cs) = receive(cs);
           (NotConnected("", rooms, "", Just(ErrKicked), cs), Cmd.None)
@@ -262,15 +304,96 @@ fun updt(msg, model) {
   }
 }
 
-sig render : (Model) ~> Doc(Message)
-fun render(model) {
-  open Tags;
+module Render {
+# TODO: GO FROM HERE
+  fun makeRoomForm(rooms) {
+      fun makeRadioRec(rooms, i) {
+        switch(rooms) {
+          case [] ->
+            if (i == 0) {
+            <#>
+             <div class="radio">
+                <label>
+                  <input type="radio" name="roomName" id="newRoom" value="newRoom" checked="checked" />
+                  New Room
+                  <input type="text" id="newRoomName" ></input>
+                </label>
+              </div>
+            </#>
+            } else {
+            <#>
+             <div class="radio">
+                <label>
+                  <input type="radio" name="roomName"
+                    id="newRoom" value="newRoom"  />
+                  New Room
+                  <input type="text" id="newRoomName" />
+                </label>
+              </div>
+            </#>
+            }
+          case x::xs ->
+            var roomId = "room" ^^ (intToString(i));
+            # If radio button is the first, it's checked by default
+            var component =
+              if (i == 0) {
+                <#>
+                  <input type="radio" name="roomName"
+                    id="{roomId}" value="{x}" checked="checked" />
+                </#>
+              } else {
+                <#>
+                  <input type="radio" name="roomName"
+                    id="{roomId}" value="{x}" />
+                </#>
+              };
 
-  # dummy for now
-  div([], [], [])
+            <#>
+              <div class="radio">
+                <label>
+                  { component }
+                  { stringToXml(x) }
+                </label>
+              </div>
+              { makeRadioRec(xs, i + 1) }
+            </#>
+        }
+      }
+      <#>
+        <form id="roomForm" l:onsubmit="{ submitRoom() }">
+            <div>
+              <label for="nickname">
+                Nickname
+              </label>
+              <input type="text" id="nickname" autofocus="true" />
+            </div>
+            { makeRadioRec(rooms, 0) }
+            <div>
+              <input type="submit" name="submitButton" value="Join" />
+            </div>
+        </form>
+      </#>
+    }
+
+  sig render : (UnrestrictedModel) ~> Doc(Message)
+  fun render(model) {
+    open Tags;
+
+    switch(model) {
+      case NotConnected(nick, rooms, curRoom, err) ->
+       ## <div id="roomSelect">
+       ##   <p> Choose one of the existing rooms or create a new one.</p>
+       ##   <div id="room_placeholder"></div>
+       ## </div>
+       div([], [],
+        p([], [], textDoc
+      case Connected(nick, modInfo, roominfo) -> TODO
+    }
+
+    # dummy for now
+    div([], [], [])
+  }
 }
-
-
 
   fun displayChat(room, topic, nicknames, clientSend, clientReceive, moderatorChan) {
 
@@ -372,75 +495,6 @@ fun render(model) {
       }
     }
 
-    fun makeRoomForm(rooms) {
-      fun makeRadioRec(rooms, i) {
-        switch(rooms) {
-          case [] ->
-            if (i == 0) {
-            <#>
-             <div class="radio">
-                <label>
-                  <input type="radio" name="roomName" id="newRoom" value="newRoom" checked="checked" />
-                  New Room
-                  <input type="text" id="newRoomName" ></input>
-                </label>
-              </div>
-            </#>
-            } else {
-            <#>
-             <div class="radio">
-                <label>
-                  <input type="radio" name="roomName"
-                    id="newRoom" value="newRoom"  />
-                  New Room
-                  <input type="text" id="newRoomName" />
-                </label>
-              </div>
-            </#>
-            }
-          case x::xs ->
-            var roomId = "room" ^^ (intToString(i));
-            # If radio button is the first, it's checked by default
-            var component =
-              if (i == 0) {
-                <#>
-                  <input type="radio" name="roomName"
-                    id="{roomId}" value="{x}" checked="checked" />
-                </#>
-              } else {
-                <#>
-                  <input type="radio" name="roomName"
-                    id="{roomId}" value="{x}" />
-                </#>
-              };
-
-            <#>
-              <div class="radio">
-                <label>
-                  { component }
-                  { stringToXml(x) }
-                </label>
-              </div>
-              { makeRadioRec(xs, i + 1) }
-            </#>
-        }
-      }
-      <#>
-        <form id="roomForm" l:onsubmit="{ submitRoom() }">
-            <div>
-              <label for="nickname">
-                Nickname
-              </label>
-              <input type="text" id="nickname" autofocus="true" />
-            </div>
-            { makeRadioRec(rooms, 0) }
-            <div>
-              <input type="submit" name="submitButton" value="Join" />
-            </div>
-        </form>
-      </#>
-    }
-
     # At submission, sends the room name and nickname to the server,
     # checks the response from the server, and either shows an error
     # and repeats, or proceeds to the main chat application
@@ -490,10 +544,6 @@ fun render(model) {
         <div id="main" class="container marketing">
           <div class="row featurette">
             <div id="placeholder"></div>
-            <div id="roomSelect">
-              <p> Choose one of the existing rooms or create a new one.</p>
-              <div id="room_placeholder"></div>
-            </div>
           </div>
         </div>
       </html>
