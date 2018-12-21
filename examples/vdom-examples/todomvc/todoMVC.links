@@ -145,8 +145,9 @@ sig viewInput : (String) -> Doc(Msg)
 fun viewInput(task) {
   header ([class("header")], [], [
     h1 ([], [], [textDoc("todos")]),
-    input ([type ("text"), class ("new-todo"), placeholder ("What needs to be done?"), name ("newTodo"), id ("newTodo"), text(task)],
-    [updateFieldHandler(), enterHandler()], [])
+    input ([type ("text"), class ("new-todo"), placeholder ("What needs to be done?"),
+      name ("newTodo"), id ("newTodo"), value(task)],
+      [updateFieldHandler(), enterHandler()], [])
   ])
 }
 
@@ -155,7 +156,6 @@ fun viewEntry(todo) {
   var classes =
     classList([("completed", todo.completed), ("editing",todo.editing)]);
   li ([class (classes)],[],[
-
     div ([class ("view")], [], [
       input ([type ("checkbox"), name ("toggle"), class ("toggle"), checked (todo.completed)],
              [checkEntryHandler(todo.id, not(todo.completed))], []),
