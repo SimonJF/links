@@ -5,6 +5,11 @@ open VirtualDom;
 fun onClick(f) {
     UnitHandler("onclick", f)
 }
+
+fun onClick(f) {
+    UnitHandler("onchange", f)
+}
+
 fun onMouseMove(f) {
     UnitHandler("onmousemove", f)
 }

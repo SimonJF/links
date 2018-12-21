@@ -89,26 +89,36 @@ fun attr(k, v) {
 }
 
 # Main event loop
-fun evtLoop(updt, render, model, prevSubscriptions, subscriptionsFn) {
+fun evtLoop(updt, extract, render, model, prevSubscriptions, subscriptionsFn) {
   receive {
     case msg ->
-      var newModel = updt(msg, model);
+      var model = updt(msg, model);
+      # Update DOM
+      var (model, unrModel) = extract(newModel);
       # Get new subscriptions
-      var newSubscriptions = subscriptionsFn(newModel);
+      var newSubscriptions = subscriptionsFn(unrModel);
       # Update subscriptions on the DOM (FFI call)
       VDom.updateSubscriptions((prevSubscriptions, newSubscriptions));
       # Update DOM
-      VDom.updateDom(render(newModel));
+      VDom.updateDom(render(unrModel));
       # Loop with new subscriptions
-      evtLoop(updt, render, newModel, newSubscriptions, subscriptionsFn)
+      evtLoop(updt, render, model, newSubscriptions, subscriptionsFn)
   }
 }
 
-# User-facing function
-fun runVDom(placeholder, view, updt, model, subscriptions) {
+# TODO: Type signatures for these
+fun runLinearVDom(placeholder, view, updt, extract, model, subscriptions) {
+  var (model, unrModel) = extract(model);
   var evtHandler = spawnClient {
-    evtLoop(updt, view, model, subscriptions(model), subscriptions)
+    evtLoop(updt, extract, view, model, subscriptions(unrModel), subscriptions)
   };
-  var _ = spawnClient { VDom.runDom(placeholder, view(model), evtHandler, subscriptions(model)) };
+  var _ = spawnClient { VDom.runDom(placeholder, view(unrModel), evtHandler, subscriptions(model)) };
   evtHandler
 }
+
+# User-facing function (assuming an unrestricted model)
+fun runVDom(placeholder, view, updt, model, subscriptions) {
+  runLinearVDom(placeholder, view, updt, fun(x) { (x, x) },
+    model, subscriptions)
+}
+

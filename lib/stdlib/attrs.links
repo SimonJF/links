@@ -90,6 +90,20 @@ fun href(val) {
     attr ("href", val)
 }
 
+
+# TODO: The empty val pair is a hack.
+# Maybe a better way of doing this would be
+# to move to a monoidal representation of HTML, attributes,
+# subscriptions, and event handlers.
+sig autofocus : (Bool) -> (String, String)
+fun autofocus(val) {
+    if (val == true) {
+        attr ("autofocus", "true")
+    } else {
+        attr ("","")
+    }
+}
+
 sig checked : (Bool) -> (String,String)
 fun checked(val) {
     if (val == true) {
