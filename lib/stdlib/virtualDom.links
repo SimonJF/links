@@ -94,7 +94,7 @@ fun evtLoop(updt, extract, render, model, prevSubscriptions, subscriptionsFn) {
     case msg ->
       var model = updt(msg, model);
       # Update DOM
-      var (model, unrModel) = extract(newModel);
+      var (model, unrModel) = extract(model);
       # Get new subscriptions
       var newSubscriptions = subscriptionsFn(unrModel);
       # Update subscriptions on the DOM (FFI call)
@@ -102,7 +102,7 @@ fun evtLoop(updt, extract, render, model, prevSubscriptions, subscriptionsFn) {
       # Update DOM
       VDom.updateDom(render(unrModel));
       # Loop with new subscriptions
-      evtLoop(updt, render, model, newSubscriptions, subscriptionsFn)
+      evtLoop(updt, extract, render, model, newSubscriptions, subscriptionsFn)
   }
 }
 
