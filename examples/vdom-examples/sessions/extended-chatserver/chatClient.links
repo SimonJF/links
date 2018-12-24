@@ -82,7 +82,7 @@ fun extract(model) {
 # render : UnrestrictedModel -> UnrestrictedModel
 
 # Messages from the UI
-typename Message =
+typename UIMessage =
   [|  NoOp
       # Login screen messages
    |  UpdateNickname: Nickname
@@ -106,7 +106,7 @@ typename Message =
    |  SessionBecomeModerator: (ModeratorSend, ClientReceive)
    |  SessionKick |];
 
-sig updt : (Message, Model) ~> Model
+sig updt : (UIMessage, Model) ~> Model
 fun updt(msg, model) {
 
   # Some messages only make sense at certain stages in the application.
@@ -138,9 +138,9 @@ fun updt(msg, model) {
     }
   }
 
-  sig subscribeClient : (ClientReceive) ~> Command(Message)
+  sig subscribeClient : (ClientReceive) ~> Command(UIMessage)
   fun subscribeClient(cr) {
-    sig clientReceive : (ClientReceive) ~> Message
+    sig clientReceive : (ClientReceive) ~> UIMessage
     fun clientReceive(cr) {
       offer(cr) {
         case IncomingChatMessage(cr) ->
@@ -283,14 +283,16 @@ fun updt(msg, model) {
     case SessionBecomeModerator(ms, cr) ->
       switch(model) {
         case Connected(nick, cs, Nothing, ri) ->
-          (Connected(nick, cs, Just(ms), ri),
+# TODO: "" is a hack, we should have "Select Name" or something,
+# or better still, the first nickname
+          (Connected(nick, cs, Just(ms, ""), ri),
            subscribeClient(cr))
-        case Connected(nick, cs, Just(old), ri) ->
+        case Connected(nick, cs, Just(old, sel), ri) ->
           # We've been given a new moderator channel. This would be
           # odd but we have to account for it. Cancel the old one,
           # and install the new one.
           cancel(old);
-          (Connected(nick, cs, Just(ms), ri), subscribeClient(cr))
+          (Connected(nick, cs, Just(ms, sel), ri), subscribeClient(cr))
         case other ->
           # Nothing doing
           cancel(ms);
@@ -306,12 +308,12 @@ fun updt(msg, model) {
           cancel(ms);
           var cs = request(wap);
           var (rooms, cs) = receive(cs);
-          (NotConnected("", rooms, "", Just(ErrKicked), cs), NoCommand)
-        case Connected(nick, cs, None, ri) ->
+          (NotConnected("", rooms, NewRoom, Just(ErrKicked), cs), NoCommand)
+        case Connected(nick, cs, Nothing, ri) ->
           cancel(cs);
           var cs = request(wap);
           var (rooms, cs) = receive(cs);
-          (NotConnected("", rooms, "", Just(ErrKicked), cs), NoCommand)
+          (NotConnected("", rooms, NewRoom, Just(ErrKicked), cs), NoCommand)
       }
   }
 }
@@ -373,7 +375,7 @@ module Render {
     )
   }
 
-  #sig render : (UnrestrictedModel) ~> Doc(Message)
+  #sig render : (UnrestrictedModel) ~> Doc(UIMessage)
   fun render(model) {
     open Tags;
 
