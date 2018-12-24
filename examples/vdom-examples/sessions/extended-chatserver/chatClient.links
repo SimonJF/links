@@ -115,26 +115,27 @@ fun updt(msg, model) {
   # state?
 
   # Operation on the NotConnected state
-  fun withNotConnected(f, model) {
+  fun withNotConnected(f, model, command) {
     switch(model) {
-      case NotConnected(nick, room, err) -> f(nick, room, err)
-      case model -> (model, NoCommand)
+      case NotConnected(nick, room, err) -> (f(nick, room, err), command)
+      case model -> (model, command)
     }
   }
 
   # Operation on the Connected state
-  fun withConnected(f, model) {
+  fun withConnected(f, model, command) {
     switch(model) {
-      case Connected(nick, cs, mi, ri) -> f(nick, cs, mi, ri)
-      case model -> (model, NoCommand)
+      case Connected(nick, cs, mi, ri) ->
+        (f(nick, cs, mi, ri), command)
+      case model -> (model, command)
     }
   }
 
-  fun withMod(f, model) {
+  fun withMod(f, model, command) {
     switch(model) {
       case Connected(nick, cs, Just(ms, selected), ri) ->
-        f(nick, cs, ms, selected, ri)
-      case other -> (other, NoCommand)
+        (f(nick, cs, ms, selected, ri), command)
+      case other -> (other, command)
     }
   }
 
@@ -170,116 +171,135 @@ fun updt(msg, model) {
     SpawnLinear(linfun() { clientReceive(cr) })
   }
 
+  fun addChatMessage(nick, msg, ri) {
+    (ri with messages = ri.messages ++ [Chat(nick, msg)])
+  }
+
+  fun addSystemMessage(msg, ri) {
+    (ri with messages = ri.messages ++ [Log(msg)])
+  }
+
+  fun userJoined(nick, ri) {
+    addSystemMessage(nick ^^ " joined.", ri)
+  }
+
+  fun userLeft(nick, ri) {
+    var newNicks = filter(fun(x) { x <> nick }, ri.nicknames);
+    var ri = addSystemMessage(nick ^^ " left.", ri);
+    (ri with nicknames = newNicks)
+  }
+
+  fun changeTopic(topic, ri) {
+    var ri = addSystemMessage("New topic: " ^^ topic, ri);
+    (ri with topic = topic)
+  }
+
   switch(msg) {
     case NoOp -> (model, NoCommand)
     case UpdateNickname(newNick) ->
       withNotConnected(fun(_, roomList, room, err, cs) {
         NotConnected(newNick, roomList, room, err, cs)
-      }, model)
+      }, model, NoCommand)
     case UpdateJoinRoomBox(newRoom) ->
       withNotConnected(fun(nick, roomList, _, err, cs) {
         NotConnected(nick, roomList, newRoom, err, cs)
-      }, model)
+      }, model, NoCommand)
     case SubmitJoinRoom ->
-      withNotConnected(fun(nick, roomList, room, err, cs) {
-        var cs = send((nick, room), cs);
-        offer(cs) {
-          case JoinedOK(s) ->
-            # TODO: We could subscribe to this, and have a "Loading" state
-            # in between. This is likely better than doing a blocking receive
-            # in the event loop! But one step at a time.
-            var ((topic, nicks, cr), s) = receive(s);
-            # TODO: Implement `subscribe` functionality to subscribe CR for updates.
-            # It might make a little more sense to have this as a "command" a la Elm,
-            # because then it'll be processed in the event loop -- which has access
-            # to the event loop PID and can direct messages correctly.
-            (Connected(nick, cs, Nothing, mkRoomInfo(room, topic, nicks)),
-             subscribeClient(cr))
-          case JoinedOKAsModerator(s) ->
-            var ((topic, nicks, cr, ms), s) = receive(s);
-            subscribe(clientReceive(cr));
-            (Connected(nick, cs, Just(ms),
-               mkRoomInfo(room, topic, nicks)),
-             subscribeClient(cr))
-          case Nope(s) ->
-            # Grab error to display
-            var (err, _) = receive(s);
-            var displayErr =
-              switch(err) {
-                case NameInUse -> ErrNameInUse
-                case BadRoom -> ErrBadRoom
-              };
-            # Reconnect to get new session and rooms
-            var cs = request(wap);
-            var (rooms, cs) = receive(cs);
-            (NotConnected("", rooms, "", Just(displayErr), cs), NoCommand)
-        }
-      })
+      switch(model) {
+        case NotConnected(nick, roomList, room, err, cs) ->
+# (GO FROM HERE)
+# FIXME: Need to augment the model with another field tracking the
+# current value of the selectroom box. We're currently treating "room"
+# as a string, when it's really of type SelectedRoom
+          var cs = send((nick, room), cs);
+          offer(cs) {
+            case JoinedOK(cs) ->
+              # TODO: We could subscribe to this, and have a "Loading" state
+              # in between. This is likely better than doing a blocking receive
+              # in the event loop! But one step at a time.
+              var ((topic, nicks, cr), cs) = receive(cs);
+              (Connected(nick, cs, Nothing, mkRoomInfo(room, topic, nicks)),
+               subscribeClient(cr))
+            case JoinedOKAsModerator(cs) ->
+              var ((topic, nicks, cr, ms), cs) = receive(cs);
+              (Connected(nick, cs, Just(ms, ""),
+                 mkRoomInfo(room, topic, nicks)),
+               subscribeClient(cr))
+            case Nope(cs) ->
+              # Grab error to display
+              var (err, _) = receive(cs);
+              var displayErr =
+                switch(err) {
+                  case NameInUse -> ErrNameInUse
+                  case BadRoom -> ErrBadRoom
+                };
+              # Reconnect to get new session and rooms
+              var cs = request(wap);
+              var (rooms, cs) = receive(cs);
+              (NotConnected("", rooms, "", Just(displayErr), cs), NoCommand)
+          }
+        case other -> (other, NoCommand)
+      }
     case UpdateChatBox(newMessage) ->
       withConnected(fun(nick, cs, ms, ri) {
-          (Connected(nick, cs, ms,
-            (ri with currentChatMessage=newMessage)), NoCommand)
-      }, model)
+          Connected(nick, cs, ms, (ri with currentChatMessage=newMessage))
+      }, model, NoCommand)
     case SubmitChat ->
       withConnected(fun(nick, cs, ms, ri) {
           var cs = select ChatMessage cs;
-          var cs = send(ri.chatMessage, cs);
-          (Connected(nick, cs, ms, (ri with chatMessage="")), NoCommand)
-      }, model)
+          var cs = send(ri.currentChatMessage, cs);
+          Connected(nick, cs, ms, (ri with currentChatMessage=""))
+      }, model, NoCommand)
     case ModUpdateSelection(newSelected) ->
       withMod(fun(nick, cs, ms, _, ri) {
-        (Connected(nick, cs, Just(ms, newSelected), ri), NoCommand)
-      }, model)
+         Connected(nick, cs, Just(ms, newSelected), ri)
+      }, model, NoCommand)
     case ModKick ->
       withMod(fun(nick, cs, ms, selected, ri) {
         var ms = select KickUser ms;
         var ms = send(selected, ms);
         var newSelected =
-          switch(ri.nicks) { case [] -> "" case x::xs -> x };
-        (Connected(nick, cs, Just(ms, newSelected), ri), NoCommand)
-      }, model)
+          switch(ri.nicknames) { case [] -> "" case x::xs -> x };
+        Connected(nick, cs, Just(ms, newSelected), ri)
+      }, model, NoCommand)
     case ModMute ->
       withMod(fun(nick, cs, ms, selected, ri) {
         var ms = select MuteUser ms;
         var ms = send(selected, ms);
-        (Connected(nick, cs, Just(ms, selected), ri), NoCommand)
-      }, model)
+        Connected(nick, cs, Just(ms, selected), ri)
+      }, model, NoCommand)
     case ModMakeModerator ->
       withMod(fun(nick, cs, ms, selected, ri) {
         var ms = select MakeModerator ms;
         var ms = send(selected, ms);
-        (Connected(nick, cs, Just(ms, selected), ri), NoCommand)
-      }, model)
+        Connected(nick, cs, Just(ms, selected), ri)
+      }, model, NoCommand)
     case SessionIncomingChat(sender, msg, cr) ->
       withConnected(fun(nick, cs, mi, ri) {
-        (Connected(nick, cs, mi, addChatMessage(sender, msg, ri)),
-         subscribeClient(cr))
-      }, model)
+        Connected(nick, cs, mi, addChatMessage(sender, msg, ri))
+      }, model, subscribeClient(cr))
     case SessionUserMuted(nick, cr) ->
       withConnected(fun(nick, cs, mi, ri) {
-        (Connected(nick, cs, mi, addSystemMessage(sender, nick ^^ " was muted :(", ri)),
-         subscribeClient(cr))
-      }, model)
+        Connected(nick, cs, mi,
+          addSystemMessage(nick ^^ " was muted :(", ri))
+      }, model, subscribeClient(cr))
     case SessionUserUnmuted(nick, cr) ->
       withConnected(fun(nick, cs, mi, ri) {
-        (Connected(nick, cs, mi, addSystemMessage(sender, nick ^^ " was unmuted! :)", ri)),
-         subscribeClient(cr))
-      }, model)
+        Connected(nick, cs, mi,
+          addSystemMessage(nick ^^ " was unmuted! :)", ri))
+      }, model, subscribeClient(cr))
     case SessionNewUser(newUser, cr) ->
       withConnected(fun(nick, cs, mi, ri) {
-        (Connected(nick, cs, mi, addUserJoinedMessage(newUser, ri)),
-          subscribeClient(cr))
-        }, model)
+        Connected(nick, cs, mi, userJoined(newUser, ri))
+      }, model, subscribeClient(cr))
     case SessionNewTopic(topic, cr) ->
       withConnected(fun(nick, cs, mi, ri) {
-        (Connected(nick, cs, mi, changeTopic(newTopic, ri)),
-          subscribeClient(cr))
-      }, model)
+        Connected(nick, cs, mi, changeTopic(topic, ri))
+      }, model, subscribeClient(cr))
     case SessionUserLeft(leaver, cr) ->
       withConnected(fun(nick, cs, mi, ri) {
-          #var newNicks = filter(fun(x) { x <> nick }, ri.nicks)
-          (Connected(nick, cs, mi, userLeft(leaver, ri)), NoCommand)
-      }, model)
+        Connected(nick, cs, mi, userLeft(leaver, ri))
+      }, model, subscribeClient(cr))
     case SessionBecomeModerator(ms, cr) ->
       switch(model) {
         case Connected(nick, cs, Nothing, ri) ->
