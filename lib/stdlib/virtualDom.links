@@ -88,11 +88,36 @@ fun attr(k, v) {
   (k, v)
 }
 
+# TODO: Put into a module
+typename Command(a) =
+  [| NoCommand | Spawn: (() {}~> a) | SpawnLinear: (() {}~@ a) |];
+
+# TODO: Generalise to monoidal interface
+fun processCommand(cmd, pid) {
+
+  switch(cmd) {
+    case NoCommand -> ()
+    case Spawn(f) ->
+      ignore(
+        spawn {
+          var res = f();
+          pid ! res
+        })
+    case SpawnLinear(f) ->
+      ignore(
+        spawn {
+          var res = f();
+          pid ! res
+        })
+  }
+}
+
 # Main event loop
 fun evtLoop(updt, extract, render, model, prevSubscriptions, subscriptionsFn) {
   receive {
     case msg ->
-      var model = updt(msg, model);
+      var (model, cmd) = updt(msg, model);
+      processCommand(cmd, self());
       # Update DOM
       var (model, unrModel) = extract(model);
       # Get new subscriptions

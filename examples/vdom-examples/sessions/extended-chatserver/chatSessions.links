@@ -41,7 +41,7 @@ typename ClientSelect =
           Nope: ?ConnectError.End
       |&];
 
-typename ClientConnect = ?([RoomName]).ClientSelect
+typename ClientConnect = ?([RoomName]).ClientSelect;
 
 typename ServerAccept = ~ClientConnect;
 typename RoomSend = ~ClientReceive;

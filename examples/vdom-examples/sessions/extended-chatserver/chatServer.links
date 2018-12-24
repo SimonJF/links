@@ -1,6 +1,6 @@
-open ChatSessions
-open ChatClient
-open Utility
+open ChatSessions;
+open ChatClient;
+open Utility;
 
 #helper functions:
 fun member(elem , l) {

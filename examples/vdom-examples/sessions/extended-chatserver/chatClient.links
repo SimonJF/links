@@ -1,7 +1,7 @@
 open ChatSessions;
 open VirtualDom;
 
-typename ChatMessage = [| Chat: (Nickname, Message), Log: Message |]
+typename ChatMessage = [| Chat: (Nickname, Message) | Log: Message |];
 
 # Model: Can be one of three states.
 #  1. Not connected to a room
@@ -12,11 +12,11 @@ typename RoomInfo =
    nicknames: [Nickname],
    topic: Topic,
    messages: [ChatMessage],
-   currentChatMessage: "");
+   currentChatMessage: String);
 
 sig mkRoomInfo : (RoomName, Topic, [Nickname]) -> RoomInfo
 fun mkRoomInfo(name, topic, nicks) {
-  (roomName=name, nicknames=nicks, topic=topic, messages=[], currentChatMessage=[])
+  (roomName=name, nicknames=nicks, topic=topic, messages=[], currentChatMessage="")
 }
 
 typename Error =
@@ -34,35 +34,32 @@ typename Model =
    |  Connected :
         (Nickname,
          ClientSend,
-         Maybe(ModeratorSend, Nickname), # Moderator channel, selected user
-         RoomInfo) |]
+         Maybe((ModeratorSend, Nickname)), # Moderator channel, selected user
+         RoomInfo) |];
 
 # Model used to show the HTML page
 typename UnrestrictedModel =
-  [| NotConnected : (Nickname, [RoomName], RoomName, Maybe(Error))
-   | Connected: (Nickname, Maybe(Nickname), RoomInfo) |]
+  [| UnrNotConnected : (Nickname, [RoomName], SelectedRoom, Maybe(Error))
+   | UnrConnected: (Nickname, Maybe(Nickname), RoomInfo) |];
 
 # This is rather boilerplatey.
 # It would be nice to have some way of deriving this automatically,
 # or not requiring the function altogether.
-sig extract : Model ~> (Model, UnrestrictedModel)
+sig extract : (Model) ~> (Model, UnrestrictedModel)
 fun extract(model) {
   switch(model) {
     case NotConnected(nick, rooms, selRoom, err, cs) ->
       var lin = NotConnected(nick, rooms, selRoom, err, cs);
-      var unr = NotConnected(nick, rooms, selRoom, err);
+      var unr = UnrNotConnected(nick, rooms, selRoom, err);
       (lin, unr)
-    case Connected(nick, cs, mi, ri) ->
-      switch(mi) {
-        case Just(ms, selNick) ->
-          var lin = Connected(nick, cs, Just(ms, selNick), ri);
-          var unr = Connected(nick, cs, Just(selNick), ri);
-          (lin, unr)
-        case Nothing ->
-          var lin = Connected(nick, cs, mi, ri);
-          var unr = Connected(nick, Nothing, ri);
-          (lin, unr)
-      }
+    case Connected(nick, cs, Just(ms, selNick), ri) ->
+        var lin = Connected(nick, cs, Just(ms, selNick), ri);
+        var unr = UnrConnected(nick, Just(selNick), ri);
+        (lin, unr)
+    case Connected(nick, cs, Nothing, ri) ->
+        var lin = Connected(nick, cs, Nothing, ri);
+        var unr = UnrConnected(nick, Nothing, ri);
+        (lin, unr)
   }
 }
 
@@ -105,7 +102,8 @@ typename Message =
    |  SessionNewTopic: (Topic, ClientReceive)
    |  SessionUserLeft: (Nickname, ClientReceive)
    |  SessionUserMuted: (Nickname, ClientReceive)
-   |  SessionBecomeModerator: (Nickname, ModeratorSend, ClientReceive)
+   |  SessionUserUnmuted: (Nickname, ClientReceive)
+   |  SessionBecomeModerator: (ModeratorSend, ClientReceive)
    |  SessionKick |];
 
 sig updt : (Message, Model) ~> Model
@@ -120,7 +118,7 @@ fun updt(msg, model) {
   fun withNotConnected(f, model) {
     switch(model) {
       case NotConnected(nick, room, err) -> f(nick, room, err)
-      case model -> (model, Cmd.None)
+      case model -> (model, NoCommand)
     }
   }
 
@@ -128,52 +126,52 @@ fun updt(msg, model) {
   fun withConnected(f, model) {
     switch(model) {
       case Connected(nick, cs, mi, ri) -> f(nick, cs, mi, ri)
-      case model -> (model, Cmd.None)
+      case model -> (model, NoCommand)
     }
   }
 
   fun withMod(f, model) {
     switch(model) {
-      Connected(nick, cs, Just(ms, selected), ri) ->
+      case Connected(nick, cs, Just(ms, selected), ri) ->
         f(nick, cs, ms, selected, ri)
-      other -> (other, Cmd.None)
+      case other -> (other, NoCommand)
     }
   }
 
-  sig subscribeClient : (ClientReceive) ~> Cmd.Command
+  sig subscribeClient : (ClientReceive) ~> Command(Message)
   fun subscribeClient(cr) {
     sig clientReceive : (ClientReceive) ~> Message
     fun clientReceive(cr) {
       offer(cr) {
-        IncomingChatMessage(cr) ->
+        case IncomingChatMessage(cr) ->
           var ((nick, msg), cr) = receive(cr);
           SessionIncomingChat(nick, msg, cr)
-        NewUser(cr) ->
+        case NewUser(cr) ->
           var (nick, cr) = receive(cr);
           SessionNewUser(nick, cr)
-        NewTopic(topic, cr) ->
+        case NewTopic(cr) ->
           var (topic, cr) = receive(cr);
           SessionNewTopic(topic, cr)
-        UserLeft(cr) ->
+        case UserLeft(cr) ->
           var (nick, cr) = receive(cr);
-          SessionUserLeft(topic, cr)
-        UserMuted(cr) ->
+          SessionUserLeft(nick, cr)
+        case UserMuted(cr) ->
           var (nick, cr) = receive(cr);
-          SessionUserMuted(topic, cr)
-        UserUnmuted(cr) ->
+          SessionUserMuted(nick, cr)
+        case UserUnmuted(cr) ->
           var (nick, cr) = receive(cr);
-          SessionUserUnmuted(topic, cr)
-        BecomeModerator(cr) ->
+          SessionUserUnmuted(nick, cr)
+        case BecomeModerator(cr) ->
           var (ms, cr) = receive(cr);
           SessionBecomeModerator(ms, cr)
-        Kick(_) -> SessionKick
+        case Kick(_) -> SessionKick
       }
     }
-    Cmd.Spawn(fun(cr) { clientReceive(cr) })
+    SpawnLinear(linfun() { clientReceive(cr) })
   }
 
   switch(msg) {
-    case NoOp -> (model, Cmd.None)
+    case NoOp -> (model, NoCommand)
     case UpdateNickname(newNick) ->
       withNotConnected(fun(_, roomList, room, err, cs) {
         NotConnected(newNick, roomList, room, err, cs)
@@ -214,23 +212,23 @@ fun updt(msg, model) {
             # Reconnect to get new session and rooms
             var cs = request(wap);
             var (rooms, cs) = receive(cs);
-            (NotConnected("", rooms, "", Just(displayErr), cs), Cmd.None)
+            (NotConnected("", rooms, "", Just(displayErr), cs), NoCommand)
         }
       })
     case UpdateChatBox(newMessage) ->
       withConnected(fun(nick, cs, ms, ri) {
           (Connected(nick, cs, ms,
-            (ri with currentChatMessage=newMessage)), Cmd.None)
+            (ri with currentChatMessage=newMessage)), NoCommand)
       }, model)
     case SubmitChat ->
       withConnected(fun(nick, cs, ms, ri) {
           var cs = select ChatMessage cs;
           var cs = send(ri.chatMessage, cs);
-          (Connected(nick, cs, ms, (ri with chatMessage="")), Cmd.None)
+          (Connected(nick, cs, ms, (ri with chatMessage="")), NoCommand)
       }, model)
     case ModUpdateSelection(newSelected) ->
       withMod(fun(nick, cs, ms, _, ri) {
-        (Connected(nick, cs, Just(ms, newSelected), ri), Cmd.None)
+        (Connected(nick, cs, Just(ms, newSelected), ri), NoCommand)
       }, model)
     case ModKick ->
       withMod(fun(nick, cs, ms, selected, ri) {
@@ -238,23 +236,33 @@ fun updt(msg, model) {
         var ms = send(selected, ms);
         var newSelected =
           switch(ri.nicks) { case [] -> "" case x::xs -> x };
-        (Connected(nick, cs, Just(ms, newSelected), ri), Cmd.None)
-      }
+        (Connected(nick, cs, Just(ms, newSelected), ri), NoCommand)
+      }, model)
     case ModMute ->
       withMod(fun(nick, cs, ms, selected, ri) {
         var ms = select MuteUser ms;
         var ms = send(selected, ms);
-        Connected(nick, cs, Just(ms, selected), ri)
-      }, Cmd.None)
+        (Connected(nick, cs, Just(ms, selected), ri), NoCommand)
+      }, model)
     case ModMakeModerator ->
       withMod(fun(nick, cs, ms, selected, ri) {
         var ms = select MakeModerator ms;
         var ms = send(selected, ms);
-        (Connected(nick, cs, Just(ms, selected), ri), Cmd.None)
+        (Connected(nick, cs, Just(ms, selected), ri), NoCommand)
       }, model)
     case SessionIncomingChat(sender, msg, cr) ->
       withConnected(fun(nick, cs, mi, ri) {
         (Connected(nick, cs, mi, addChatMessage(sender, msg, ri)),
+         subscribeClient(cr))
+      }, model)
+    case SessionUserMuted(nick, cr) ->
+      withConnected(fun(nick, cs, mi, ri) {
+        (Connected(nick, cs, mi, addSystemMessage(sender, nick ^^ " was muted :(", ri)),
+         subscribeClient(cr))
+      }, model)
+    case SessionUserUnmuted(nick, cr) ->
+      withConnected(fun(nick, cs, mi, ri) {
+        (Connected(nick, cs, mi, addSystemMessage(sender, nick ^^ " was unmuted! :)", ri)),
          subscribeClient(cr))
       }, model)
     case SessionNewUser(newUser, cr) ->
@@ -270,7 +278,7 @@ fun updt(msg, model) {
     case SessionUserLeft(leaver, cr) ->
       withConnected(fun(nick, cs, mi, ri) {
           #var newNicks = filter(fun(x) { x <> nick }, ri.nicks)
-          Connected(nick, cs, mi, userLeft(leaver, ri))
+          (Connected(nick, cs, mi, userLeft(leaver, ri)), NoCommand)
       }, model)
     case SessionBecomeModerator(ms, cr) ->
       switch(model) {
@@ -282,8 +290,7 @@ fun updt(msg, model) {
           # odd but we have to account for it. Cancel the old one,
           # and install the new one.
           cancel(old);
-          (Connected(nick, cs, Just(ms), ri),
-           subscribeClient(cr))
+          (Connected(nick, cs, Just(ms), ri), subscribeClient(cr))
         case other ->
           # Nothing doing
           cancel(ms);
@@ -293,103 +300,135 @@ fun updt(msg, model) {
       switch(model) {
         # Nothing doing.
         case NotConnected(nick, rooms, roomsel, err, cs) ->
-          (NotConnected(nick, rooms, roomsel, err, cs), Cmd.None)
+          (NotConnected(nick, rooms, roomsel, err, cs), NoCommand)
         case Connected(_, cs, Just(ms, _), _) ->
           cancel(cs);
           cancel(ms);
           var cs = request(wap);
           var (rooms, cs) = receive(cs);
-          (NotConnected("", rooms, "", Just(ErrKicked), cs), Cmd.None)
+          (NotConnected("", rooms, "", Just(ErrKicked), cs), NoCommand)
         case Connected(nick, cs, None, ri) ->
           cancel(cs);
           var cs = request(wap);
           var (rooms, cs) = receive(cs);
-          (NotConnected("", rooms, "", Just(ErrKicked), cs), Cmd.None)
+          (NotConnected("", rooms, "", Just(ErrKicked), cs), NoCommand)
       }
   }
 }
 
 module Render {
-  fun roomForm(rooms) {
+  open Tags;
+  open Attrs;
+  open Events;
+
+  fun roomForm(rooms, selectedRoom) {
+    var newRoomChecked =
+      switch(selectedRoom) {
+        case NewRoom -> true
+        case SelectedRoom(_) -> false
+      };
+
     var newRoomRadio =
       div([class("radio")], [],
         [
           label([], [], [
-            input([type("radio"), name("room"), checked(true)],
+            input([type("radio"), name("room"), checked(newRoomChecked)],
               [onInput(fun(_) { UpdateSelectedRoom(NewRoom) })], []),
-            textNode("New Room")
+            textDoc("New Room")
           ])
         ]
       );
 
-    fun roomRadio(name) {
+    fun roomRadio(roomName) {
+      var isChecked =
+        switch(selectedRoom) {
+          case NewRoom -> false
+          case SelectedRoom(room) -> roomName == room
+        };
+
       div([class("radio")], [],
         [
           label([], [], [
-            input([type("radio"), name("roomName")],
-              [onInput(fun(_) { UpdateSelectedRoom(name)})], []),
-            textNode(name)
+            input([type("radio"), name("roomName"), checked(isChecked)],
+              [onInput(fun(_) { UpdateSelectedRoom(SelectedRoom(roomName))})], []),
+            textDoc(roomName)
           ])
         ]
       )
     }
 
     var radioForm =
-      newRoomRadio :: map(fun(name) { roomRadio(name) }, rooms);
+      newRoomRadio :: map(fun(roomName) { roomRadio(roomName) }, rooms);
 
-    form([], [], [
+    form([], [],
+    # TODO: This is why we need a monoidal interface for Doc...
       div([], [], [
         label([for_("nickname")], [], [textDoc("Nickname")]),
         input([type("text"), id("nickname"), autofocus(true)], [], [])
-      ]),
-      radioForm,
-      div([], [], [
-        input([type("submit", value("Join"))],
-          [onClick(fun() { SubmitJoinRoom })], [])])
-    ])
+      ]) ::
+      (radioForm ++
+       [div([], [], [
+        input([type("submit"), value("Join")],
+          [onClick(fun() { SubmitJoinRoom })], [])])])
+    )
   }
 
-  sig render : (UnrestrictedModel) ~> Doc(Message)
+  #sig render : (UnrestrictedModel) ~> Doc(Message)
   fun render(model) {
     open Tags;
 
+    fun renderMessage(msg) {
+      switch(msg) {
+        case Chat(nick, msg) ->
+          p([], [], [
+            b([], [], [textDoc(nick)]),
+            textDoc(msg)
+          ])
+        case Log(msg) ->
+          p([], [], [
+            b([], [], [textDoc(msg)])
+          ])
+      }
+    }
+
     switch(model) {
-      case NotConnected(nick, rooms, curRoom, err) ->
+      case UnrNotConnected(nick, rooms, curRoom, err) ->
        # TODO: Render error message
+       # TODO: Link nick with nickname form
        div([], [], [
         p([], [], [
-          textDoc("Choose one of the existing rooms or create a new one.")])
+          textDoc("Choose one of the existing rooms or create a new one."),
+          roomForm(rooms, curRoom)])
        ])
-      case Connected(nick, modInfo, roomInfo) ->
+      case UnrConnected(nick, modInfo, roomInfo) ->
         var adminBox = div([], [], []); # TODO: Fill me in
 
         fun infoHeader(description, content) {
-          div([id("topic"), [],
-            [p([span([class("lead")])], [], [
+          div([], [],
+            [p([], [], [span([class("lead")], [], [
               b([], [], [textDoc(description ^^ ": ")]),
-              textDoc(roomInfo.topic)
-            ]);
+              textDoc(content)
+            ])])])
         }
         var topic = infoHeader("Topic", roomInfo.topic);
         var room = infoHeader("Room", roomInfo.roomName);
-        var msgs = map(fun(msg) { p([], [], textDoc(msg)) }, roomInfo.messages);
+        var msgs = map(renderMessage, roomInfo.messages);
         fun enterHandler(keycode) {
-          if(code == "13") { SubmitChat } else { NoOp }
+          if(keycode == "13") { SubmitChat } else { NoOp }
         }
         fun inputHandler(str) { UpdateChatBox(str) }
 
         var chatBox =
-          div([style("overflow-y:scroll; width:100%; height:400px;"),
-                text(model.currentChatMessage)],
+          div([Attrs.style("overflow-y:scroll; width:100%; height:400px;"),
+               value(roomInfo.currentChatMessage)],
               [getKeycode(enterHandler), onInput(inputHandler)],
-              [msgs]);
+              msgs);
 
         div([], [], [
-          { adminBox },
-          { room },
-          { topic },
-          { chatBox }
-        ])
+          adminBox,
+          room,
+          topic,
+          chatBox])
     }
   }
 }
