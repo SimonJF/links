@@ -2,17 +2,24 @@
 
 # Doc Type
 
-typename VirtualHandler(a) =
+typename VirtualHandler(a :: Type(Any, Any)) =
   [| StringHandler: (String, (String) {}~> a)
    | UnitHandler: (String, () {}~> a)
    | TupleIntHandler: (String, ((Int,Int)) {}~> a)
    | TimeHandler: (Int, () {}~> a)
    | AnimationFrameHandler: ((a) {}~> a) |];
 
-typename Doc(a) =
+##### GO FROM HERE
+# For some reason, it doesn't seem possible to have a Doc parameterised
+# over a linear type variable. This is because when trying to unify the
+# type variable, the flexible type variable appears to be unrestricted,
+# whereas the specified type is linear.
+# TODO: Next up, minimal failing example, to demonstrate the problem further.
+typename Doc(a :: Type(Any, Any)) =
   [| DocTextNode: (String)
    | DocTagNode:
-      (tagName: String, attrs: [(String, String)], eventHandlers: [VirtualHandler(a)],
+      (tagName: String, attrs: [(String, String)],
+       eventHandlers: [VirtualHandler(a)],
        children: [Doc(a)])
    |];
 
@@ -23,14 +30,16 @@ module VirtualDom {
   }
 }
 
-typename Sub(a) = [| EmptySub | HandlerSub : (String, VirtualHandler(a)) | Sub : (a) |];
-
+typename Sub(a :: Type(Any, Any)) =
+  [| EmptySub
+   | HandlerSub : (String, VirtualHandler(a))
+   | Sub : (a) |];
 
 # Loads the "vdom.js" file, exposes runDom and updateDom.
 module VDom {
   alien javascript "/lib/vdom.js" {
     runDom : forall a :: Type(Any, Any) .
-      (String, Doc(a), Process({wild |_}), [Sub(a)]) ~%~> ();
+      (String, Doc(a), Process({wild}), [Sub(a)]) ~%~> ();
     updateDom : forall a :: Type(Any, Any) . (Doc(a)) ~%~> ();
     updateSubscriptions : forall a :: Type(Any, Any) . (([Sub(a)],[Sub(a)])) ~%~> ();
     getUniqueID : forall a :: Type(Any, Any) . (VirtualHandler(a)) ~%~> (String);
@@ -159,7 +168,7 @@ sig runLinearVDom :
    model,
    (unrModel) ~%~> [Sub(msg)]
    ) ~%~>
-   Process({ wild | _ })
+   Process({ wild })
 fun runLinearVDom(placeholder, view, updt, extract, model, subscriptions) {
   var (model, unrModel) = extract(model);
   var evtHandler = spawnClient {
