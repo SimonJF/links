@@ -29,7 +29,7 @@ typename Sub(a) = [| EmptySub | HandlerSub : (String, VirtualHandler(a)) | Sub :
 # Loads the "vdom.js" file, exposes runDom and updateDom.
 module VDom {
   alien javascript "/lib/vdom.js" {
-    runDom : forall a . (String, Doc(a), Process({hear:a, wild}), [Sub(a)]) ~%e~> ();
+    runDom : forall a . (String, Doc(a), Process({hear:a, wild| _}), [Sub(a)]) ~%e~> ();
     updateDom : forall a . (Doc(a)) ~%e~> ();
     updateSubscriptions : forall a . (([Sub(a)],[Sub(a)])) ~%e~> ();
     getUniqueID : forall a . (VirtualHandler(a)) ~%e~> (String);
@@ -93,8 +93,8 @@ typename Command(a) =
   [| NoCommand | Spawn: (() {}~> a) | SpawnLinear: (() {}~@ a) |];
 
 # TODO: Generalise to monoidal interface
+sig processCommand : (Command(a), Process({hear: a | _})) ~> ()
 fun processCommand(cmd, pid) {
-
   switch(cmd) {
     case NoCommand -> ()
     case Spawn(f) ->
@@ -109,6 +109,7 @@ fun processCommand(cmd, pid) {
           var res = f();
           pid ! res
         })
+
   }
 }
 
@@ -132,12 +133,21 @@ fun evtLoop(updt, extract, render, model, prevSubscriptions, subscriptionsFn) {
 }
 
 # TODO: Type signatures for these
+sig runLinearVDom :
+  (String,
+   (unrModel) ~%~> Doc(msg),
+   (msg, model) ~%~> (model, Command(msg)),
+   (model) ~%~> (model, unrModel),
+   model,
+   (unrModel) ~%~> [Sub(msg)]
+   ) ~%~>
+   Process({ hear: msg, wild | _ })
 fun runLinearVDom(placeholder, view, updt, extract, model, subscriptions) {
   var (model, unrModel) = extract(model);
   var evtHandler = spawnClient {
     evtLoop(updt, extract, view, model, subscriptions(unrModel), subscriptions)
   };
-  var _ = spawnClient { VDom.runDom(placeholder, view(unrModel), evtHandler, subscriptions(model)) };
+  var _ = spawnClient { VDom.runDom(placeholder, view(unrModel), evtHandler, subscriptions(unrModel)) };
   evtHandler
 }
 

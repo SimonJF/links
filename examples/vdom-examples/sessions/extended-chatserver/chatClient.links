@@ -1,7 +1,8 @@
 open ChatSessions;
 open VirtualDom;
 
-typename ChatMessage = [| Chat: (Nickname, Message) | Log: Message |];
+typename ChatMessage =
+  [| Chat: (Nickname, Message) | Log: Message |];
 
 # Model: Can be one of three states.
 #  1. Not connected to a room
@@ -28,9 +29,20 @@ typename Error =
 
 typename SelectedRoom = [| NewRoom | SelectedRoom: String |];
 
+typename NotConnectedModel =
+  (nickname: String,
+   rooms: [RoomName],
+   selectedRoom: SelectedRoom,
+   newRoomText: RoomName,
+   error: Maybe(Error));
+
+fun mkNCModel(rooms, error) {
+  (nickname = "", rooms = rooms, selectedRoom = NewRoom,
+   newRoomText = "", error = error)
+}
+
 typename Model =
-      # [RoomName]: rooms on server. RoomName: currently-selected room
-  [|  NotConnected : (Nickname, [RoomName], SelectedRoom, Maybe(Error), ClientSelect)
+  [|  NotConnected : (NotConnectedModel, ClientSelect)
    |  Connected :
         (Nickname,
          ClientSend,
@@ -39,7 +51,7 @@ typename Model =
 
 # Model used to show the HTML page
 typename UnrestrictedModel =
-  [| UnrNotConnected : (Nickname, [RoomName], SelectedRoom, Maybe(Error))
+  [| UnrNotConnected : NotConnectedModel
    | UnrConnected: (Nickname, Maybe(Nickname), RoomInfo) |];
 
 # This is rather boilerplatey.
@@ -48,10 +60,10 @@ typename UnrestrictedModel =
 sig extract : (Model) ~> (Model, UnrestrictedModel)
 fun extract(model) {
   switch(model) {
-    case NotConnected(nick, rooms, selRoom, err, cs) ->
-      var lin = NotConnected(nick, rooms, selRoom, err, cs);
-      var unr = UnrNotConnected(nick, rooms, selRoom, err);
-      (lin, unr)
+    case NotConnected(ncModel, cs) ->
+        var lin = NotConnected(ncModel, cs);
+        var unr = UnrNotConnected(ncModel);
+        (lin, unr)
     case Connected(nick, cs, Just(ms, selNick), ri) ->
         var lin = Connected(nick, cs, Just(ms, selNick), ri);
         var unr = UnrConnected(nick, Just(selNick), ri);
@@ -63,30 +75,13 @@ fun extract(model) {
   }
 }
 
-# We actually only need one extra function.
-# The `extract` function, given a linear model, projects out the unrestricted
-# part.
-# extract : Model -> (Model, UnrestrictedModel)
-# var mod = update(mod, msg);
-# var (mod, unrMod) = extract(mod);
-# var tree = render(unrMod);
-# loop(mod)
-
-# runVDom :
-#   (Model, # Initial model
-#    Message ~> Model, # Update function
-#    Model ~> (LinearModel, UnrestrictedModel),
-#    UnrestrictedModel ~> Doc(Message))
-#
-# updt : Message -> Model
-# render : UnrestrictedModel -> UnrestrictedModel
-
 # Messages from the UI
 typename UIMessage =
   [|  NoOp
       # Login screen messages
    |  UpdateNickname: Nickname
    |  UpdateSelectedRoom: SelectedRoom
+   |  UpdateNewRoom: RoomName
    |  SubmitJoinRoom
       # Chat screen messages
    |  UpdateChatBox: Message
@@ -106,7 +101,7 @@ typename UIMessage =
    |  SessionBecomeModerator: (ModeratorSend, ClientReceive)
    |  SessionKick |];
 
-sig updt : (UIMessage, Model) ~> Model
+sig updt : (UIMessage, Model) ~> (Model, Command(UIMessage))
 fun updt(msg, model) {
 
   # Some messages only make sense at certain stages in the application.
@@ -117,7 +112,8 @@ fun updt(msg, model) {
   # Operation on the NotConnected state
   fun withNotConnected(f, model, command) {
     switch(model) {
-      case NotConnected(nick, room, err) -> (f(nick, room, err), command)
+      case NotConnected(ncModel, cs) ->
+        (f(ncModel, cs), command)
       case model -> (model, command)
     }
   }
@@ -197,33 +193,40 @@ fun updt(msg, model) {
   switch(msg) {
     case NoOp -> (model, NoCommand)
     case UpdateNickname(newNick) ->
-      withNotConnected(fun(_, roomList, room, err, cs) {
-        NotConnected(newNick, roomList, room, err, cs)
+      withNotConnected(fun(ncModel, cs) {
+        NotConnected((ncModel with nickname = newNick), cs)
       }, model, NoCommand)
-    case UpdateJoinRoomBox(newRoom) ->
-      withNotConnected(fun(nick, roomList, _, err, cs) {
-        NotConnected(nick, roomList, newRoom, err, cs)
+    case UpdateSelectedRoom(newRoom) ->
+      withNotConnected(fun(ncModel, cs) {
+        var newModel = (ncModel with selectedRoom = newRoom);
+        NotConnected(newModel, cs)
+      }, model, NoCommand)
+    case UpdateNewRoom(newRoom) ->
+      withNotConnected(fun(ncModel, cs) {
+        var newModel = (ncModel with newRoomText = newRoom);
+        NotConnected(newModel, cs)
       }, model, NoCommand)
     case SubmitJoinRoom ->
       switch(model) {
-        case NotConnected(nick, roomList, room, err, cs) ->
-# (GO FROM HERE)
-# FIXME: Need to augment the model with another field tracking the
-# current value of the selectroom box. We're currently treating "room"
-# as a string, when it's really of type SelectedRoom
-          var cs = send((nick, room), cs);
+        case NotConnected(ncModel, cs) ->
+          var roomName = switch(ncModel.selectedRoom) {
+            case NewRoom -> ncModel.newRoomText
+            case SelectedRoom(name) -> name
+          };
+          var cs = send((ncModel.nickname, roomName), cs);
           offer(cs) {
             case JoinedOK(cs) ->
               # TODO: We could subscribe to this, and have a "Loading" state
               # in between. This is likely better than doing a blocking receive
               # in the event loop! But one step at a time.
               var ((topic, nicks, cr), cs) = receive(cs);
-              (Connected(nick, cs, Nothing, mkRoomInfo(room, topic, nicks)),
+              (Connected(ncModel.nickname, cs, Nothing,
+               mkRoomInfo(roomName, topic, nicks)),
                subscribeClient(cr))
             case JoinedOKAsModerator(cs) ->
               var ((topic, nicks, cr, ms), cs) = receive(cs);
-              (Connected(nick, cs, Just(ms, ""),
-                 mkRoomInfo(room, topic, nicks)),
+              (Connected(ncModel.nickname, cs, Just(ms, ""),
+                 mkRoomInfo(roomName, topic, nicks)),
                subscribeClient(cr))
             case Nope(cs) ->
               # Grab error to display
@@ -236,7 +239,8 @@ fun updt(msg, model) {
               # Reconnect to get new session and rooms
               var cs = request(wap);
               var (rooms, cs) = receive(cs);
-              (NotConnected("", rooms, "", Just(displayErr), cs), NoCommand)
+              var newModel = mkNCModel(rooms, Just(displayErr));
+              (NotConnected(newModel, cs), NoCommand)
           }
         case other -> (other, NoCommand)
       }
@@ -321,19 +325,19 @@ fun updt(msg, model) {
     case SessionKick ->
       switch(model) {
         # Nothing doing.
-        case NotConnected(nick, rooms, roomsel, err, cs) ->
-          (NotConnected(nick, rooms, roomsel, err, cs), NoCommand)
+        case NotConnected(ncModel, cs) ->
+          (NotConnected(ncModel, cs), NoCommand)
         case Connected(_, cs, Just(ms, _), _) ->
           cancel(cs);
           cancel(ms);
           var cs = request(wap);
           var (rooms, cs) = receive(cs);
-          (NotConnected("", rooms, NewRoom, Just(ErrKicked), cs), NoCommand)
+          (NotConnected(mkNCModel(rooms, Nothing), cs), NoCommand)
         case Connected(nick, cs, Nothing, ri) ->
           cancel(cs);
           var cs = request(wap);
           var (rooms, cs) = receive(cs);
-          (NotConnected("", rooms, NewRoom, Just(ErrKicked), cs), NoCommand)
+          (NotConnected(mkNCModel(rooms, Nothing), cs), NoCommand)
       }
   }
 }
@@ -343,12 +347,17 @@ module Render {
   open Attrs;
   open Events;
 
-  fun roomForm(rooms, selectedRoom) {
+# rooms, selectedRoom
+  fun roomForm(ncModel) {
     var newRoomChecked =
-      switch(selectedRoom) {
+      switch(ncModel.selectedRoom) {
         case NewRoom -> true
         case SelectedRoom(_) -> false
       };
+
+    fun enterHandler(keycode) {
+      if(keycode == "13") { SubmitJoinRoom } else { NoOp }
+    }
 
     var newRoomRadio =
       div([class("radio")], [],
@@ -356,14 +365,19 @@ module Render {
           label([], [], [
             input([type("radio"), name("room"), checked(newRoomChecked)],
               [onInput(fun(_) { UpdateSelectedRoom(NewRoom) })], []),
-            textDoc("New Room")
+            textDoc("New Room"),
+            input([type("text"), value(ncModel.newRoomText)],
+              [onInput(fun(str) { UpdateNewRoom(str) }),
+               getKeycode(enterHandler)],
+              []
+            )
           ])
         ]
       );
 
     fun roomRadio(roomName) {
       var isChecked =
-        switch(selectedRoom) {
+        switch(ncModel.selectedRoom) {
           case NewRoom -> false
           case SelectedRoom(room) -> roomName == room
         };
@@ -380,7 +394,7 @@ module Render {
     }
 
     var radioForm =
-      newRoomRadio :: map(fun(roomName) { roomRadio(roomName) }, rooms);
+      newRoomRadio :: map(fun(roomName) { roomRadio(roomName) }, ncModel.rooms);
 
     form([], [],
     # TODO: This is why we need a monoidal interface for Doc...
@@ -414,13 +428,13 @@ module Render {
     }
 
     switch(model) {
-      case UnrNotConnected(nick, rooms, curRoom, err) ->
+      case UnrNotConnected(ncModel) ->
        # TODO: Render error message
        # TODO: Link nick with nickname form
        div([], [], [
         p([], [], [
           textDoc("Choose one of the existing rooms or create a new one."),
-          roomForm(rooms, curRoom)])
+          roomForm(ncModel)])
        ])
       case UnrConnected(nick, modInfo, roomInfo) ->
         var adminBox = div([], [], []); # TODO: Fill me in
@@ -459,9 +473,9 @@ fun start() {
   spawnClient {
     var cs = request(wap);
     var (rooms, cs) = receive(cs);
-    var model = NotConnected("", rooms, "", Just(ErrKicked), cs);
+    var model = NotConnected(mkNCModel(rooms, Nothing), cs);
     runLinearVDom("placeholder", Render.render, updt,
-      extract, initialModel, [])
+      extract, model, [])
   };
   page
     <html>
