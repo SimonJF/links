@@ -409,7 +409,7 @@ module Render {
     )
   }
 
-  #sig render : (UnrestrictedModel) ~> Doc(UIMessage)
+  sig render : (UnrestrictedModel) ~> Doc(UIMessage)
   fun render(model) {
     open Tags;
 
@@ -470,12 +470,12 @@ module Render {
 }
 
 fun start() {
-  spawnClient {
+  var _ = spawnClient {
     var cs = request(wap);
     var (rooms, cs) = receive(cs);
     var model = NotConnected(mkNCModel(rooms, Nothing), cs);
     runLinearVDom("placeholder", Render.render, updt,
-      extract, model, [])
+      extract, model, fun(_) { [] })
   };
   page
     <html>

@@ -29,10 +29,11 @@ typename Sub(a) = [| EmptySub | HandlerSub : (String, VirtualHandler(a)) | Sub :
 # Loads the "vdom.js" file, exposes runDom and updateDom.
 module VDom {
   alien javascript "/lib/vdom.js" {
-    runDom : forall a . (String, Doc(a), Process({hear:a, wild| _}), [Sub(a)]) ~%e~> ();
-    updateDom : forall a . (Doc(a)) ~%e~> ();
-    updateSubscriptions : forall a . (([Sub(a)],[Sub(a)])) ~%e~> ();
-    getUniqueID : forall a . (VirtualHandler(a)) ~%e~> (String);
+    runDom : forall a :: Type(Any, Any) .
+      (String, Doc(a), Process({wild |_}), [Sub(a)]) ~%~> ();
+    updateDom : forall a :: Type(Any, Any) . (Doc(a)) ~%~> ();
+    updateSubscriptions : forall a :: Type(Any, Any) . (([Sub(a)],[Sub(a)])) ~%~> ();
+    getUniqueID : forall a :: Type(Any, Any) . (VirtualHandler(a)) ~%~> (String);
     # diffSubs : forall a . (VirtualHandler(a)) ~%e~> (String);
   }
 }
@@ -89,51 +90,68 @@ fun attr(k, v) {
 }
 
 # TODO: Put into a module
-typename Command(a) =
+typename Command(a :: Type(Any, Any)) =
+#typename Command(a) =
   [| NoCommand | Spawn: (() {}~> a) | SpawnLinear: (() {}~@ a) |];
 
 # TODO: Generalise to monoidal interface
-sig processCommand : (Command(a), Process({hear: a | _})) ~> ()
-fun processCommand(cmd, pid) {
+sig processCommand :
+  # forall msg :: Type(Any, Any) .
+  (Command(msg), AP(?msg.End)) ~> ()
+fun processCommand(cmd, ap) {
   switch(cmd) {
     case NoCommand -> ()
     case Spawn(f) ->
-      ignore(
+      var _ =
         spawn {
           var res = f();
-          pid ! res
-        })
-    case SpawnLinear(f) ->
-      ignore(
+          ignore(send(res, request(ap)));
+        };
+      ()
+    case SpawnLinear(f: (() {}~@ msg)) ->
+      var _ =
         spawn {
           var res = f();
-          pid ! res
-        })
-
+          ignore(send(res, request(ap)));
+        };
+      ()
   }
 }
 
 # Main event loop
-fun evtLoop(updt, extract, render, model, prevSubscriptions, subscriptionsFn) {
-  receive {
-    case msg ->
-      var (model, cmd) = updt(msg, model);
-      processCommand(cmd, self());
-      # Update DOM
-      var (model, unrModel) = extract(model);
-      # Get new subscriptions
-      var newSubscriptions = subscriptionsFn(unrModel);
-      # Update subscriptions on the DOM (FFI call)
-      VDom.updateSubscriptions((prevSubscriptions, newSubscriptions));
-      # Update DOM
-      VDom.updateDom(render(unrModel));
-      # Loop with new subscriptions
-      evtLoop(updt, extract, render, model, newSubscriptions, subscriptionsFn)
-  }
+sig evtLoop :
+ # forall msg :: Type(Any, Any),
+ #        model :: Type(Any, Any),
+ #        unrModel :: Type(Unl, Any) .
+  (AP(?msg.End),
+   (msg, model) ~%~> (model, Command(msg)),
+   (model) ~%~> (model, unrModel),
+   (unrModel) ~%~> Doc(msg),
+   model,
+   [Sub(msg)],
+   (unrModel) ~%~> [Sub(msg)]) ~%~> ()
+fun evtLoop(ap, updt, extract, render, model, prevSubscriptions, subscriptionsFn) {
+  var (message, _) = receive(accept(ap));
+  var (model, cmd) = updt(message, model);
+  processCommand(cmd, ap);
+  # Update DOM
+  var (model, unrModel) = extract(model);
+  # Get new subscriptions
+  var newSubscriptions = subscriptionsFn(unrModel);
+  # Update subscriptions on the DOM (FFI call)
+  VDom.updateSubscriptions((prevSubscriptions, newSubscriptions));
+  # Update DOM
+  VDom.updateDom(render(unrModel));
+  # Loop with new subscriptions
+  evtLoop(ap, updt, extract, render, model, newSubscriptions, subscriptionsFn)
 }
 
 # TODO: Type signatures for these
 sig runLinearVDom :
+  #forall
+  #  msg::Type(Any, Any),
+  #  model::Type(Any, Any),
+  #  unrModel::Type(Unl, Any) .
   (String,
    (unrModel) ~%~> Doc(msg),
    (msg, model) ~%~> (model, Command(msg)),
@@ -141,19 +159,19 @@ sig runLinearVDom :
    model,
    (unrModel) ~%~> [Sub(msg)]
    ) ~%~>
-   Process({ hear: msg, wild | _ })
+   Process({ wild | _ })
 fun runLinearVDom(placeholder, view, updt, extract, model, subscriptions) {
   var (model, unrModel) = extract(model);
   var evtHandler = spawnClient {
-    evtLoop(updt, extract, view, model, subscriptions(unrModel), subscriptions)
+    evtLoop(new(), updt, extract, view, model, subscriptions(unrModel), subscriptions)
   };
   var _ = spawnClient { VDom.runDom(placeholder, view(unrModel), evtHandler, subscriptions(unrModel)) };
   evtHandler
 }
 
 # User-facing function (assuming an unrestricted model)
-fun runVDom(placeholder, view, updt, model, subscriptions) {
-  runLinearVDom(placeholder, view, updt, fun(x) { (x, x) },
-    model, subscriptions)
-}
+# fun runVDom(placeholder, view, updt, model, subscriptions) {
+#   runLinearVDom(placeholder, view, updt, fun(x) { (x, x) },
+#     model, subscriptions)
+# }
 
