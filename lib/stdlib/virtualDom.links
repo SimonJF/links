@@ -85,11 +85,13 @@ fun animationFrame(f) {
 
 ######
 
+sig textDoc : forall a :: Type(Any, Any) . (String) ~> Doc(a)
 fun textDoc(str) {
   DocTextNode(str)
 }
 
-# sig tag : (String, [(String, String)], [VirtualHandler(a)], [Doc(a)]) -> Doc(a)
+sig tag : forall a :: Type(Any, Any) .
+  (String, [(String, String)], [VirtualHandler(a)], [Doc(a)]) -> Doc(a)
 fun tag(nameOfTag, attrsOfTag, handlers, childrenOfTag) {
   DocTagNode((tagName=nameOfTag, attrs=attrsOfTag, eventHandlers=handlers, children=childrenOfTag))
 }
@@ -103,35 +105,51 @@ typename Command(a :: Type(Any, Any)) =
 #typename Command(a) =
   [| NoCommand | Spawn: (() {}~> a) | SpawnLinear: (() {}~@ a) |];
 
+#
+# sig go : forall a :: Type(Any, Any) . (Command(a), AP(?a.End)) {}~> ()
+# fun go(data, ap) {
+#   var toSend = switch (data) {
+#     case Apply(f) -> apply(f)
+#     case ApplyLinear(f) -> applyLinear(f)
+#   };
+#   var _ = send(toSend, request(ap));
+#   ()
+# }
+#
+
+sig applySpawn: forall a :: Type(Any, Any) . (() {}~> a) {}~> a
+fun applySpawn(f) { f() }
+
+sig applySpawnLinear : forall a :: Type(Any, Any) . (() {}~@ a) {}~> a
+fun applySpawnLinear(f) { f() }
+
 # TODO: Generalise to monoidal interface
+# TODO: We need the annotation on the function...
 sig processCommand :
-  # forall msg :: Type(Any, Any) .
-  (Command(msg), AP(?msg.End)) ~> ()
+  forall msg :: Type(Any, Any) . (Command(msg), AP(?msg.End)) ~> ()
 fun processCommand(cmd, ap) {
   switch(cmd) {
     case NoCommand -> ()
     case Spawn(f) ->
-      var _ =
+      ignore(
         spawn {
-          var res = f();
-          ignore(send(res, request(ap)));
-        };
-      ()
-    case SpawnLinear(f: (() {}~@ msg)) ->
-      var _ =
+          var _ = send(applySpawn(f), request(ap));
+          ()
+        })
+    case SpawnLinear(f) ->
+      ignore(
         spawn {
-          var res = f();
-          ignore(send(res, request(ap)));
-        };
-      ()
+          var _ = send(applySpawnLinear(f), request(ap));
+          ()
+        })
   }
 }
 
 # Main event loop
 sig evtLoop :
- # forall msg :: Type(Any, Any),
- #        model :: Type(Any, Any),
- #        unrModel :: Type(Unl, Any) .
+ forall msg :: Type(Any, Any),
+        model :: Type(Any, Any),
+        unrModel :: Type(Unl, Any) .
   (AP(?msg.End),
    (msg, model) ~%~> (model, Command(msg)),
    (model) ~%~> (model, unrModel),
@@ -155,12 +173,11 @@ fun evtLoop(ap, updt, extract, render, model, prevSubscriptions, subscriptionsFn
   evtLoop(ap, updt, extract, render, model, newSubscriptions, subscriptionsFn)
 }
 
-# TODO: Type signatures for these
 sig runLinearVDom :
-  #forall
-  #  msg::Type(Any, Any),
-  #  model::Type(Any, Any),
-  #  unrModel::Type(Unl, Any) .
+  forall
+    msg::Type(Any, Any),
+    model::Type(Any, Any),
+    unrModel::Type(Unl, Any) .
   (String,
    (unrModel) ~%~> Doc(msg),
    (msg, model) ~%~> (model, Command(msg)),
@@ -172,7 +189,8 @@ sig runLinearVDom :
 fun runLinearVDom(placeholder, view, updt, extract, model, subscriptions) {
   var (model, unrModel) = extract(model);
   var evtHandler = spawnClient {
-    evtLoop(new(), updt, extract, view, model, subscriptions(unrModel), subscriptions)
+    var ap = new();
+    evtLoop(ap, updt, extract, view, model, subscriptions(unrModel), subscriptions)
   };
   var _ = spawnClient { VDom.runDom(placeholder, view(unrModel), evtHandler, subscriptions(unrModel)) };
   evtHandler

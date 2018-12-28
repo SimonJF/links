@@ -347,132 +347,132 @@ module Render {
   open Attrs;
   open Events;
 
-  sig render : (NotConnectedModel) ~> Doc(UIMessage)
-  fun render(model) {
-    div([], [], [])
-  }
+#  sig render : (UnrestrictedModel) {}~> Doc(UIMessage)
+#  fun render(model) {
+#    div([], [], [])
+#  }
 
 # rooms, selectedRoom
- #sig roomForm : (NotConnectedModel) ~> Doc(UIMessage)
- #fun roomForm(ncModel) {
- #  var newRoomChecked =
- #    switch(ncModel.selectedRoom) {
- #      case NewRoom -> true
- #      case SelectedRoom(_) -> false
- #    };
+  sig roomForm : (NotConnectedModel) ~> Doc(UIMessage)
+  fun roomForm(ncModel) {
+    var newRoomChecked =
+      switch(ncModel.selectedRoom) {
+        case NewRoom -> true
+        case SelectedRoom(_) -> false
+      };
 
- #  fun enterHandler(keycode) {
- #    if(keycode == "13") { SubmitJoinRoom } else { NoOp }
- #  }
+    fun enterHandler(keycode) {
+      if(keycode == "13") { SubmitJoinRoom } else { NoOp }
+    }
 
- #  var newRoomRadio : Doc(UIMessage) =
- #    div([class("radio")], [],
- #      [
- #        label([], [], [
- #          input([type("radio"), name("room"), checked(newRoomChecked)],
- #            [onInput(fun(_) { UpdateSelectedRoom(NewRoom) })], []),
- #          textDoc("New Room"),
- #          input([type("text"), value(ncModel.newRoomText)],
- #            [onInput(fun(str) { UpdateNewRoom(str) }),
- #             getKeycode(enterHandler)],
- #            []
- #          )
- #        ])
- #      ]
- #    );
+    var newRoomRadio : Doc(UIMessage) =
+      div([class("radio")], [],
+        [
+          label([], [], [
+            input([type("radio"), name("room"), checked(newRoomChecked)],
+              [onInput(fun(_) { UpdateSelectedRoom(NewRoom) })], []),
+            textDoc("New Room"),
+            input([type("text"), value(ncModel.newRoomText)],
+              [onInput(fun(str) { UpdateNewRoom(str) }),
+               getKeycode(enterHandler)],
+              []
+            )
+          ])
+        ]
+      );
 
- #  fun roomRadio(roomName) {
- #    var isChecked =
- #      switch(ncModel.selectedRoom) {
- #        case NewRoom -> false
- #        case SelectedRoom(room) -> roomName == room
- #      };
+    fun roomRadio(roomName) {
+      var isChecked =
+        switch(ncModel.selectedRoom) {
+          case NewRoom -> false
+          case SelectedRoom(room) -> roomName == room
+        };
 
- #    div([class("radio")], [],
- #      [
- #        label([], [], [
- #          input([type("radio"), name("roomName"), checked(isChecked)],
- #            [onInput(fun(_) { UpdateSelectedRoom(SelectedRoom(roomName))})], []),
- #          textDoc(roomName)
- #        ])
- #      ]
- #    )
- #  }
+      div([class("radio")], [],
+        [
+          label([], [], [
+            input([type("radio"), name("roomName"), checked(isChecked)],
+              [onInput(fun(_) { UpdateSelectedRoom(SelectedRoom(roomName))})], []),
+            textDoc(roomName)
+          ])
+        ]
+      )
+    }
 
- #  var radioForm =
- #    newRoomRadio :: map(fun(roomName) { roomRadio(roomName) }, ncModel.rooms);
+    var radioForm =
+      newRoomRadio :: map(fun(roomName) { roomRadio(roomName) }, ncModel.rooms);
 
- #  form([], [],
- #  # TODO: This is why we need a monoidal interface for Doc...
- #    div([], [], [
- #      label([for_("nickname")], [], [textDoc("Nickname")]),
- #      input([type("text"), id("nickname"), autofocus(true)], [], [])
- #    ]) ::
- #    (radioForm ++
- #     [div([], [], [
- #      input([type("submit"), value("Join")],
- #        [onClick(fun() { SubmitJoinRoom })], [])])])
- #  )
- #}
+    form([], [],
+    # TODO: This is why we need a monoidal interface for Doc...
+      div([], [], [
+        label([for_("nickname")], [], [textDoc("Nickname")]),
+        input([type("text"), id("nickname"), autofocus(true)], [], [])
+      ]) ::
+      (radioForm ++
+       [div([], [], [
+        input([type("submit"), value("Join")],
+          [onClick(fun() { SubmitJoinRoom })], [])])])
+    )
+  }
 
- #sig render : (UnrestrictedModel) ~> Doc(UIMessage)
- #fun render(model) {
- #  open Tags;
+  sig render : (UnrestrictedModel) ~> Doc(UIMessage)
+  fun render(model) {
+    open Tags;
 
- #  fun renderMessage(msg) {
- #    switch(msg) {
- #      case Chat(nick, msg) ->
- #        p([], [], [
- #          b([], [], [textDoc(nick)]),
- #          textDoc(msg)
- #        ])
- #      case Log(msg) ->
- #        p([], [], [
- #          b([], [], [textDoc(msg)])
- #        ])
- #    }
- #  }
+    fun renderMessage(msg) {
+      switch(msg) {
+        case Chat(nick, msg) ->
+          p([], [], [
+            b([], [], [textDoc(nick)]),
+            textDoc(msg)
+          ])
+        case Log(msg) ->
+          p([], [], [
+            b([], [], [textDoc(msg)])
+          ])
+      }
+    }
 
- #  switch(model) {
- #    case UnrNotConnected(ncModel) ->
- #     # TODO: Render error message
- #     # TODO: Link nick with nickname form
- #     div([], [], [
- #      p([], [], [
- #        textDoc("Choose one of the existing rooms or create a new one."),
- #        roomForm(ncModel)])
- #     ])
- #    case UnrConnected(nick, modInfo, roomInfo) ->
- #      var adminBox = div([], [], []); # TODO: Fill me in
+    switch(model) {
+      case UnrNotConnected(ncModel) ->
+       # TODO: Render error message
+       # TODO: Link nick with nickname form
+       div([], [], [
+        p([], [], [
+          textDoc("Choose one of the existing rooms or create a new one."),
+          roomForm(ncModel)])
+       ])
+      case UnrConnected(nick, modInfo, roomInfo) ->
+        var adminBox = div([], [], []); # TODO: Fill me in
 
- #      fun infoHeader(description, content) {
- #        div([], [],
- #          [p([], [], [span([class("lead")], [], [
- #            b([], [], [textDoc(description ^^ ": ")]),
- #            textDoc(content)
- #          ])])])
- #      }
- #      var topic = infoHeader("Topic", roomInfo.topic);
- #      var room = infoHeader("Room", roomInfo.roomName);
- #      var msgs = map(renderMessage, roomInfo.messages);
- #      fun enterHandler(keycode) {
- #        if(keycode == "13") { SubmitChat } else { NoOp }
- #      }
- #      fun inputHandler(str) { UpdateChatBox(str) }
+        fun infoHeader(description, content) {
+          div([], [],
+            [p([], [], [span([class("lead")], [], [
+              b([], [], [textDoc(description ^^ ": ")]),
+              textDoc(content)
+            ])])])
+        }
+        var topic = infoHeader("Topic", roomInfo.topic);
+        var room = infoHeader("Room", roomInfo.roomName);
+        var msgs = map(renderMessage, roomInfo.messages);
+        fun enterHandler(keycode) {
+          if(keycode == "13") { SubmitChat } else { NoOp }
+        }
+        fun inputHandler(str) { UpdateChatBox(str) }
 
- #      var chatBox =
- #        div([Attrs.style("overflow-y:scroll; width:100%; height:400px;"),
- #             value(roomInfo.currentChatMessage)],
- #            [getKeycode(enterHandler), onInput(inputHandler)],
- #            msgs);
+        var chatBox =
+          div([Attrs.style("overflow-y:scroll; width:100%; height:400px;"),
+               value(roomInfo.currentChatMessage)],
+              [getKeycode(enterHandler), onInput(inputHandler)],
+              msgs);
 
- #      div([], [], [
- #        adminBox,
- #        room,
- #        topic,
- #        chatBox])
- #  }
- #}
+        div([], [], [
+          adminBox,
+          room,
+          topic,
+          chatBox])
+    }
+  }
 }
 
 fun start() {

@@ -12,7 +12,7 @@ let _print_sorted_deps xs =
 let assert_no_cycles = function
   | [] -> ()
   | []::_ys -> ()
-  | [_x]::_ys -> ()
+  | (_x::[])::_ys -> ()
   | (x::xs)::_ys -> failwith ("Error -- cyclic dependencies: " ^ (String.concat ", " (x :: xs)))
 
 (* Traversal to find module import references in the current file *)
@@ -75,7 +75,7 @@ let rec add_module_bindings deps dep_map =
       with Notfound.NotFound _ ->
         (failwith (Printf.sprintf "Trying to find %s in dep map containing keys: %s\n"
           module_name (print_list (List.map fst (StringMap.bindings dep_map))))));
-    | _ -> failwith "Internal error: impossible pattern in add_module_bindings"
+    | xs -> failwith (Printf.sprintf "Internal error: impossible pattern in add_module_bindings: %s\n" (print_list (List.map print_list xs)))
 
 
 let rec add_dependencies_inner module_name module_prog visited deps dep_map =
