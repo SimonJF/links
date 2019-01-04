@@ -213,7 +213,7 @@ fun updt(msg, model) {
             case NewRoom -> ncModel.newRoomText
             case SelectedRoom(name) -> name
           };
-          var cs = send((ncModel.nickname, roomName), cs);
+          var cs = send((roomName, ncModel.nickname), cs);
           offer(cs) {
             case JoinedOK(cs) ->
               # TODO: We could subscribe to this, and have a "Loading" state
@@ -406,11 +406,12 @@ module Render {
     # TODO: This is why we need a monoidal interface for Doc...
       div([], [], [
         label([for_("nickname")], [], [textDoc("Nickname")]),
-        input([type("text"), id("nickname"), autofocus(true)], [], [])
+        input([type("text"), id("nickname"), autofocus(true)],
+        [onInput(fun(nick) { UpdateNickname(nick) })], [])
       ]) ::
       (radioForm ++
        [div([], [], [
-        input([type("submit"), value("Join")],
+        input([type("button"), value("Join")],
           [onClick(fun() { SubmitJoinRoom })], [])])])
     )
   }
@@ -423,7 +424,7 @@ module Render {
       switch(msg) {
         case ChatMsg(nick, msg) ->
           p([], [], [
-            b([], [], [textDoc(nick)]),
+            b([], [], [textDoc(nick ^^ ": ")]),
             textDoc(msg)
           ])
         case LogMsg(msg) ->
@@ -461,16 +462,20 @@ module Render {
         fun inputHandler(str) { UpdateChatBox(str) }
 
         var chatBox =
-          div([Attrs.style("overflow-y:scroll; width:100%; height:400px;"),
+          div([Attrs.style("overflow-y:scroll; width:100%; height:400px;")],
+              [], msgs);
+        var chatInputBox =
+          input([Attrs.style("width:100%;"),
                value(roomInfo.currentChatMessage)],
               [getKeycode(enterHandler), onInput(inputHandler)],
-              msgs);
+              []);
 
         div([], [], [
           adminBox,
           room,
           topic,
-          chatBox])
+          chatBox,
+          chatInputBox])
     }
   }
 }
