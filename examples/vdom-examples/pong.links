@@ -172,7 +172,7 @@ fun subscriptions(model) {
 
 
 fun mainPage(_) {
-  var evtHandler = runVDom("placeholder", view, updt, defaultGame, subscriptions);
+  var evtHandler = runSimpleVDom("placeholder", view, updt, defaultGame, subscriptions);
   page
   <html>
     <head>

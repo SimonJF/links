@@ -197,8 +197,33 @@ fun runLinearVDom(placeholder, view, updt, extract, model, subscriptions) {
 }
 
 # User-facing function (assuming an unrestricted model)
-# fun runVDom(placeholder, view, updt, model, subscriptions) {
-#   runLinearVDom(placeholder, view, updt, fun(x) { (x, x) },
-#     model, subscriptions)
-# }
+sig runVDom :
+  forall
+    msg :: Type(Any, Any),
+    model :: Type(Unl, Any) .
+  (String,
+    (model) ~%~> Doc(msg),
+    (msg, model) ~%~> (model, Command(msg)),
+    model,
+    (model) ~%~> [Sub(msg)]) ~%~> Process({ wild })
+fun runVDom(placeholder, view, updt, model, subscriptions) {
+  runLinearVDom(placeholder, view, updt,
+    fun(x) { (x, x) },
+    model, subscriptions)
+}
 
+sig runSimpleVDom :
+  forall
+    msg :: Type(Any, Any),
+    model :: Type(Unl, Any) .
+  (String,
+    (model) ~%~> Doc(msg),
+    (msg, model) ~%~> model,
+    model,
+    (model) ~%~> [Sub(msg)]) ~%~> Process({ wild })
+fun runSimpleVDom(placeholder, view, updt, model, subscriptions) {
+  runVDom(placeholder, view,
+    fun(msg, model) { (updt(msg, model), NoCommand)},
+    model,
+    subscriptions)
+}

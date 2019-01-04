@@ -43,7 +43,7 @@ fun subscriptions(model) {
 
 fun mainPage(_) {
   var initialModel = (coords = (0,0));
-  var evtHandler = runVDom("placeholder", view, updt, initialModel, subscriptions);
+  var evtHandler = runSimpleVDom("placeholder", view, updt, initialModel, subscriptions);
   page
   <html>
     <head>

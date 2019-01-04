@@ -480,7 +480,7 @@ fun mainPage() {
     var cs = request(wap);
     var (rooms, cs) = receive(cs);
     var model = NotConnected(mkNCModel(rooms, Nothing), cs);
-    runLinearVDom("placeholder", Render.render, updt,
+    runLinearVDom("vdom-placeholder", Render.render, updt,
       extract, model, fun(_) { [] })
   };
   page
@@ -512,7 +512,7 @@ fun mainPage() {
 
       <div id="main" class="container marketing">
         <div class="row featurette">
-          <div id="placeholder"></div>
+          <div id="vdom-placeholder"></div>
         </div>
       </div>
     </html>

@@ -1,7 +1,7 @@
-open Tags
-open Attrs
-open Events
-open VirtualDom
+open Tags;
+open Attrs;
+open Events;
+open VirtualDom;
 
 typename Model = (mousePos : (Int,Int));
 typename Msg = [| MousePosition : (Int,Int) |];
@@ -17,7 +17,7 @@ fun mousePositionHandler() {
 }
 
 sig updt : (Msg, Model) ~%e~> Model
-fun updt(msg, model) { 
+fun updt(msg, model) {
   switch(msg) {
     case MousePosition((a,b)) ->
       (model with mousePos = (a,b))
@@ -37,7 +37,7 @@ fun view(model) {
 fun mainPage(_, _) {
   var initialModel = (mousePos = (0,0));
   var subscriptions = [mousePositionHandler()];
-  var evtHandler = runVDom("placeholder", view, updt, initialModel, subscriptions);
+  var evtHandler = runSimpleVDom("placeholder", view, updt, initialModel, subscriptions);
   page
   <html>
     <head>

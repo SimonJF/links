@@ -32,7 +32,7 @@ fun subscriptions(model) {
 
 fun mainPage(_) {
   var initialModel = (keyPressed = "None");
-  var evtHandler = runVDom("placeholder", view, updt, initialModel, subscriptions);
+  var evtHandler = runSimpleVDom("placeholder", view, updt, initialModel, subscriptions);
   page
   <html>
     <head>

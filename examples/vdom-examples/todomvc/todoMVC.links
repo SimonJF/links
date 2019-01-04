@@ -254,7 +254,7 @@ fun view(model) {
 
 fun mainPage(_) {
   var initialModel = (entries = [], field = "", uid = 0, visibility = "All");
-  var evtHandler = runVDom("placeholder", view, updt, initialModel, fun(_) { [] });
+  var evtHandler = runSimpleVDom("placeholder", view, updt, initialModel, fun(_) { [] });
   page
   <html>
     <head>
