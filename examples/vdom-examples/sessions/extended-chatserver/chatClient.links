@@ -2,7 +2,7 @@ open ChatSessions;
 open VirtualDom;
 
 typename ChatMessage =
-  [| Chat: (Nickname, Message) | Log: Message |];
+  [| ChatMsg: (Nickname, Message) | LogMsg: Message |];
 
 # Model: Can be one of three states.
 #  1. Not connected to a room
@@ -168,11 +168,11 @@ fun updt(msg, model) {
   }
 
   fun addChatMessage(nick, msg, ri) {
-    (ri with messages = ri.messages ++ [Chat(nick, msg)])
+    (ri with messages = ri.messages ++ [ChatMsg(nick, msg)])
   }
 
   fun addSystemMessage(msg, ri) {
-    (ri with messages = ri.messages ++ [Log(msg)])
+    (ri with messages = ri.messages ++ [LogMsg(msg)])
   }
 
   fun userJoined(nick, ri) {
@@ -208,7 +208,7 @@ fun updt(msg, model) {
       }, model, NoCommand)
     case SubmitJoinRoom ->
       switch(model) {
-        case NotConnected(ncModel, cs) ->
+        case NotConnected(ncModel, (cs: ClientSelect)) ->
           var roomName = switch(ncModel.selectedRoom) {
             case NewRoom -> ncModel.newRoomText
             case SelectedRoom(name) -> name
@@ -421,12 +421,12 @@ module Render {
 
     fun renderMessage(msg) {
       switch(msg) {
-        case Chat(nick, msg) ->
+        case ChatMsg(nick, msg) ->
           p([], [], [
             b([], [], [textDoc(nick)]),
             textDoc(msg)
           ])
-        case Log(msg) ->
+        case LogMsg(msg) ->
           p([], [], [
             b([], [], [textDoc(msg)])
           ])
@@ -475,7 +475,7 @@ module Render {
   }
 }
 
-fun start() {
+fun mainPage() {
   var _ = spawnClient {
     var cs = request(wap);
     var (rooms, cs) = receive(cs);
