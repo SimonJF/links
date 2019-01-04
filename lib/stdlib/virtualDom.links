@@ -39,7 +39,7 @@ typename Sub(a :: Type(Any, Any)) =
 module VDom {
   alien javascript "/lib/vdom.js" {
     runDom : forall a :: Type(Any, Any) .
-      (String, Doc(a), Process({wild}), [Sub(a)]) ~%~> ();
+      (String, Doc(a), AP(?a.End), [Sub(a)]) ~%~> ();
     updateDom : forall a :: Type(Any, Any) . (Doc(a)) ~%~> ();
     updateSubscriptions : forall a :: Type(Any, Any) . (([Sub(a)],[Sub(a)])) ~%~> ();
     getUniqueID : forall a :: Type(Any, Any) . (VirtualHandler(a)) ~%~> (String);
@@ -184,16 +184,15 @@ sig runLinearVDom :
    (model) ~%~> (model, unrModel),
    model,
    (unrModel) ~%~> [Sub(msg)]
-   ) ~%~>
-   Process({ wild })
+   ) ~%~> ()
 fun runLinearVDom(placeholder, view, updt, extract, model, subscriptions) {
   var (model, unrModel) = extract(model);
   var evtHandler = spawnClient {
     var ap = new();
+    VDom.runDom(placeholder, view(unrModel), ap, subscriptions(unrModel));
     evtLoop(ap, updt, extract, view, model, subscriptions(unrModel), subscriptions)
   };
-  var _ = spawnClient { VDom.runDom(placeholder, view(unrModel), evtHandler, subscriptions(unrModel)) };
-  evtHandler
+  ()
 }
 
 # User-facing function (assuming an unrestricted model)
@@ -205,7 +204,7 @@ sig runVDom :
     (model) ~%~> Doc(msg),
     (msg, model) ~%~> (model, Command(msg)),
     model,
-    (model) ~%~> [Sub(msg)]) ~%~> Process({ wild })
+    (model) ~%~> [Sub(msg)]) ~%~> ()
 fun runVDom(placeholder, view, updt, model, subscriptions) {
   runLinearVDom(placeholder, view, updt,
     fun(x) { (x, x) },
@@ -220,7 +219,7 @@ sig runSimpleVDom :
     (model) ~%~> Doc(msg),
     (msg, model) ~%~> model,
     model,
-    (model) ~%~> [Sub(msg)]) ~%~> Process({ wild })
+    (model) ~%~> [Sub(msg)]) ~%~> ()
 fun runSimpleVDom(placeholder, view, updt, model, subscriptions) {
   runVDom(placeholder, view,
     fun(msg, model) { (updt(msg, model), NoCommand)},

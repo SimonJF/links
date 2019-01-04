@@ -141,7 +141,7 @@ fun updt(msg, model) {
   }
 }
 
-sig viewInput : (String) -> Doc(Msg)
+sig viewInput : (String) ~> Doc(Msg)
 fun viewInput(task) {
   header ([class("header")], [], [
     h1 ([], [], [textDoc("todos")]),
@@ -195,7 +195,7 @@ fun viewEntries(visibility, entries) {
   ])
 }
 
-sig viewControlsCount : (Int) -> Doc(Msg)
+sig viewControlsCount : (Int) ~> Doc(Msg)
 fun viewControlsCount(entriesLeft) {
   var item_ = if (entriesLeft == 1) {
     " item"
