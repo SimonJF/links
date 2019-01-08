@@ -141,17 +141,17 @@ fun updt(msg, model) {
   }
 }
 
-sig viewInput : (String) ~> Doc(Msg)
+sig viewInput : (String) ~> HTML(Msg)
 fun viewInput(task) {
   header ([class("header")], [], [
-    h1 ([], [], [textDoc("todos")]),
+    h1 ([], [], [textNode("todos")]),
     input ([type ("text"), class ("new-todo"), placeholder ("What needs to be done?"),
       name ("newTodo"), id ("newTodo"), value(task)],
       [updateFieldHandler(), enterHandler()], [])
   ])
 }
 
-sig viewEntry : (Entry) ~> Doc(Msg)
+sig viewEntry : (Entry) ~> HTML(Msg)
 fun viewEntry(todo) {
   var classes =
     classList([("completed", todo.completed), ("editing",todo.editing)]);
@@ -159,7 +159,7 @@ fun viewEntry(todo) {
     div ([class ("view")], [], [
       input ([type ("checkbox"), name ("toggle"), class ("toggle"), checked (todo.completed)],
              [checkEntryHandler(todo.id, not(todo.completed))], []),
-      label ([],[editingHandler(todo.id, true)],[textDoc(todo.description)]),
+      label ([],[editingHandler(todo.id, true)],[textNode(todo.description)]),
       span ([class ("destroy")], [deleteHandler(todo.id)], [])
     ]),
 
@@ -176,7 +176,7 @@ fun viewEntry(todo) {
   ])
 }
 
-sig viewEntries : (String, [Entry]) ~> Doc(Msg)
+sig viewEntries : (String, [Entry]) ~> HTML(Msg)
 fun viewEntries(visibility, entries) {
   var isVisible = fun (todo) {
     switch(visibility) {
@@ -195,7 +195,7 @@ fun viewEntries(visibility, entries) {
   ])
 }
 
-sig viewControlsCount : (Int) ~> Doc(Msg)
+sig viewControlsCount : (Int) ~> HTML(Msg)
 fun viewControlsCount(entriesLeft) {
   var item_ = if (entriesLeft == 1) {
     " item"
@@ -203,29 +203,29 @@ fun viewControlsCount(entriesLeft) {
     " items"
   };
   span ([class ("todo-count")], [], [
-    strong ([], [], [textDoc(intToString(entriesLeft))]),
-    textDoc(item_),textDoc(" left")
+    strong ([], [], [textNode(intToString(entriesLeft))]),
+    textNode(item_),textNode(" left")
   ])
 }
 
-sig visibilitySwap : (String, String, String) ~> Doc(Msg)
+sig visibilitySwap : (String, String, String) ~> HTML(Msg)
 fun visibilitySwap(uri, visibility, actualVisibility) {
   var classes = classList([("selected", visibility == actualVisibility)]);
   li ([], [changeVisibilityHandler(visibility)], [
-    a ([href (uri), class (classes)],[],[textDoc(visibility)])
+    a ([href (uri), class (classes)],[],[textNode(visibility)])
   ])
 }
 
-sig viewControlsFilters : (String) ~> Doc(Msg)
+sig viewControlsFilters : (String) ~> HTML(Msg)
 fun viewControlsFilters(visibility) {
  ul ([class ("filters")], [], [
-    visibilitySwap("#/", "All", visibility), textDoc(" "),
-    visibilitySwap("#/active", "Active", visibility), textDoc(" "),
+    visibilitySwap("#/", "All", visibility), textNode(" "),
+    visibilitySwap("#/active", "Active", visibility), textNode(" "),
     visibilitySwap("#/completed", "Completed", visibility)
   ])
 }
 
-sig viewControls : (String, [Entry]) ~> Doc(Msg)
+sig viewControls : (String, [Entry]) ~> HTML(Msg)
 fun viewControls(visibility, entries) {
   var entriesCompleted = length(filter(fun(x) { x.completed }, entries));
   var entriesLeft = length(entries) - entriesCompleted;
@@ -240,7 +240,7 @@ fun viewControls(visibility, entries) {
   ])
 }
 
-sig view : (Model) ~%e~> Doc(Msg)
+sig view : (Model) ~%e~> HTML(Msg)
 fun view(model) {
   div ([class ("todomvc-wrapper")], [], [
     section ([class ("todoapp")], [], [
@@ -254,7 +254,8 @@ fun view(model) {
 
 fun mainPage(_) {
   var initialModel = (entries = [], field = "", uid = 0, visibility = "All");
-  var evtHandler = runSimpleVDom("placeholder", view, updt, initialModel, fun(_) { [] });
+  var evtHandler =
+    runSimple("placeholder", initialModel, view, updt);
   page
   <html>
     <head>

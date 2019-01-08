@@ -59,12 +59,12 @@ fun keyUpHandler() {
   })
 }
 
-sig drawCircle : (Float,Float) -> Doc(Msg)
+sig drawCircle : (Float,Float) -> HTML(Msg)
 fun drawCircle(x,y) {
   div ([class ("circle"), style ("left:"^^floatToString(x)^^"px;top:"^^floatToString(y)^^"px;position:absolute;")], [], [])
 }
 
-sig drawPaddle : (Float,Float) -> Doc(Msg)
+sig drawPaddle : (Float,Float) -> HTML(Msg)
 fun drawPaddle(x,y) {
   div ([class ("paddle"), style ("left:"^^floatToString(x)^^"px;top:"^^floatToString(y)^^"px;position:absolute;")], [], [])
 }
@@ -150,17 +150,17 @@ fun updt(msg, game) {
     }
 }
 
-sig view : (Game) ~%e~> Doc(Msg)
+sig view : (Game) ~%e~> HTML(Msg)
 fun view(game) {
   div ([class ("canvas")], [], [
     drawCircle(game.ball.x,game.ball.y),
     drawPaddle(game.player1.x,game.player1.y),
     drawPaddle(game.player2.x,game.player2.y),
     h1 ([class ("scores")], [], [
-      textDoc(intToString(game.player1.score/2) ^^ " " ^^ intToString(game.player2.score/2))
+      textNode(intToString(game.player1.score/2) ^^ " " ^^ intToString(game.player2.score/2))
     ]),
     div ([class ("instructions")], [], [
-      textDoc("SPACE to start, W/S and UP/DOWN to move")
+      textNode("SPACE to start, W/S and UP/DOWN to move")
     ])
   ])
 }
@@ -172,7 +172,8 @@ fun subscriptions(model) {
 
 
 fun mainPage(_) {
-  var evtHandler = runSimpleVDom("placeholder", view, updt, defaultGame, subscriptions);
+  run("placeholder", defaultGame, view,
+    fun(msg, model) { (updt(msg, model), NoCommand) }, subscriptions);
   page
   <html>
     <head>

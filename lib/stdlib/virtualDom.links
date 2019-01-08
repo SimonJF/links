@@ -1,26 +1,20 @@
 ### VDOM STUFF ###
 
-# Doc Type
+# HTML Type
 
-typename VirtualHandler(a :: Type(Any, Any)) =
+typename EventHandler(a :: Type(Any, Any)) =
   [| StringHandler: (String, (String) {}~> a)
    | UnitHandler: (String, () {}~> a)
    | TupleIntHandler: (String, ((Int,Int)) {}~> a)
    | TimeHandler: (Int, () {}~> a)
    | AnimationFrameHandler: ((a) {}~> a) |];
 
-##### GO FROM HERE
-# For some reason, it doesn't seem possible to have a Doc parameterised
-# over a linear type variable. This is because when trying to unify the
-# type variable, the flexible type variable appears to be unrestricted,
-# whereas the specified type is linear.
-# TODO: Next up, minimal failing example, to demonstrate the problem further.
-typename Doc(a :: Type(Any, Any)) =
-  [| DocTextNode: (String)
-   | DocTagNode:
+typename HTML(a :: Type(Any, Any)) =
+  [| HTMLTextNode: (String)
+   | HTMLTagNode:
       (tagName: String, attrs: [(String, String)],
-       eventHandlers: [VirtualHandler(a)],
-       children: [Doc(a)])
+       eventHandlers: [EventHandler(a)],
+       children: [HTML(a)])
    |];
 
 # Needed to ensure that virtual-dom is open
@@ -32,18 +26,18 @@ module VirtualDom {
 
 typename Sub(a :: Type(Any, Any)) =
   [| EmptySub
-   | HandlerSub : (String, VirtualHandler(a))
+   | HandlerSub : (String, EventHandler(a))
    | Sub : (a) |];
 
 # Loads the "vdom.js" file, exposes runDom and updateDom.
 module VDom {
   alien javascript "/lib/vdom.js" {
     runDom : forall a :: Type(Any, Any) .
-      (String, Doc(a), AP(?a.End), [Sub(a)]) ~%~> ();
-    updateDom : forall a :: Type(Any, Any) . (Doc(a)) ~%~> ();
+      (String, HTML(a), AP(?a.End), [Sub(a)]) ~%~> ();
+    updateDom : forall a :: Type(Any, Any) . (HTML(a)) ~%~> ();
     updateSubscriptions : forall a :: Type(Any, Any) . (([Sub(a)],[Sub(a)])) ~%~> ();
-    getUniqueID : forall a :: Type(Any, Any) . (VirtualHandler(a)) ~%~> (String);
-    # diffSubs : forall a . (VirtualHandler(a)) ~%e~> (String);
+    getUniqueID : forall a :: Type(Any, Any) . (EventHandler(a)) ~%~> (String);
+    # diffSubs : forall a . (EventHandler(a)) ~%e~> (String);
   }
 }
 ### SUBSCRIPTIONS ###
@@ -85,15 +79,15 @@ fun animationFrame(f) {
 
 ######
 
-sig textDoc : forall a :: Type(Any, Any) . (String) ~> Doc(a)
-fun textDoc(str) {
-  DocTextNode(str)
+sig textNode: forall a :: Type(Any, Any) . (String) ~> HTML(a)
+fun textNode(str) {
+  HTMLTextNode(str)
 }
 
 sig tag : forall a :: Type(Any, Any) .
-  (String, [(String, String)], [VirtualHandler(a)], [Doc(a)]) -> Doc(a)
+  (String, [(String, String)], [EventHandler(a)], [HTML(a)]) -> HTML(a)
 fun tag(nameOfTag, attrsOfTag, handlers, childrenOfTag) {
-  DocTagNode((tagName=nameOfTag, attrs=attrsOfTag, eventHandlers=handlers, children=childrenOfTag))
+  HTMLTagNode((tagName=nameOfTag, attrs=attrsOfTag, eventHandlers=handlers, children=childrenOfTag))
 }
 
 fun attr(k, v) {
@@ -102,20 +96,7 @@ fun attr(k, v) {
 
 # TODO: Put into a module
 typename Command(a :: Type(Any, Any)) =
-#typename Command(a) =
   [| NoCommand | Spawn: (() {}~> a) | SpawnLinear: (() {}~@ a) |];
-
-#
-# sig go : forall a :: Type(Any, Any) . (Command(a), AP(?a.End)) {}~> ()
-# fun go(data, ap) {
-#   var toSend = switch (data) {
-#     case Apply(f) -> apply(f)
-#     case ApplyLinear(f) -> applyLinear(f)
-#   };
-#   var _ = send(toSend, request(ap));
-#   ()
-# }
-#
 
 sig applySpawn: forall a :: Type(Any, Any) . (() {}~> a) {}~> a
 fun applySpawn(f) { f() }
@@ -124,7 +105,6 @@ sig applySpawnLinear : forall a :: Type(Any, Any) . (() {}~@ a) {}~> a
 fun applySpawnLinear(f) { f() }
 
 # TODO: Generalise to monoidal interface
-# TODO: We need the annotation on the function...
 sig processCommand :
   forall msg :: Type(Any, Any) . (Command(msg), AP(?msg.End)) ~> ()
 fun processCommand(cmd, ap) {
@@ -151,13 +131,13 @@ sig evtLoop :
         model :: Type(Any, Any),
         unrModel :: Type(Unl, Any) .
   (AP(?msg.End),
-   (msg, model) ~%~> (model, Command(msg)),
-   (model) ~%~> (model, unrModel),
-   (unrModel) ~%~> Doc(msg),
    model,
-   [Sub(msg)],
-   (unrModel) ~%~> [Sub(msg)]) ~%~> ()
-fun evtLoop(ap, updt, extract, render, model, prevSubscriptions, subscriptionsFn) {
+   (unrModel) ~%~> HTML(msg),
+   (msg, model) ~%~> (model, Command(msg)),
+   (unrModel) ~%~> [Sub(msg)],
+   (model) ~%~> (model, unrModel),
+   [Sub(msg)]) ~%~> ()
+fun evtLoop(ap, model, view, updt, subscriptionsFn, extract, prevSubscriptions) {
   var (message, _) = receive(accept(ap));
   var (model, cmd) = updt(message, model);
   processCommand(cmd, ap);
@@ -168,61 +148,57 @@ fun evtLoop(ap, updt, extract, render, model, prevSubscriptions, subscriptionsFn
   # Update subscriptions on the DOM (FFI call)
   VDom.updateSubscriptions((prevSubscriptions, newSubscriptions));
   # Update DOM
-  VDom.updateDom(render(unrModel));
+  VDom.updateDom(view(unrModel));
   # Loop with new subscriptions
-  evtLoop(ap, updt, extract, render, model, newSubscriptions, subscriptionsFn)
+  evtLoop(ap, model, view, updt, subscriptionsFn, extract, newSubscriptions)
 }
 
-sig runLinearVDom :
+sig runLinear:
   forall
     msg::Type(Any, Any),
     model::Type(Any, Any),
     unrModel::Type(Unl, Any) .
   (String,
-   (unrModel) ~%~> Doc(msg),
-   (msg, model) ~%~> (model, Command(msg)),
-   (model) ~%~> (model, unrModel),
    model,
-   (unrModel) ~%~> [Sub(msg)]
+   (unrModel) ~%~> HTML(msg),
+   (msg, model) ~%~> (model, Command(msg)),
+   (unrModel) ~%~> [Sub(msg)],
+   (model) ~%~> (model, unrModel)
    ) ~%~> ()
-fun runLinearVDom(placeholder, view, updt, extract, model, subscriptions) {
+fun runLinear(placeholder, model, view, updt, subscriptions, extract) {
   var (model, unrModel) = extract(model);
   var evtHandler = spawnClient {
     var ap = new();
     VDom.runDom(placeholder, view(unrModel), ap, subscriptions(unrModel));
-    evtLoop(ap, updt, extract, view, model, subscriptions(unrModel), subscriptions)
+    evtLoop(ap, model, view, updt, subscriptions, extract, subscriptions(unrModel))
   };
   ()
 }
 
 # User-facing function (assuming an unrestricted model)
-sig runVDom :
+sig run:
   forall
     msg :: Type(Any, Any),
     model :: Type(Unl, Any) .
   (String,
-    (model) ~%~> Doc(msg),
-    (msg, model) ~%~> (model, Command(msg)),
     model,
+    (model) ~%~> HTML(msg),
+    (msg, model) ~%~> (model, Command(msg)),
     (model) ~%~> [Sub(msg)]) ~%~> ()
-fun runVDom(placeholder, view, updt, model, subscriptions) {
-  runLinearVDom(placeholder, view, updt,
-    fun(x) { (x, x) },
-    model, subscriptions)
+fun run(placeholder, model, view, updt, subscriptions) {
+  runLinear(placeholder, model, view, updt, subscriptions, fun(x) { (x, x) })
 }
 
-sig runSimpleVDom :
+sig runSimple :
   forall
     msg :: Type(Any, Any),
     model :: Type(Unl, Any) .
   (String,
-    (model) ~%~> Doc(msg),
-    (msg, model) ~%~> model,
     model,
-    (model) ~%~> [Sub(msg)]) ~%~> ()
-fun runSimpleVDom(placeholder, view, updt, model, subscriptions) {
-  runVDom(placeholder, view,
+    (model) ~%~> HTML(msg),
+    (msg, model) ~%~> model) ~%~> ()
+fun runSimple(placeholder, model, view, updt) {
+  run(placeholder, model, view,
     fun(msg, model) { (updt(msg, model), NoCommand)},
-    model,
-    subscriptions)
+    fun(_) { [] } )
 }

@@ -347,13 +347,13 @@ module Render {
   open Attrs;
   open Events;
 
-#  sig render : (UnrestrictedModel) {}~> Doc(UIMessage)
+#  sig render : (UnrestrictedModel) {}~> HTML(UIMessage)
 #  fun render(model) {
 #    div([], [], [])
 #  }
 
 # rooms, selectedRoom
-  sig roomForm : (NotConnectedModel) ~> Doc(UIMessage)
+  sig roomForm : (NotConnectedModel) ~> HTML(UIMessage)
   fun roomForm(ncModel) {
     var newRoomChecked =
       switch(ncModel.selectedRoom) {
@@ -365,13 +365,13 @@ module Render {
       if(keycode == "13") { SubmitJoinRoom } else { NoOp }
     }
 
-    var newRoomRadio : Doc(UIMessage) =
+    var newRoomRadio : HTML(UIMessage) =
       div([class("radio")], [],
         [
           label([], [], [
             input([type("radio"), name("room"), checked(newRoomChecked)],
               [onInput(fun(_) { UpdateSelectedRoom(NewRoom) })], []),
-            textDoc("New Room"),
+            textNode("New Room"),
             input([type("text"), value(ncModel.newRoomText)],
               [onInput(fun(str) { UpdateNewRoom(str) }),
                getKeycode(enterHandler)],
@@ -393,7 +393,7 @@ module Render {
           label([], [], [
             input([type("radio"), name("roomName"), checked(isChecked)],
               [onInput(fun(_) { UpdateSelectedRoom(SelectedRoom(roomName))})], []),
-            textDoc(roomName)
+            textNode(roomName)
           ])
         ]
       )
@@ -403,9 +403,9 @@ module Render {
       newRoomRadio :: map(fun(roomName) { roomRadio(roomName) }, ncModel.rooms);
 
     form([], [],
-    # TODO: This is why we need a monoidal interface for Doc...
+    # TODO: This is why we need a monoidal interface for HTML...
       div([], [], [
-        label([for_("nickname")], [], [textDoc("Nickname")]),
+        label([for_("nickname")], [], [textNode("Nickname")]),
         input([type("text"), id("nickname"), autofocus(true)],
         [onInput(fun(nick) { UpdateNickname(nick) })], [])
       ]) ::
@@ -416,7 +416,7 @@ module Render {
     )
   }
 
-  sig render : (UnrestrictedModel) ~> Doc(UIMessage)
+  sig render : (UnrestrictedModel) ~> HTML(UIMessage)
   fun render(model) {
     open Tags;
 
@@ -424,12 +424,12 @@ module Render {
       switch(msg) {
         case ChatMsg(nick, msg) ->
           p([], [], [
-            b([], [], [textDoc(nick ^^ ": ")]),
-            textDoc(msg)
+            b([], [], [textNode(nick ^^ ": ")]),
+            textNode(msg)
           ])
         case LogMsg(msg) ->
           p([], [], [
-            b([], [], [textDoc(msg)])
+            b([], [], [textNode(msg)])
           ])
       }
     }
@@ -440,7 +440,7 @@ module Render {
        # TODO: Link nick with nickname form
        div([], [], [
         p([], [], [
-          textDoc("Choose one of the existing rooms or create a new one."),
+          textNode("Choose one of the existing rooms or create a new one."),
           roomForm(ncModel)])
        ])
       case UnrConnected(nick, modInfo, roomInfo) ->
@@ -449,8 +449,8 @@ module Render {
         fun infoHeader(description, content) {
           div([], [],
             [p([], [], [span([class("lead")], [], [
-              b([], [], [textDoc(description ^^ ": ")]),
-              textDoc(content)
+              b([], [], [textNode(description ^^ ": ")]),
+              textNode(content)
             ])])])
         }
         var topic = infoHeader("Topic", roomInfo.topic);
@@ -485,8 +485,8 @@ fun mainPage() {
     var cs = request(wap);
     var (rooms, cs) = receive(cs);
     var model = NotConnected(mkNCModel(rooms, Nothing), cs);
-    runLinearVDom("vdom-placeholder", Render.render, updt,
-      extract, model, fun(_) { [] })
+    runLinear("vdom-placeholder", model, Render.render, updt,
+      fun(_) { [] }, extract)
   };
   page
     <html>

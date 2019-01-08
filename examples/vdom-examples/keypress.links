@@ -20,10 +20,10 @@ fun updt(msg, model) {
   }
 }
 
-sig view : (Model) ~%e~> Doc(Msg)
+sig view : (Model) ~%e~> HTML(Msg)
 fun view(model) {
     div ([id ("testdiv"), style ("width:100%;height:100%")],[],
-    [textDoc("Key pressed: "),textDoc(model.keyPressed)])
+    [textNode("Key pressed: "),textNode(model.keyPressed)])
 }
 
 fun subscriptions(model) {
@@ -32,7 +32,8 @@ fun subscriptions(model) {
 
 fun mainPage(_) {
   var initialModel = (keyPressed = "None");
-  var evtHandler = runSimpleVDom("placeholder", view, updt, initialModel, subscriptions);
+  run("placeholder", initialModel, view,
+    fun(model, msg) { (updt(model, msg), NoCommand) }, subscriptions);
   page
   <html>
     <head>
