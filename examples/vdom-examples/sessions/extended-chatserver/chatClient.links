@@ -361,10 +361,6 @@ module Render {
         case SelectedRoom(_) -> false
       };
 
-    fun enterHandler(keycode) {
-      if(keycode == "13") { SubmitJoinRoom } else { NoOp }
-    }
-
     var newRoomRadio : HTML(UIMessage) =
       div([class("radio")], [],
         [
@@ -374,7 +370,7 @@ module Render {
             textNode("New Room"),
             input([type("text"), value(ncModel.newRoomText)],
               [onInput(fun(str) { UpdateNewRoom(str) }),
-               getKeycode(enterHandler)],
+               onEnter(fun() { SubmitJoinRoom })],
               []
             )
           ])
@@ -456,9 +452,6 @@ module Render {
         var topic = infoHeader("Topic", roomInfo.topic);
         var room = infoHeader("Room", roomInfo.roomName);
         var msgs = map(renderMessage, roomInfo.messages);
-        fun enterHandler(keycode) {
-          if(keycode == "13") { SubmitChat } else { NoOp }
-        }
         fun inputHandler(str) { UpdateChatBox(str) }
 
         var chatBox =
@@ -467,7 +460,7 @@ module Render {
         var chatInputBox =
           input([Attrs.style("width:100%;"),
                value(roomInfo.currentChatMessage)],
-              [getKeycode(enterHandler), onInput(inputHandler)],
+              [onEnter(fun() { SubmitChat }), onInput(inputHandler)],
               []);
 
         div([], [], [
