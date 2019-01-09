@@ -66,7 +66,7 @@ fun updt(msg, model) {
   }
 }
 
-sig view : (Model) ~%e~> Doc(Msg)
+sig view : (Model) ~%e~> HTML(Msg)
 fun view(model) {
     var toggleText = if (model.paused == true) {
       "Start"
@@ -74,16 +74,16 @@ fun view(model) {
       "Pause"
     };
     div ([id ("swatch"), class ("swatch")],[], [
-      h1 ([], [], [textDoc(pad(model.minutes)),textDoc(":"),textDoc(pad(model.seconds))]),
-      button ([id ("togglepause")], [togglePauseHandler()], [textDoc(toggleText)]),
-      button ([id ("reset")], [resetHandler()], [textDoc("Reset")]),
-      button ([id ("stop")], [stopHandler()], [textDoc("Stop")]),
+      h1 ([], [], [textNode(pad(model.minutes)),textNode(":"),textNode(pad(model.seconds))]),
+      button ([id ("togglepause")], [togglePauseHandler()], [textNode(toggleText)]),
+      button ([id ("reset")], [resetHandler()], [textNode("Reset")]),
+      button ([id ("stop")], [stopHandler()], [textNode("Stop")]),
       div ([class ("footer")], [], [
-        b ([],[],[textDoc("Keyboard shortcuts")]),
+        b ([],[],[textNode("Keyboard shortcuts")]),
         br ([],[],[]),
-        textDoc("| p : start/pause | "),
-        textDoc("r : reset | "),
-        textDoc("s : stop |")
+        textNode("| p : start/pause | "),
+        textNode("r : reset | "),
+        textNode("s : stop |")
       ])
     ])
 }
@@ -100,7 +100,8 @@ fun subscriptions(model) {
 
 fun mainPage(_) {
   var initialModel = (seconds = 0, minutes = 0, paused = true);
-  var evtHandler = runSimpleVDom("placeholder", view, updt, initialModel, subscriptions);
+  var evtHandler = run("placeholder", initialModel, view,
+    fun(msg, model) { (updt(msg, model), NoCommand) }, subscriptions);
   page
   <html>
     <head>

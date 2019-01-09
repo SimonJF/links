@@ -63,17 +63,17 @@ fun uniqueID(hdlr) {
 }
 
 fun getKeyDownCode(f) {
-  var hdler = PropertyHandler("onkeydown", "keyCode", fun(v) { Just(f(v)) });
+  var hdler = EventDataHandler("keydown", "keyCode", fun(v) { Just(f(v)) });
   HandlerSub(uniqueID(hdler), hdler)
 }
 
 fun getKeyUpCode(f) {
-  var hdler = PropertyHandler("onkeyup", "keyCode", fun(v) { Just(f(v)) });
+  var hdler = EventDataHandler("keyup", "keyCode", fun(v) { Just(f(v)) });
   HandlerSub(uniqueID(hdler), hdler)
 }
 
 fun getKeyPressCode(f) {
-  var hdler = PropertyHandler("onkeypress", "keyCode", fun(v) { Just(f(v)) });
+  var hdler = EventDataHandler("keypress", "keyCode", fun(v) { Just(f(v)) });
   HandlerSub(uniqueID(hdler), hdler)
 }
 
