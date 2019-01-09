@@ -22,13 +22,7 @@ fun updateFieldHandler() {
 }
 
 fun enterHandler() {
-  getKeycode(fun(keycode) {
-    if (keycode == "13") {
-      Add
-    } else {
-      NoOp
-    }
-  })
+  onEnter(fun() { Add })
 }
 
 fun updateEntryHandler(id) {
@@ -40,13 +34,7 @@ fun blurHandler(id, tf) {
 }
 
 fun editingEnterHandler(id, tf) {
-  getKeycode(fun(keycode) {
-    if (keycode == "13") {
-      EditingEntry(id, tf)
-    } else {
-      NoOp
-    }
-  })
+  onEnter(fun() { EditingEntry(id, tf) })
 }
 
 fun checkEntryHandler(id, notCompleted) {

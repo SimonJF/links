@@ -38,11 +38,6 @@ fun onMouseOut(f) {
     UnitHandler("onmouseout", f)
 }
 
-### MOUSE POS ###
-fun mousePos(f) {
-    StringHandler("mouseListener", f)
-}
-
 ### FOCUS HELPERS ###
 
 fun onFocus(f) {
@@ -56,22 +51,34 @@ fun onBlur(f) {
 ### KEYBOARD HELPERS ###
 
 fun onKeyUp(f) {
-    StringHandler("onkeyup", f)
+    PropertyHandler("onkeyup", "value", fun(val) { Just(f(val)) } )
 }
 fun onKeyDown(f) {
-    StringHandler("onkeydown", f)
+    PropertyHandler("onkeydown", "value", fun(val) { Just(f(val)) })
 }
 fun onKeyPress(f) {
-    StringHandler("onkeypress", f)
+    PropertyHandler("onkeypress", "value", fun(val) { Just(f(val)) })
 }
 fun onInput(f) {
-    StringHandler("oninput", f)
+    PropertyHandler("oninput", "value", fun(val) { Just(f(val)) })
 }
 
-# Currently a bit magic. The JS will put a handler in for "onkeydown", and
-# then return the event to the given continuation.
-fun getKeycode(f) {
-  StringHandler("keycode", f)
+fun getKeycode(event, f) {
+  EventDataHandler(event, "keyCode", fun(val) { Just(f(val)) } )
 }
+
+fun onKeycode(event, keycode, f) {
+  EventDataHandler(event, "keyCode",
+    fun(kc) {
+      if(keycode == stringToInt(kc)) {
+        Just(f())
+      } else {
+        Nothing
+      }
+    }
+  )
+}
+
+fun onEnter(f) { onKeycode("onkeydown", 13, f) }
 
 

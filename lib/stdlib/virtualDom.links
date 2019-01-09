@@ -2,10 +2,25 @@
 
 # HTML Type
 
+# Perhaps a better generalisation for StringHandler:
+# PropertyHandler : (EventName, PropertyName, (PropertyValue) {}~> Maybe(a))
+# This would allow us to de-hackify the "keycode" thing, and also allow us
+# to *not* dispatch a message where it's not necessary.
+
+typename EventName = String;
+typename EventKey = String;
+typename EventValue = String;
+typename PropertyName = String;
+typename PropertyValue = String;
+
+# StringHandler: (String, (String) {}~> a)
 typename EventHandler(a :: Type(Any, Any)) =
-  [| StringHandler: (String, (String) {}~> a)
-   | UnitHandler: (String, () {}~> a)
-   | TupleIntHandler: (String, ((Int,Int)) {}~> a)
+  [| PropertyHandler:
+      (EventName, PropertyName, (PropertyValue) {}~> Maybe(a))
+   | EventDataHandler:
+      (EventName, EventKey, (EventValue) {}~> Maybe(a))
+   | UnitHandler: (EventName, () {}~> a)
+   | TupleIntHandler: (EventName, ((Int,Int)) {}~> a)
    | TimeHandler: (Int, () {}~> a)
    | AnimationFrameHandler: ((a) {}~> a) |];
 
@@ -48,17 +63,17 @@ fun uniqueID(hdlr) {
 }
 
 fun getKeyDownCode(f) {
-  var hdler = StringHandler("keydown", f);
+  var hdler = PropertyHandler("onkeydown", "keyCode", fun(v) { Just(f(v)) });
   HandlerSub(uniqueID(hdler), hdler)
 }
 
 fun getKeyUpCode(f) {
-  var hdler = StringHandler("keyup", f);
+  var hdler = PropertyHandler("onkeyup", "keyCode", fun(v) { Just(f(v)) });
   HandlerSub(uniqueID(hdler), hdler)
 }
 
 fun getKeyPressCode(f) {
-  var hdler = StringHandler("keypress", f);
+  var hdler = PropertyHandler("onkeypress", "keyCode", fun(v) { Just(f(v)) });
   HandlerSub(uniqueID(hdler), hdler)
 }
 
