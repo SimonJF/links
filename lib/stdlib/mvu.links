@@ -1,36 +1,7 @@
 ### VDOM STUFF ###
-
-# HTML Type
-
-# Perhaps a better generalisation for StringHandler:
-# PropertyHandler : (EventName, PropertyName, (PropertyValue) {}~> Maybe(a))
-# This would allow us to de-hackify the "keycode" thing, and also allow us
-# to *not* dispatch a message where it's not necessary.
-
-typename EventName = String;
-typename EventKey = String;
-typename EventValue = String;
-typename PropertyName = String;
-typename PropertyValue = String;
-
-# StringHandler: (String, (String) {}~> a)
-typename EventHandler(a :: Type(Any, Any)) =
-  [| PropertyHandler:
-      (EventName, PropertyName, (PropertyValue) {}~> Maybe(a))
-   | EventDataHandler:
-      (EventName, EventKey, (EventValue) {}~> Maybe(a))
-   | UnitHandler: (EventName, () {}~> a)
-   | TupleIntHandler: (EventName, ((Int,Int)) {}~> a)
-   | TimeHandler: (Int, () {}~> a)
-   | AnimationFrameHandler: ((a) {}~> a) |];
-
-typename HTML(a :: Type(Any, Any)) =
-  [| HTMLTextNode: (String)
-   | HTMLTagNode:
-      (tagName: String, attrs: [(String, String)],
-       eventHandlers: [EventHandler(a)],
-       children: [HTML(a)])
-   |];
+open MvuAttrs;
+open MvuHTML;
+open MvuSubscriptions;
 
 # Needed to ensure that virtual-dom is open
 module VirtualDom {
@@ -39,24 +10,23 @@ module VirtualDom {
   }
 }
 
-typename Sub(a :: Type(Any, Any)) =
-  [| EmptySub
-   | HandlerSub : (String, EventHandler(a))
-   | Sub : (a) |];
-
 # Loads the "vdom.js" file, exposes runDom and updateDom.
 module VDom {
   alien javascript "/lib/vdom.js" {
     runDom : forall a :: Type(Any, Any) .
-      (String, HTML(a), AP(?a.End), [Sub(a)]) ~%~> ();
+      (String, HTML(a), AP(?a.End), Sub(a)) ~%~> ();
     updateDom : forall a :: Type(Any, Any) . (HTML(a)) ~%~> ();
-    updateSubscriptions : forall a :: Type(Any, Any) . (([Sub(a)],[Sub(a)])) ~%~> ();
+    updateSubscriptions : forall a :: Type(Any, Any) . ((Sub(a), Sub(a))) ~%~> ();
     getUniqueID : forall a :: Type(Any, Any) . (EventHandler(a)) ~%~> (String);
-    # diffSubs : forall a . (EventHandler(a)) ~%e~> (String);
   }
 }
 ### SUBSCRIPTIONS ###
 
+## SJF TODO: The current "unique ID" subscription method requires an FFI call.
+## Unfortunately were we to put these in the "mvuSubscriptions" file, we would end
+## up with a cyclic dependency.
+## It's most likely possible to remove the "getUniqueID" call from the Links side of
+## the code altogether.
 
 fun uniqueID(hdlr) {
   VDom.getUniqueID(hdlr)
@@ -93,21 +63,6 @@ fun animationFrame(f) {
 }
 
 ######
-
-sig textNode: forall a :: Type(Any, Any) . (String) ~> HTML(a)
-fun textNode(str) {
-  HTMLTextNode(str)
-}
-
-sig tag : forall a :: Type(Any, Any) .
-  (String, [(String, String)], [EventHandler(a)], [HTML(a)]) -> HTML(a)
-fun tag(nameOfTag, attrsOfTag, handlers, childrenOfTag) {
-  HTMLTagNode((tagName=nameOfTag, attrs=attrsOfTag, eventHandlers=handlers, children=childrenOfTag))
-}
-
-fun attr(k, v) {
-  (k, v)
-}
 
 # TODO: Put into a module
 typename Command(a :: Type(Any, Any)) =
@@ -170,8 +125,7 @@ fun evtLoop(ap, model, view, updt, subscriptionsFn, extract, prevSubscriptions) 
 
 sig runLinear:
   forall
-    msg::Type(Any, Any),
-    model::Type(Any, Any),
+    msg::Type(Any, Any), model::Type(Any, Any),
     unrModel::Type(Unl, Any) .
   (String,
    model,

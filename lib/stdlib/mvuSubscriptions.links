@@ -1,0 +1,9 @@
+open MvuEvents;
+
+typename Sub(a :: Type(Any, Any)) =
+  [| EmptySub
+   | AppendSub: (Sub(a), Sub(a))
+   | HandlerSub : (String, EventHandler(a))
+   |];
+
+
