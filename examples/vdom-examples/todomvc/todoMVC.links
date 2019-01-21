@@ -133,8 +133,8 @@ fun updt(msg, model) {
 ### Rendering
 
 # Helper functions
-var ca = MvuAttrs.concat;
-var ch = MvuHTML.concat;
+fun ca(xs) { MvuAttrs.concat(xs) }
+fun ch(xs) { MvuHTML.concat(xs) }
 var noAttrs = MvuAttrs.empty;
 var noChildren = MvuHTML.empty;
 
