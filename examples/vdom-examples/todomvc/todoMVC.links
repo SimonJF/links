@@ -207,14 +207,11 @@ fun viewEntries(visibility, entries) {
   };
   var allCompleted = length(filter(fun(x) { not(x.completed) }, entries)) == 0;
   section(class ("main"),
-    ch([
-      input(
-        ca([type ("checkbox"),
-            id ("toggle-all"),
-            class ("toggle-all"),
-            checkAllHandler(not(allCompleted))]), noChildren),
-      ul(ca([class ("todo-list")]), ch(map(viewEntry, filter(isVisible, entries))))
-    ])
+    input(
+      type ("checkbox") +@ id ("toggle-all") +@
+      class ("toggle-all") +@ checkAllHandler(not(allCompleted)),
+    noChildren) +*
+    ul(class ("todo-list"), ch(map(viewEntry, filter(isVisible, entries))))
   )
 }
 

@@ -27,6 +27,8 @@ fun append(h1, h2) {
   }
 }
 
+op a1 +* a2 { append(a1, a2) }
+
 fun concat(nodes) {
   fold_right(fun(x, acc) { append(x, acc) }, HTMLEmpty, nodes)
 }

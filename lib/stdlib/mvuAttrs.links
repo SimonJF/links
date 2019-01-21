@@ -30,6 +30,8 @@ fun append(a1, a2) {
   }
 }
 
+op a1 +@ a2 { append(a1, a2) }
+
 fun concat(attrs) {
   fold_right(fun(x, acc) { append(x, acc) }, AttrEmpty, attrs)
 }
