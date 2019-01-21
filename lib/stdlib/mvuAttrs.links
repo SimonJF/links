@@ -9,23 +9,29 @@ typename AttrValue = String;
 typename Attr(a :: Type(Any, Any)) =
   [| AttrEmpty
    | AttrAppend: (Attr(a), Attr(a))
-   | AttrAttribute: (AttrKey AttrValue)
+   | AttrAttribute: (AttrKey, AttrValue)
    | AttrEventHandler: EventHandler(a) |];
 
 fun attr(k, v) {
   AttrAttribute(k, v)
 }
 
-fun evtHandler(hndlr) {
+var empty = AttrEmpty;
+
+fun eventHandler(hndlr) {
   AttrEventHandler(hndlr)
 }
 
 fun append(a1, a2) {
-  AttrAppend(a1, a2)
+  switch ((a1, a2)) {
+    case (AttrEmpty, a2) -> a2
+    case (a1, AttrEmpty) -> a1
+    case (a1, a2) -> AttrAppend(a1, a2)
+  }
 }
 
 fun concat(attrs) {
-  fold_right(fun(x, acc) { x :: acc }, [], attrs)
+  fold_right(fun(x, acc) { append(x, acc) }, AttrEmpty, attrs)
 }
 
 fun placeholder(val) {
@@ -108,7 +114,7 @@ fun autofocus(val) {
   }
 }
 
-sig checked : (Bool) -> (String,String)
+sig checked : (Bool) -> Attr(a)
 fun checked(val) {
     if (val) {
       attr ("checked", "true")
@@ -117,7 +123,7 @@ fun checked(val) {
     }
 }
 
-sig hidden : (Bool) -> (String,String)
+sig hidden : (Bool) -> Attr(a)
 fun hidden(val) {
     if (val == true) {
       attr("hidden", "true")
@@ -137,3 +143,91 @@ fun classList(classes) {
         case [] -> ""
     }
 }
+
+
+#### Event handlers which can be added as attributes.
+
+### MOUSE HELPERS ###
+
+fun onClick(f) {
+  eventHandler(UnitHandler("onclick", f))
+}
+
+fun onClick(f) {
+  eventHandler(UnitHandler("onchange", f))
+}
+
+fun onMouseMove(f) {
+  eventHandler(UnitHandler("onmousemove", f))
+}
+fun onMouseDown(f) {
+  eventHandler(UnitHandler("onmousedown", f))
+}
+fun onMouseUp(f) {
+  eventHandler(UnitHandler("onmouseup", f))
+}
+fun onMouseEnter(f) {
+  eventHandler(UnitHandler("onmouseenter", f))
+}
+fun onMouseLeave(f) {
+  eventHandler(UnitHandler("onmouseleave", f))
+}
+fun onClick(f) {
+  eventHandler(UnitHandler("onclick", f))
+}
+fun onDoubleClick(f) {
+  eventHandler(UnitHandler("ondblclick", f))
+}
+fun onMouseOver(f) {
+  eventHandler(UnitHandler("onmouseover", f))
+}
+fun onMouseOut(f) {
+  eventHandler(UnitHandler("onmouseout", f))
+}
+
+### FOCUS HELPERS ###
+
+fun onFocus(f) {
+  eventHandler(UnitHandler("onfocus", f))
+}
+
+fun onBlur(f) {
+  eventHandler(UnitHandler("onblur", f))
+}
+
+### KEYBOARD HELPERS ###
+
+fun onKeyUp(f) {
+  eventHandler(PropertyHandler("onkeyup", "value", fun(val) { Just(f(val)) } ))
+}
+fun onKeyDown(f) {
+  eventHandler(PropertyHandler("onkeydown", "value", fun(val) { Just(f(val)) }))
+}
+fun onKeyPress(f) {
+  eventHandler(PropertyHandler("onkeypress", "value", fun(val) { Just(f(val)) }))
+}
+fun onInput(f) {
+  eventHandler(PropertyHandler("oninput", "value", fun(val) { Just(f(val)) }))
+}
+
+fun getKeycode(event, f) {
+  eventHandler(EventDataHandler(event, "keyCode", fun(val) { Just(f(val)) } ))
+}
+
+fun onKeycode(event, keycode, f) {
+  eventHandler(
+    EventDataHandler(event, "keyCode",
+      fun(kc) {
+        if(keycode == stringToInt(kc)) {
+          Just(f())
+        } else {
+          Nothing
+        }
+      }
+    )
+  )
+}
+
+fun onEnter(f) { onKeycode("onkeydown", 13, f) }
+
+

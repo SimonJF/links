@@ -1,7 +1,7 @@
-open VirtualDom;
-open Tags;
-open Attrs;
-open Events;
+open Mvu;
+open MvuHTML;
+open MvuAttrs;
+open MvuEvents;
 
 typename Entry = (description : String, completed : Bool, editing : Bool, id : Int);
 typename Model = (entries : [Entry], field : String, uid : Int, visibility : String);
@@ -129,39 +129,68 @@ fun updt(msg, model) {
   }
 }
 
+
+### Rendering
+
+# Helper functions
+var ca = MvuAttrs.concat;
+var ch = MvuHTML.concat;
+var noAttrs = MvuAttrs.empty;
+var noChildren = MvuHTML.empty;
+
+
 sig viewInput : (String) ~> HTML(Msg)
 fun viewInput(task) {
-  header ([class("header")], [], [
-    h1 ([], [], [textNode("todos")]),
-    input ([type ("text"), class ("new-todo"), placeholder ("What needs to be done?"),
-      name ("newTodo"), id ("newTodo"), value(task)],
-      [updateFieldHandler(), enterHandler()], [])
-  ])
+  header (class("header"),
+    ch([
+      h1 (noAttrs, textNode("todos")),
+      input (
+        ca([type ("text"),
+            class ("new-todo"),
+            placeholder ("What needs to be done?"),
+            name ("newTodo"),
+            id("newTodo"),
+            value(task),
+            updateFieldHandler(),
+            enterHandler()]),
+        noChildren)
+    ]))
 }
 
 sig viewEntry : (Entry) ~> HTML(Msg)
 fun viewEntry(todo) {
   var classes =
     classList([("completed", todo.completed), ("editing",todo.editing)]);
-  li ([class (classes)],[],[
-    div ([class ("view")], [], [
-      input ([type ("checkbox"), name ("toggle"), class ("toggle"), checked (todo.completed)],
-             [checkEntryHandler(todo.id, not(todo.completed))], []),
-      label ([],[editingHandler(todo.id, true)],[textNode(todo.description)]),
-      span ([class ("destroy")], [deleteHandler(todo.id)], [])
-    ]),
 
-    input (
-      [class ("edit"),
-       value (todo.description),
-       name ("title"),
-       id ("todo-" ^^ intToString(todo.id))
-      ],
-      [updateEntryHandler(todo.id),
-       blurHandler(todo.id, false),
-       editingEnterHandler(todo.id, false)
-      ], [])
-  ])
+  li (class(classes),
+    ch([
+      div (class ("view"), ch([
+
+        input(
+          ca([
+            type ("checkbox"),
+            name ("toggle"),
+            class ("toggle"),
+            checked (todo.completed),
+            checkEntryHandler(todo.id, not(todo.completed))
+          ]), noChildren),
+
+        MvuHTML.label(editingHandler(todo.id, true), textNode(todo.description)),
+
+        span (ca([class ("destroy"), deleteHandler(todo.id)]), noChildren)
+      ])),
+
+      input(
+        ca([
+          class("edit"),
+          value(todo.description),
+          name("title"),
+          id("todo-" ^^ intToString(todo.id)),
+          updateEntryHandler(todo.id),
+          blurHandler(todo.id, false),
+          editingEnterHandler(todo.id, false)]),
+        noChildren)
+    ]))
 }
 
 sig viewEntries : (String, [Entry]) ~> HTML(Msg)
@@ -177,10 +206,16 @@ fun viewEntries(visibility, entries) {
     }
   };
   var allCompleted = length(filter(fun(x) { not(x.completed) }, entries)) == 0;
-  section ([class ("main")], [], [
-      input ([type ("checkbox"), id ("toggle-all"), class ("toggle-all")], [checkAllHandler(not(allCompleted))], []),
-      ul ([class ("todo-list")],[],map(viewEntry, filter(isVisible, entries)))
-  ])
+  section(class ("main"),
+    ch([
+      input(
+        ca([type ("checkbox"),
+            id ("toggle-all"),
+            class ("toggle-all"),
+            checkAllHandler(not(allCompleted))]), noChildren),
+      ul(ca([class ("todo-list")]), ch(map(viewEntry, filter(isVisible, entries))))
+    ])
+  )
 }
 
 sig viewControlsCount : (Int) ~> HTML(Msg)
@@ -190,53 +225,49 @@ fun viewControlsCount(entriesLeft) {
   } else {
     " items"
   };
-  span ([class ("todo-count")], [], [
-    strong ([], [], [textNode(intToString(entriesLeft))]),
-    textNode(item_),textNode(" left")
-  ])
+  span (class ("todo-count"), ch([
+    strong (noAttrs, textNode(intToString(entriesLeft))),
+    textNode(item_),
+    textNode(" left")
+  ]))
 }
 
 sig visibilitySwap : (String, String, String) ~> HTML(Msg)
 fun visibilitySwap(uri, visibility, actualVisibility) {
   var classes = classList([("selected", visibility == actualVisibility)]);
-  li ([], [changeVisibilityHandler(visibility)], [
-    a ([href (uri), class (classes)],[],[textNode(visibility)])
-  ])
+  li (changeVisibilityHandler(visibility),
+    a(ca([href (uri), class (classes)]), textNode(visibility)))
 }
 
 sig viewControlsFilters : (String) ~> HTML(Msg)
 fun viewControlsFilters(visibility) {
- ul ([class ("filters")], [], [
+ ul (class ("filters"), ch([
     visibilitySwap("#/", "All", visibility), textNode(" "),
     visibilitySwap("#/active", "Active", visibility), textNode(" "),
     visibilitySwap("#/completed", "Completed", visibility)
-  ])
+  ]))
 }
 
 sig viewControls : (String, [Entry]) ~> HTML(Msg)
 fun viewControls(visibility, entries) {
   var entriesCompleted = length(filter(fun(x) { x.completed }, entries));
   var entriesLeft = length(entries) - entriesCompleted;
-  var entriesEmpty = if (length(entries) == 0) {
-    true
-  } else {
-    false
-  };
-  footer ([class ("footer"), hidden(entriesEmpty)], [], [
+  var entriesEmpty = length(entries) == 0;
+  footer (ca([class ("footer"), hidden(entriesEmpty)]), ch([
     viewControlsCount(entriesLeft),
     viewControlsFilters(visibility)
-  ])
+  ]))
 }
 
-sig view : (Model) ~%e~> HTML(Msg)
+sig view : (Model) ~%~> HTML(Msg)
 fun view(model) {
-  div ([class ("todomvc-wrapper")], [], [
-    section ([class ("todoapp")], [], [
+  div (class ("todomvc-wrapper"),
+    section (class ("todoapp"), ch([
       viewInput(model.field),
       viewEntries(model.visibility, model.entries),
       viewControls(model.visibility, model.entries)
-    ])
-  ])
+    ]))
+  )
 }
 
 

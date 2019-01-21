@@ -1,5 +1,6 @@
 ### VDOM STUFF ###
 open MvuAttrs;
+open MvuEvents;
 open MvuHTML;
 open MvuSubscriptions;
 
@@ -104,9 +105,9 @@ sig evtLoop :
    model,
    (unrModel) ~%~> HTML(msg),
    (msg, model) ~%~> (model, Command(msg)),
-   (unrModel) ~%~> [Sub(msg)],
+   (unrModel) ~%~> Sub(msg),
    (model) ~%~> (model, unrModel),
-   [Sub(msg)]) ~%~> ()
+   Sub(msg)) ~%~> ()
 fun evtLoop(ap, model, view, updt, subscriptionsFn, extract, prevSubscriptions) {
   var (message, _) = receive(accept(ap));
   var (model, cmd) = updt(message, model);
@@ -131,7 +132,7 @@ sig runLinear:
    model,
    (unrModel) ~%~> HTML(msg),
    (msg, model) ~%~> (model, Command(msg)),
-   (unrModel) ~%~> [Sub(msg)],
+   (unrModel) ~%~> Sub(msg),
    (model) ~%~> (model, unrModel)
    ) ~%~> ()
 fun runLinear(placeholder, model, view, updt, subscriptions, extract) {
@@ -153,7 +154,7 @@ sig run:
     model,
     (model) ~%~> HTML(msg),
     (msg, model) ~%~> (model, Command(msg)),
-    (model) ~%~> [Sub(msg)]) ~%~> ()
+    (model) ~%~> Sub(msg)) ~%~> ()
 fun run(placeholder, model, view, updt, subscriptions) {
   runLinear(placeholder, model, view, updt, subscriptions, fun(x) { (x, x) })
 }
@@ -169,5 +170,5 @@ sig runSimple :
 fun runSimple(placeholder, model, view, updt) {
   run(placeholder, model, view,
     fun(msg, model) { (updt(msg, model), NoCommand)},
-    fun(_) { [] } )
+    fun(_) { EmptySub } )
 }

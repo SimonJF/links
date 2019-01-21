@@ -8,6 +8,7 @@ typename HTML(a :: Type(Any, Any)) =
    | HTMLTag: (tagName: String, attrs: Attr(a), children: HTML(a))
    |];
 
+var empty = HTMLEmpty;
 
 fun textNode(str) {
   HTMLText(str)
@@ -17,12 +18,17 @@ fun tag(nameOfTag, attrs, children) {
   HTMLTag((tagName=nameOfTag, attrs=attrs, children=children))
 }
 
-fun append(a1, a2) {
-  HTMLAppend(a1, a2)
+fun append(h1, h2) {
+# Take advantage of monoid laws. If either is empty, return the other.
+  switch ((h1, h2)) {
+    case (HTMLEmpty, h2) -> h2
+    case (h1, HTMLEmpty) -> h1
+    case (h1, h2) -> HTMLAppend(h1, h2)
+  }
 }
 
 fun concat(nodes) {
-  fold_right(fun(x, acc) { HTMLAppend(x, acc) }, HTMLEmpty, nodes)
+  fold_right(fun(x, acc) { append(x, acc) }, HTMLEmpty, nodes)
 }
 
 fun html(attrs, children) {
