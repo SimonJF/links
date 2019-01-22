@@ -16,51 +16,8 @@ module VDom {
   alien javascript "/lib/vdom.js" {
     runDom : forall a :: Type(Any, Any) .
       (String, HTML(a), AP(?a.End), Sub(a)) ~%~> ();
-    updateDom : forall a :: Type(Any, Any) . (HTML(a)) ~%~> ();
-    updateSubscriptions : forall a :: Type(Any, Any) . ((Sub(a), Sub(a))) ~%~> ();
-    getUniqueID : forall a :: Type(Any, Any) . (EventHandler(a)) ~%~> (String);
+    updateDom : forall a :: Type(Any, Any) . (HTML(a), Sub(a)) ~%~> ();
   }
-}
-### SUBSCRIPTIONS ###
-
-## SJF TODO: The current "unique ID" subscription method requires an FFI call.
-## Unfortunately were we to put these in the "mvuSubscriptions" file, we would end
-## up with a cyclic dependency.
-## It's most likely possible to remove the "getUniqueID" call from the Links side of
-## the code altogether.
-
-fun uniqueID(hdlr) {
-  VDom.getUniqueID(hdlr)
-}
-
-fun getKeyDownCode(f) {
-  var hdler = EventDataHandler("keydown", "keyCode", fun(v) { Just(f(v)) });
-  HandlerSub(uniqueID(hdler), hdler)
-}
-
-fun getKeyUpCode(f) {
-  var hdler = EventDataHandler("keyup", "keyCode", fun(v) { Just(f(v)) });
-  HandlerSub(uniqueID(hdler), hdler)
-}
-
-fun getKeyPressCode(f) {
-  var hdler = EventDataHandler("keypress", "keyCode", fun(v) { Just(f(v)) });
-  HandlerSub(uniqueID(hdler), hdler)
-}
-
-fun getMousePos(f) {
-  var hdler = TupleIntHandler("mousemove", f);
-  HandlerSub(uniqueID(hdler), hdler)
-}
-
-fun getEvery(interval, f) {
-  var hdler = TimeHandler(interval, f);
-  HandlerSub(uniqueID(hdler), hdler)
-}
-
-fun animationFrame(f) {
-  var hdler = UnitHandler("animationFrame", f);
-  HandlerSub(uniqueID(hdler), hdler)
 }
 
 ######

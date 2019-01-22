@@ -23,3 +23,36 @@ fun concat(nodes) {
 }
 
 
+### TODO: GO FROM HERE.
+## Need to update HandlerSub to new interface.
+fun getKeyDownCode(f) {
+  var hdler = EventDataHandler("keydown", "keyCode", fun(v) { Just(f(v)) });
+  HandlerSub(uniqueID(hdler), hdler)
+}
+
+fun getKeyUpCode(f) {
+  var hdler = EventDataHandler("keyup", "keyCode", fun(v) { Just(f(v)) });
+  HandlerSub(uniqueID(hdler), hdler)
+}
+
+fun getKeyPressCode(f) {
+  var hdler = EventDataHandler("keypress", "keyCode", fun(v) { Just(f(v)) });
+  HandlerSub(uniqueID(hdler), hdler)
+}
+
+fun getMousePos(f) {
+  var hdler = TupleIntHandler("mousemove", f);
+  HandlerSub(uniqueID(hdler), hdler)
+}
+
+fun getEvery(interval, f) {
+  var hdler = TimeHandler(interval, f);
+  HandlerSub(uniqueID(hdler), hdler)
+}
+
+fun animationFrame(f) {
+  var hdler = UnitHandler("animationFrame", f);
+  HandlerSub(uniqueID(hdler), hdler)
+}
+
+
