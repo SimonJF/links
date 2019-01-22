@@ -1,9 +1,25 @@
 open MvuEvents;
 
 typename Sub(a :: Type(Any, Any)) =
-  [| EmptySub
-   | AppendSub: (Sub(a), Sub(a))
-   | HandlerSub : (String, EventHandler(a))
+  [| SubEmpty
+   | SubAppend: (Sub(a), Sub(a))
+   | SubEventHandler: EventHandler(a) # Subscribe to a window event
+   | SubInterval: (Int, () {}~> a))   # Timing interval
+   | SubAnimationFrame: (Int) {}~> a  # Animation frame (int is timestamp)
    |];
+
+fun append(s1, s2) {
+  switch((s1, s2)) {
+    case (SubEmpty, s2) -> s2
+    case (s1, SubAppend) -> s1
+    case (s1, s2) -> SubAppend(s1, s2)
+  }
+}
+
+op s1 +~ s2 { append(s1, s2) }
+
+fun concat(nodes) {
+  fold_right(fun(x, acc) { append(x, acc) }, SubEmpty, nodes)
+}
 
 

@@ -18,5 +18,4 @@ typename EventHandler(a :: Type(Any, Any)) =
       (EventName, EventKey, (EventValue) {}~> Maybe(a))
    | UnitHandler: (EventName, () {}~> a)
    | TupleIntHandler: (EventName, ((Int,Int)) {}~> a)
-   | TimeHandler: (Int, () {}~> a)
-   | AnimationFrameHandler: ((a) {}~> a) |];
+   |];
