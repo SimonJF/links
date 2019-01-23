@@ -22,9 +22,6 @@ fun concat(nodes) {
   fold_right(fun(x, acc) { append(x, acc) }, SubEmpty, nodes)
 }
 
-
-### TODO: GO FROM HERE.
-## Need to update HandlerSub to new interface.
 fun getKeyDownCode(f) {
   var hdler = EventDataHandler("keydown", "keyCode", fun(v) { Just(f(v)) });
   SubEventHandler(hdler)
@@ -46,8 +43,7 @@ fun getMousePos(f) {
 }
 
 fun getEvery(interval, f) {
-  var hdler = TimeHandler(interval, f);
-  SubEventHandler(hdler)
+  SubInterval(interval, f)
 }
 
 fun animationFrame(f) {

@@ -1,10 +1,16 @@
-open Tags;
-open Attrs;
-open Events;
-open VirtualDom;
+open Mvu;
+open MvuHTML;
+open MvuAttrs;
+open MvuEvents;
+open MvuSubscriptions;
 
 typename Model = (seconds : Int, minutes : Int, paused: Bool);
 typename Msg = [| Tick | Reset | TogglePause | Stop | NoOp |];
+
+var pKey = "80";
+var rKey = "82";
+var sKey = "83";
+
 
 fun resetHandler() {
   onClick(fun() { Reset })
@@ -26,11 +32,11 @@ fun secondsHandler() {
 
 fun shortcutHandler() {
   getKeyDownCode(fun(keycode) {
-    if (keycode == "80") {
+    if (keycode == pKey) {
       TogglePause
-    } else if (keycode == "82") {
+    } else if (keycode == rKey) {
       Reset
-    } else if (keycode == "83") {
+    } else if (keycode == sKey) {
       Stop
     } else {
       NoOp
@@ -66,34 +72,38 @@ fun updt(msg, model) {
   }
 }
 
+var ae = MvuAttrs.empty;
+var he = MvuHTML.empty;
+fun ch(xs) { MvuHTML.concat(xs) }
+
 sig view : (Model) ~%e~> HTML(Msg)
 fun view(model) {
-    var toggleText = if (model.paused == true) {
+    var toggleText = if (model.paused) {
       "Start"
     } else {
       "Pause"
     };
-    div ([id ("swatch"), class ("swatch")],[], [
-      h1 ([], [], [textNode(pad(model.minutes)),textNode(":"),textNode(pad(model.seconds))]),
-      button ([id ("togglepause")], [togglePauseHandler()], [textNode(toggleText)]),
-      button ([id ("reset")], [resetHandler()], [textNode("Reset")]),
-      button ([id ("stop")], [stopHandler()], [textNode("Stop")]),
-      div ([class ("footer")], [], [
-        b ([],[],[textNode("Keyboard shortcuts")]),
-        br ([],[],[]),
+    div (id ("swatch") +@ class ("swatch"), ch([
+      h1 (ae, textNode(pad(model.minutes)) +* textNode(":" ^^ pad(model.seconds))),
+      button (id ("togglepause") +@ togglePauseHandler(), textNode(toggleText)),
+      button (id ("reset") +@ resetHandler(), textNode("Reset")),
+      button (id ("stop") +@ stopHandler(), textNode("Stop")),
+      div (class ("footer"), ch([
+        b (ae, textNode("Keyboard shortcuts")),
+        br (ae, he),
         textNode("| p : start/pause | "),
         textNode("r : reset | "),
         textNode("s : stop |")
-      ])
-    ])
+      ]))
+    ]))
 }
 
-sig subscriptions : (Model) ~> [Sub(Msg)]
+sig subscriptions : (Model) ~> Sub(Msg)
 fun subscriptions(model) {
-  if (model.paused == true) {
-    [shortcutHandler()]
+  if (model.paused) {
+    shortcutHandler()
   } else {
-    [secondsHandler(), shortcutHandler()]
+    secondsHandler() +^ shortcutHandler()
   }
 }
 
