@@ -1,7 +1,8 @@
-open Tags;
-open Attrs;
-open Events;
-open VirtualDom;
+open Mvu;
+open MvuHTML;
+open MvuAttrs;
+open MvuEvents;
+open MvuSubscriptions;
 
 typename Model = (keyPressed : String);
 typename Msg = [| KeyPressed : String |];
@@ -22,12 +23,13 @@ fun updt(msg, model) {
 
 sig view : (Model) ~%e~> HTML(Msg)
 fun view(model) {
-    div ([id ("testdiv"), style ("width:100%;height:100%")],[],
-    [textNode("Key pressed: "),textNode(model.keyPressed)])
+    div (id("testdiv") +@ style ("width:100%;height:100%"),
+    textNode("Key pressed: " ^^ model.keyPressed))
 }
 
+sig subscriptions : (Model) -> Sub(Msg)
 fun subscriptions(model) {
-  [keyCodeHandler()]
+  keyCodeHandler()
 }
 
 fun mainPage(_) {
