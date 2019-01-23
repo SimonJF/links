@@ -116,7 +116,6 @@ fun autofocus(val) {
   }
 }
 
-sig checked : (Bool) -> Attr(a)
 fun checked(val) {
     if (val) {
       attr ("checked", "true")
@@ -125,7 +124,6 @@ fun checked(val) {
     }
 }
 
-sig hidden : (Bool) -> Attr(a)
 fun hidden(val) {
     if (val == true) {
       attr("hidden", "true")

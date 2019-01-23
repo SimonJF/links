@@ -1,5 +1,6 @@
 open ChatSessions;
-open VirtualDom;
+open Mvu;
+open MvuSubscriptions;
 
 typename ChatMessage =
   [| ChatMsg: (Nickname, Message) | LogMsg: Message |];
@@ -343,16 +344,13 @@ fun updt(msg, model) {
 }
 
 module Render {
-  open Tags;
-  open Attrs;
-  open Events;
+  open MvuHTML;
+  open MvuAttrs;
+  open MvuEvents;
 
-#  sig render : (UnrestrictedModel) {}~> HTML(UIMessage)
-#  fun render(model) {
-#    div([], [], [])
-#  }
+  var ae = MvuAttrs.empty;
+  var he = MvuHTML.empty;
 
-# rooms, selectedRoom
   sig roomForm : (NotConnectedModel) ~> HTML(UIMessage)
   fun roomForm(ncModel) {
     var newRoomChecked =
@@ -362,19 +360,17 @@ module Render {
       };
 
     var newRoomRadio : HTML(UIMessage) =
-      div([class("radio")], [],
-        [
-          label([], [], [
-            input([type("radio"), name("room"), checked(newRoomChecked)],
-              [onInput(fun(_) { UpdateSelectedRoom(NewRoom) })], []),
-            textNode("New Room"),
-            input([type("text"), value(ncModel.newRoomText)],
-              [onInput(fun(str) { UpdateNewRoom(str) }),
-               onEnter(fun() { SubmitJoinRoom })],
-              []
-            )
-          ])
-        ]
+      div(class("radio"),
+          label(ae,
+            input(type("radio") +@ name("room") +@ checked(newRoomChecked) +@
+              onInput(fun(_) { UpdateSelectedRoom(NewRoom) }), he) +*
+            textNode("New Room") +*
+            input(
+              type("text") +@
+              value(ncModel.newRoomText) +@
+              onInput(fun(str) { UpdateNewRoom(str) }) +@
+              onEnter(fun() { SubmitJoinRoom }), he)
+          )
       );
 
     fun roomRadio(roomName) {
@@ -384,91 +380,86 @@ module Render {
           case SelectedRoom(room) -> roomName == room
         };
 
-      div([class("radio")], [],
-        [
-          label([], [], [
-            input([type("radio"), name("roomName"), checked(isChecked)],
-              [onInput(fun(_) { UpdateSelectedRoom(SelectedRoom(roomName))})], []),
+      div(class("radio"),
+          label(ae,
+            input(
+              type("radio") +@
+              name("roomName") +@
+              checked(isChecked) +@
+              onInput(fun(_) { UpdateSelectedRoom(SelectedRoom(roomName))}), he) +*
             textNode(roomName)
-          ])
-        ]
+          )
       )
     }
 
-    var radioForm =
-      newRoomRadio :: map(fun(roomName) { roomRadio(roomName) }, ncModel.rooms);
+    var radioForm : HTML(UIMessage) =
+      newRoomRadio +*
+      MvuHTML.concat(map(fun(roomName) { roomRadio(roomName) }, ncModel.rooms));
 
-    form([], [],
-    # TODO: This is why we need a monoidal interface for HTML...
-      div([], [], [
-        label([for_("nickname")], [], [textNode("Nickname")]),
-        input([type("text"), id("nickname"), autofocus(true)],
-        [onInput(fun(nick) { UpdateNickname(nick) })], [])
-      ]) ::
-      (radioForm ++
-       [div([], [], [
-        input([type("button"), value("Join")],
-          [onClick(fun() { SubmitJoinRoom })], [])])])
-    )
+    form(ae,
+      div(ae,
+        label(for_("nickname"), textNode("Nickname")) +*
+        input(
+          type("text") +@
+          id("nickname") +@
+          autofocus(true) +@
+          onInput(fun(nick) { UpdateNickname(nick) }), he)) +*
+      radioForm +*
+      div(ae,
+        input(type("button") +@ value("Join") +@ onClick(fun() { SubmitJoinRoom }), he)))
   }
 
   sig render : (UnrestrictedModel) ~> HTML(UIMessage)
   fun render(model) {
-    open Tags;
 
     fun renderMessage(msg) {
       switch(msg) {
         case ChatMsg(nick, msg) ->
-          p([], [], [
-            b([], [], [textNode(nick ^^ ": ")]),
-            textNode(msg)
-          ])
+          p(ae,
+            b(ae, textNode(nick ^^ ": ")) +* textNode(msg))
         case LogMsg(msg) ->
-          p([], [], [
-            b([], [], [textNode(msg)])
-          ])
+          p(ae, b(ae, textNode(msg)))
       }
     }
 
     switch(model) {
       case UnrNotConnected(ncModel) ->
        # TODO: Render error message
-       # TODO: Link nick with nickname form
-       div([], [], [
-        p([], [], [
-          textNode("Choose one of the existing rooms or create a new one."),
-          roomForm(ncModel)])
-       ])
+       div(ae,
+         p(ae,
+           textNode("Choose one of the existing rooms or create a new one.") +*
+           roomForm(ncModel))
+       )
       case UnrConnected(nick, modInfo, roomInfo) ->
-        var adminBox = div([], [], []); # TODO: Fill me in
+        var adminBox = div(ae, he); # TODO: Fill me in
 
         fun infoHeader(description, content) {
-          div([], [],
-            [p([], [], [span([class("lead")], [], [
-              b([], [], [textNode(description ^^ ": ")]),
-              textNode(content)
-            ])])])
+          div(ae,
+            p(ae,
+              span(class("lead"),
+                b(ae, textNode(description ^^ ": ")) +*
+                textNode(content))))
         }
         var topic = infoHeader("Topic", roomInfo.topic);
         var room = infoHeader("Room", roomInfo.roomName);
-        var msgs = map(renderMessage, roomInfo.messages);
+        var msgs = MvuHTML.concat(map(renderMessage, roomInfo.messages));
         fun inputHandler(str) { UpdateChatBox(str) }
 
         var chatBox =
-          div([Attrs.style("overflow-y:scroll; width:100%; height:400px;")],
-              [], msgs);
-        var chatInputBox =
-          input([Attrs.style("width:100%;"),
-               value(roomInfo.currentChatMessage)],
-              [onEnter(fun() { SubmitChat }), onInput(inputHandler)],
-              []);
+          div(MvuAttrs.style("overflow-y:scroll; width:100%; height:400px;"), msgs);
 
-        div([], [], [
-          adminBox,
-          room,
-          topic,
-          chatBox,
-          chatInputBox])
+        var chatInputBox =
+          input(MvuAttrs.style("width:100%;") +@
+               value(roomInfo.currentChatMessage) +@
+               onEnter(fun() { SubmitChat }) +@
+               onInput(inputHandler), he);
+
+        div(ae,
+          adminBox +*
+          room +*
+          topic +*
+          chatBox +*
+          chatInputBox)
     }
   }
 }
@@ -479,7 +470,7 @@ fun mainPage() {
     var (rooms, cs) = receive(cs);
     var model = NotConnected(mkNCModel(rooms, Nothing), cs);
     runLinear("vdom-placeholder", model, Render.render, updt,
-      fun(_) { [] }, extract)
+      fun(_) { SubEmpty }, extract)
   };
   page
     <html>
