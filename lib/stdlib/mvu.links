@@ -73,10 +73,8 @@ fun evtLoop(ap, model, view, updt, subscriptionsFn, extract, prevSubscriptions) 
   var (model, unrModel) = extract(model);
   # Get new subscriptions
   var newSubscriptions = subscriptionsFn(unrModel);
-  # Update subscriptions on the DOM (FFI call)
-  VDom.updateSubscriptions((prevSubscriptions, newSubscriptions));
   # Update DOM
-  VDom.updateDom(view(unrModel));
+  VDom.updateDom(view(unrModel), newSubscriptions);
   # Loop with new subscriptions
   evtLoop(ap, model, view, updt, subscriptionsFn, extract, newSubscriptions)
 }
@@ -127,5 +125,5 @@ sig runSimple :
 fun runSimple(placeholder, model, view, updt) {
   run(placeholder, model, view,
     fun(msg, model) { (updt(msg, model), NoCommand)},
-    fun(_) { EmptySub } )
+    fun(_) { SubEmpty } )
 }
