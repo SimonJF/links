@@ -47,8 +47,7 @@ fun getEvery(interval, f) {
 }
 
 fun animationFrame(f) {
-  var hdler = UnitHandler("animationFrame", f);
-  SubEventHandler(hdler)
+  SubAnimationFrame(f)
 }
 
 

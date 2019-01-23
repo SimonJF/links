@@ -1,13 +1,24 @@
-open Tags;
-open Attrs;
-open Events;
-open VirtualDom;
+open MvuHTML;
+open MvuAttrs;
+open MvuEvents;
+open MvuSubscriptions;
+open Mvu;
 
 typename Ball = (x : Float, y: Float, vx : Float, vy : Float);
+
 typename Player = (x : Float, y: Float, vx : Float, vy : Float, score : Int);
+
 typename PaddleState = [| Up | Down | Still |];
-typename Msg = [| NewFrame | Paddle1 : PaddleState | Paddle2 : PaddleState | TogglePause | NoOp |];
-typename Game = (paused : Bool, ball : Ball, player1 : Player, player2 : Player, paddle1state : PaddleState, paddle2state: PaddleState);
+
+typename Msg =
+  [| NewFrame
+   | Paddle1 : PaddleState
+   | Paddle2 : PaddleState
+   | TogglePause | NoOp |];
+
+typename Game =
+  (paused : Bool, ball : Ball, player1 : Player, player2 : Player,
+   paddle1state : PaddleState, paddle2state: PaddleState);
 
 
 var width = 600.0;
@@ -20,26 +31,37 @@ var playerVelocity = 2.0;
 
 # sig player : Float -> Player
 fun player(xPos) {
-  (x=xPos,y=halfHeight-.22.0,vx=50.0,vy=50.0,score=0)
+  (x = xPos, y = halfHeight -. 22.0, vx = 50.0, vy = 50.0, score = 0)
 }
 
-var defaultGame = (paused=true, ball=(x=halfWidth,y=halfHeight,vx=ballVelocity,vy=ballVelocity), player1=player(width-.37.0), player2=player(20.0), paddle1state = Still, paddle2state = Still);
+var defaultGame =
+  (paused = true,
+    ball = (x = halfWidth, y = halfHeight, vx = ballVelocity, vy = ballVelocity),
+    player1 = player(width -. 37.0), player2 = player(20.0),
+    paddle1state = Still, paddle2state = Still);
 
 fun animFrameHandler() {
-  animationFrame(fun() { NewFrame })
+  animationFrame(fun(_) { NewFrame })
 }
+
+var upKey = "38";
+var downKey = "40";
+var wKey = "87";
+var sKey = "83";
+var spaceKey = "32";
+
 
 fun keyDownHandler() {
   getKeyDownCode(fun(keycode) {
-    if (keycode == "38") {
+    if (keycode == upKey) {
       Paddle1(Up)
-    } else if (keycode == "40") {
+    } else if (keycode == downKey) {
       Paddle1(Down)
-    } else if (keycode == "87") {
+    } else if (keycode == wKey) {
       Paddle2(Up)
-    } else if (keycode == "83") {
+    } else if (keycode == sKey) {
       Paddle2(Down)
-    } else if (keycode == "32") {
+    } else if (keycode == spaceKey) {
       TogglePause
     } else {
       NoOp
@@ -49,9 +71,9 @@ fun keyDownHandler() {
 
 fun keyUpHandler() {
   getKeyUpCode(fun(keycode) {
-    if (keycode == "38" || keycode == "40") {
+    if (keycode == upKey || keycode == downKey) {
       Paddle1(Still)
-    } else if (keycode == "87" || keycode == "83") {
+    } else if (keycode == wKey || keycode == sKey) {
       Paddle2(Still)
     } else {
       NoOp
@@ -59,14 +81,22 @@ fun keyUpHandler() {
   })
 }
 
+# Rendering
+var ae = MvuAttrs.empty;
+var he = MvuHTML.empty;
+fun ch(xs) { MvuHTML.concat(xs) }
+
 sig drawCircle : (Float,Float) -> HTML(Msg)
 fun drawCircle(x,y) {
-  div ([class ("circle"), style ("left:"^^floatToString(x)^^"px;top:"^^floatToString(y)^^"px;position:absolute;")], [], [])
+  div (class ("circle") +@
+       style ("left:" ^^ floatToString(x) ^^ "px;top:" ^^ floatToString(y) ^^ "px;position:absolute;"),
+       he)
 }
 
-sig drawPaddle : (Float,Float) -> HTML(Msg)
+sig drawPaddle : (Float, Float) -> HTML(Msg)
 fun drawPaddle(x,y) {
-  div ([class ("paddle"), style ("left:"^^floatToString(x)^^"px;top:"^^floatToString(y)^^"px;position:absolute;")], [], [])
+  div (class ("paddle") +@
+       style ("left:" ^^ floatToString(x) ^^ "px;top:" ^^ floatToString(y) ^^ "px;position:absolute;"), he)
 }
 
 fun physicsUpdate(ball) {
@@ -100,7 +130,9 @@ fun within(paddle,ball) {
 }
 
 fun moveBall(ball, paddle1, paddle2) {
-  physicsUpdate((ball with vy = stepV(ball.vy, (ball.y >= height -. 8.0), (ball.y <= 7.5)), vx = stepV(ball.vx, within(paddle1,ball), within(paddle2,ball))))
+  physicsUpdate((ball with
+    vy = stepV(ball.vy, (ball.y >= height -. 8.0), (ball.y <= 7.5)),
+    vx = stepV(ball.vx, within(paddle1,ball), within(paddle2,ball))))
 }
 
 fun movePaddle(player, direction, scoreUpdate) {
@@ -138,36 +170,37 @@ fun updt(msg, game) {
 
     switch(msg) {
       case NewFrame ->
-        (game with ball = newBall, paused = newState, player1 = movePaddle(game.player1, game.paddle1state, score1), player2 = movePaddle(game.player2, game.paddle2state, score2))
+        (game with ball = newBall, paused = newState,
+          player1 = movePaddle(game.player1, game.paddle1state, score1),
+          player2 = movePaddle(game.player2, game.paddle2state, score2))
       case TogglePause ->
         (game with paused = not(game.paused))
       case Paddle1(i) ->
-        (game with player1 = movePaddle(game.player1, i, score1), ball = newBall, paused = newState, paddle1state = i)
+        (game with player1 = movePaddle(game.player1, i, score1),
+         ball = newBall, paused = newState, paddle1state = i)
       case Paddle2(i) ->
-        (game with player2 = movePaddle(game.player2, i, score2), ball = newBall, paused = newState, paddle2state = i)
-      case NoOp ->
-        game
+        (game with player2 = movePaddle(game.player2, i, score2),
+         ball = newBall, paused = newState, paddle2state = i)
+      case NoOp -> game
     }
 }
 
 sig view : (Game) ~%e~> HTML(Msg)
 fun view(game) {
-  div ([class ("canvas")], [], [
+  div (class ("canvas"), ch([
     drawCircle(game.ball.x,game.ball.y),
     drawPaddle(game.player1.x,game.player1.y),
     drawPaddle(game.player2.x,game.player2.y),
-    h1 ([class ("scores")], [], [
-      textNode(intToString(game.player1.score/2) ^^ " " ^^ intToString(game.player2.score/2))
-    ]),
-    div ([class ("instructions")], [], [
-      textNode("SPACE to start, W/S and UP/DOWN to move")
-    ])
-  ])
+    h1 (class ("scores"),
+      textNode(intToString(game.player1.score / 2) ^^ " " ^^ intToString(game.player2.score / 2))
+    ),
+    div (class ("instructions"), textNode("SPACE to start, W/S and UP/DOWN to move"))
+  ]))
 }
 
-#sig subscriptions : Game -> [Sub(Msg)]
+sig subscriptions : (Game) -> Sub(Msg)
 fun subscriptions(model) {
-  [animFrameHandler(), keyUpHandler(), keyDownHandler()]
+  animFrameHandler() +^ keyUpHandler() +^ keyDownHandler()
 }
 
 

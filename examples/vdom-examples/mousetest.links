@@ -1,7 +1,8 @@
-open Tags;
-open Attrs;
-open Events;
-open VirtualDom;
+open Mvu;
+open MvuHTML;
+open MvuAttrs;
+open MvuEvents;
+open MvuSubscriptions;
 
 typename Model = (coords: (Int,Int));
 typename Msg = [| MouseCoords : (Int,Int) |];
@@ -20,24 +21,28 @@ fun updt(msg, model) {
 
 fun getRGB(xPos, yPos) {
   # 1300 , 600
-  var red = xPos*(1300/255);
-  var green = yPos*(600/255);
-  var blue = (xPos+yPos)*(1900/255);
-  intToString(red)^^","^^intToString(green)^^","^^intToString(blue)
+  var red = xPos * (1300/255);
+  var green = yPos * (600/255);
+  var blue = (xPos+yPos) * (1900/255);
+  intToString(red) ^^ "," ^^ intToString(green) ^^ "," ^^ intToString(blue)
 }
+
+var ae = MvuAttrs.empty;
 
 sig view : (Model) ~%e~> HTML(Msg)
 fun view(model) {
   var xPos = first(model.coords);
   var yPos = second(model.coords);
-  div ([style ("width:100%;height:100%;background-color:rgb("^^getRGB(xPos,yPos)^^")")], [], [
-    h4 ([], [], [textNode(intToString(xPos)), textNode(", "), textNode(intToString(yPos))])
-  ])
+  var styleStr =
+    "width:100%; height:100%; background-color:rgb(" ^^
+      getRGB(xPos, yPos) ^^ ")";
+  div (style(styleStr),
+    h4 (ae, textNode(intToString(xPos) ^^ ", " ^^ intToString(yPos))))
 }
 
-#sig subscriptions : Model -> [Sub(Msg)]
+sig subscriptions : (Model) -> Sub(Msg)
 fun subscriptions(model) {
-  [mouseMoveHandler()]
+  mouseMoveHandler()
 }
 
 
