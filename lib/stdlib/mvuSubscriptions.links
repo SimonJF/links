@@ -22,24 +22,36 @@ fun concat(nodes) {
   fold_right(fun(x, acc) { append(x, acc) }, SubEmpty, nodes)
 }
 
-fun getKeyDownCode(f) {
-  var hdler = EventDataHandler("keydown", "keyCode", fun(v) { Just(f(v)) });
+sig onKeyboardEvent : forall a :: Type(Any, Any) .
+  (String, (KeyboardEvent) {}~> Maybe(a)) -> Sub(a)
+fun onKeyboardEvent(evtName, f) {
+  var hdler =
+    KeyboardEventHandler(evtName, fun(evt) { f(evt) });
   SubEventHandler(hdler)
 }
 
-fun getKeyUpCode(f) {
-  var hdler = EventDataHandler("keyup", "keyCode", fun(v) { Just(f(v)) });
+fun onKeyDown(f) {
+  onKeyboardEvent("keydown", f)
+}
+
+fun onKeyUp(f) {
+  onKeyboardEvent("keyup", f)
+}
+
+fun onKeyPress(f) {
+  onKeyboardEvent("keypress", f)
+}
+
+sig onMouseEvent : forall a :: Type(Any, Any) .
+  (String, (MouseEvent) {}~> Maybe(a)) -> Sub(a)
+fun onMouseEvent(evtName, f) {
+  var hdler =
+    MouseEventHandler(evtName, fun(evt) { f(evt) });
   SubEventHandler(hdler)
 }
 
-fun getKeyPressCode(f) {
-  var hdler = EventDataHandler("keypress", "keyCode", fun(v) { Just(f(v)) });
-  SubEventHandler(hdler)
-}
-
-fun getMousePos(f) {
-  var hdler = TupleIntHandler("mousemove", f);
-  SubEventHandler(hdler)
+fun onMouseMove(f) {
+  onMouseEvent("mousemove", f)
 }
 
 fun getEvery(interval, f) {
@@ -49,5 +61,4 @@ fun getEvery(interval, f) {
 fun animationFrame(f) {
   SubAnimationFrame(f)
 }
-
 

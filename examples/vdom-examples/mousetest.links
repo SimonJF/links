@@ -4,18 +4,15 @@ open MvuAttrs;
 open MvuEvents;
 open MvuSubscriptions;
 
-typename Model = (coords: (Int,Int));
-typename Msg = [| MouseCoords : (Int,Int) |];
+typename Model = Maybe(MouseEvent);
+typename Msg = [| UpdateMouseEvent: MouseEvent |];
 
-fun mouseMoveHandler() {
-  getMousePos(fun(newCoords) { MouseCoords(newCoords) })
-}
+var mouseMoveHandler = onMouseMove(fun(evt) { Just(UpdateMouseEvent(evt)) });
 
 sig updt : (Msg, Model) ~%e~> Model
-fun updt(msg, model) {
+fun updt(msg, _) {
   switch(msg) {
-    case MouseCoords(newCoords) ->
-      (model with coords = newCoords)
+    case UpdateMouseEvent(mouseEvt) -> Just(mouseEvt)
   }
 }
 
@@ -29,32 +26,63 @@ fun getRGB(xPos, yPos) {
 
 var ae = MvuAttrs.empty;
 
+fun textPar((k, v)) {
+  p(MvuAttrs.empty, textNode(k ^^ ": " ^^ v))
+}
+
+fun i2s(i) { intToString(i) }
+fun b2s(b) { if(b) { "true" } else { "false"} }
+
 sig view : (Model) ~%e~> HTML(Msg)
 fun view(model) {
-  var xPos = first(model.coords);
-  var yPos = second(model.coords);
-  var styleStr =
-    "width:100%; height:100%; background-color:rgb(" ^^
-      getRGB(xPos, yPos) ^^ ")";
-  div (style(styleStr),
-    h4 (ae, textNode(intToString(xPos) ^^ ", " ^^ intToString(yPos))))
+  switch(model) {
+    case Nothing -> textNode("Move the mouse!")
+    case Just(evt) ->
+      var props =
+        MvuHTML.concat(
+          map(textPar,
+            [
+              ("altKey", b2s(evt.altKey)),
+              ("button", i2s(evt.button)),
+              ("buttons", i2s(evt.buttons)),
+              ("clientX", i2s(evt.clientX)),
+              ("clientY", i2s(evt.clientY)),
+              ("ctrlKey", b2s(evt.ctrlKey)),
+              ("metaKey", b2s(evt.metaKey)),
+              ("movementX", i2s(evt.movementX)),
+              ("movementY", i2s(evt.movementY)),
+              ("offsetX", i2s(evt.offsetX)),
+              ("offsetY", i2s(evt.offsetY)),
+              ("pageX", i2s(evt.pageX)),
+              ("pageY", i2s(evt.pageY)),
+              ("screenX", i2s(evt.screenX)),
+              ("screenY", i2s(evt.screenY)),
+              ("shiftKey", b2s(evt.shiftKey)),
+              ("which", i2s(evt.which)),
+              ("x", i2s(evt.x)),
+              ("y", i2s(evt.y))
+            ]));
+      var styleStr =
+        "width:100%; height:100%; background-color:rgb(" ^^
+          getRGB(evt.x, evt.y) ^^ ")";
+      div (style(styleStr), props)
+  }
 }
 
 sig subscriptions : (Model) -> Sub(Msg)
 fun subscriptions(model) {
-  mouseMoveHandler()
+  mouseMoveHandler
 }
 
 
 fun mainPage(_) {
-  var initialModel = (coords = (0,0));
   var evtHandler =
-    run("placeholder", initialModel, view,
+    run("placeholder", Nothing, view,
       fun(msg, model) { (updt(msg, model), NoCommand) }, subscriptions);
   page
   <html>
     <head>
-      <title>Stopwatch</title>
+      <title>Mouse Subscriptions</title>
       <link rel="stylesheet" href="css/stopwatch.css" type="text/css" />
     </head>
     <body>
