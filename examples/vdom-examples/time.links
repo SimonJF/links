@@ -7,9 +7,9 @@ open MvuSubscriptions;
 typename Model = (seconds : Int, minutes : Int, paused: Bool);
 typename Msg = [| Tick | Reset | TogglePause | Stop | NoOp |];
 
-var pKey = "80";
-var rKey = "82";
-var sKey = "83";
+var pKey = "p";
+var rKey = "r";
+var sKey = "s";
 
 
 fun resetHandler() {
@@ -31,12 +31,12 @@ fun secondsHandler() {
 }
 
 fun shortcutHandler() {
-  getKeyDownCode(fun(keycode) {
-    if (keycode == pKey) {
+  MvuSubscriptions.onKeyDown(fun(evt) {
+    if (evt.key == pKey) {
       TogglePause
-    } else if (keycode == rKey) {
+    } else if (evt.key == rKey) {
       Reset
-    } else if (keycode == sKey) {
+    } else if (evt.key == sKey) {
       Stop
     } else {
       NoOp

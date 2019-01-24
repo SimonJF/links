@@ -44,15 +44,18 @@ fun animFrameHandler() {
   animationFrame(fun(_) { NewFrame })
 }
 
-var upKey = "38";
-var downKey = "40";
-var wKey = "87";
-var sKey = "83";
-var spaceKey = "32";
+var upKey = "ArrowUp";
+var downKey = "ArrowDown";
+var wKey = "w";
+var sKey = "s";
+var spaceKey = " ";
 
 
 fun keyDownHandler() {
-  getKeyDownCode(fun(keycode) {
+  open MvuSubscriptions;
+
+  onKeyDown(fun(evt) {
+    var keycode = evt.key;
     if (keycode == upKey) {
       Paddle1(Up)
     } else if (keycode == downKey) {
@@ -70,7 +73,10 @@ fun keyDownHandler() {
 }
 
 fun keyUpHandler() {
-  getKeyUpCode(fun(keycode) {
+  open MvuSubscriptions;
+
+  onKeyUp(fun(evt) {
+    var keycode = evt.key;
     if (keycode == upKey || keycode == downKey) {
       Paddle1(Still)
     } else if (keycode == wKey || keycode == sKey) {

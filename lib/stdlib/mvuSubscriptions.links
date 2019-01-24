@@ -31,15 +31,15 @@ fun onKeyboardEvent(evtName, f) {
 }
 
 fun onKeyDown(f) {
-  onKeyboardEvent("keydown", f)
+  onKeyboardEvent("keydown", fun(x) { Just(f(x)) })
 }
 
 fun onKeyUp(f) {
-  onKeyboardEvent("keyup", f)
+  onKeyboardEvent("keyup", fun(x) { Just(f(x)) })
 }
 
 fun onKeyPress(f) {
-  onKeyboardEvent("keypress", f)
+  onKeyboardEvent("keypress", fun(x) { Just(f(x)) } )
 }
 
 sig onMouseEvent : forall a :: Type(Any, Any) .

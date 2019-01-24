@@ -150,75 +150,78 @@ fun classList(classes) {
 ### MOUSE HELPERS ###
 
 fun onClick(f) {
-  eventHandler(UnitHandler("onclick", f))
+  eventHandler(UnitHandler("click", f))
 }
 
 fun onClick(f) {
-  eventHandler(UnitHandler("onchange", f))
+  eventHandler(UnitHandler("change", f))
 }
 
 fun onMouseMove(f) {
-  eventHandler(UnitHandler("onmousemove", f))
+  eventHandler(UnitHandler("mousemove", f))
 }
 fun onMouseDown(f) {
-  eventHandler(UnitHandler("onmousedown", f))
+  eventHandler(UnitHandler("mousedown", f))
 }
 fun onMouseUp(f) {
-  eventHandler(UnitHandler("onmouseup", f))
+  eventHandler(UnitHandler("mouseup", f))
 }
 fun onMouseEnter(f) {
-  eventHandler(UnitHandler("onmouseenter", f))
+  eventHandler(UnitHandler("mouseenter", f))
 }
 fun onMouseLeave(f) {
-  eventHandler(UnitHandler("onmouseleave", f))
+  eventHandler(UnitHandler("mouseleave", f))
 }
 fun onClick(f) {
-  eventHandler(UnitHandler("onclick", f))
+  eventHandler(UnitHandler("click", f))
 }
 fun onDoubleClick(f) {
-  eventHandler(UnitHandler("ondblclick", f))
+  eventHandler(UnitHandler("dblclick", f))
 }
 fun onMouseOver(f) {
-  eventHandler(UnitHandler("onmouseover", f))
+  eventHandler(UnitHandler("mouseover", f))
 }
 fun onMouseOut(f) {
-  eventHandler(UnitHandler("onmouseout", f))
+  eventHandler(UnitHandler("mouseout", f))
 }
 
 ### FOCUS HELPERS ###
 
 fun onFocus(f) {
-  eventHandler(UnitHandler("onfocus", f))
+  eventHandler(UnitHandler("focus", f))
 }
 
 fun onBlur(f) {
-  eventHandler(UnitHandler("onblur", f))
+  eventHandler(UnitHandler("blur", f))
 }
 
 ### KEYBOARD HELPERS ###
 
 fun onKeyUp(f) {
-  eventHandler(PropertyHandler("onkeyup", "value", fun(val) { Just(f(val)) } ))
+  eventHandler(PropertyHandler("keyup", "value", fun(val) { Just(f(val)) } ))
 }
+
 fun onKeyDown(f) {
-  eventHandler(PropertyHandler("onkeydown", "value", fun(val) { Just(f(val)) }))
+  eventHandler(PropertyHandler("keydown", "value", fun(val) { Just(f(val)) }))
 }
+
 fun onKeyPress(f) {
-  eventHandler(PropertyHandler("onkeypress", "value", fun(val) { Just(f(val)) }))
+  eventHandler(PropertyHandler("keypress", "value", fun(val) { Just(f(val)) }))
 }
+
 fun onInput(f) {
-  eventHandler(PropertyHandler("oninput", "value", fun(val) { Just(f(val)) }))
+  eventHandler(PropertyHandler("input", "value", fun(val) { Just(f(val)) }))
 }
 
-fun getKeycode(event, f) {
-  eventHandler(EventDataHandler(event, "keyCode", fun(val) { Just(f(val)) } ))
+fun getKey(event, f) {
+  eventHandler(KeyboardEventHandler(event, fun(evt) { Just(f(evt.key)) } ))
 }
 
-fun onKeycode(event, keycode, f) {
+fun onKey(eventName, key, f) {
   eventHandler(
-    EventDataHandler(event, "keyCode",
-      fun(kc) {
-        if(keycode == stringToInt(kc)) {
+    KeyboardEventHandler(eventName,
+      fun(evt) {
+        if(key == evt.key) {
           Just(f())
         } else {
           Nothing
@@ -228,6 +231,6 @@ fun onKeycode(event, keycode, f) {
   )
 }
 
-fun onEnter(f) { onKeycode("onkeydown", 13, f) }
+fun onEnter(f) { onKey("keydown", "Enter", f) }
 
 

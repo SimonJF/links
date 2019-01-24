@@ -4,37 +4,52 @@ open MvuAttrs;
 open MvuEvents;
 open MvuSubscriptions;
 
-typename Model = (keyPressed : String);
-typename Msg = [| KeyPressed : String |];
-
-fun keyCodeHandler() {
-  getKeyUpCode(fun(keycode) {
-    KeyPressed(keycode)
-  })
-}
+typename Model = Maybe(KeyboardEvent);
+typename Msg = [| UpdateEvent: KeyboardEvent |];
 
 sig updt : (Msg, Model) ~%e~> Model
-fun updt(msg, model) {
+fun updt(msg, _) {
   switch(msg) {
-    case KeyPressed(keycode) ->
-      (model with keyPressed = keycode)
+    case UpdateEvent(evt) -> Just(evt)
   }
 }
 
+fun textPar((k, v)) {
+  p(MvuAttrs.empty, textNode(k ^^ ": " ^^ v))
+}
+
+fun i2s(i) { intToString(i) }
+fun b2s(b) { if(b) { "true" } else { "false"} }
+
 sig view : (Model) ~%e~> HTML(Msg)
 fun view(model) {
-    div (id("testdiv") +@ style ("width:100%;height:100%"),
-    textNode("Key pressed: " ^^ model.keyPressed))
+  switch(model) {
+    case Nothing -> textNode("Press a key!")
+    case Just(evt) ->
+      var props = MvuHTML.concat(map(textPar,
+      [
+        ("altKey", b2s(evt.altKey)),
+        ("code", i2s(evt.code)),
+        ("ctrlKey", b2s(evt.ctrlKey)),
+        ("isComposing", b2s(evt.isComposing)),
+        ("key", evt.key),
+        ("locale", evt.locale),
+        ("location", i2s(evt.location)),
+        ("metaKey", b2s(evt.metaKey)),
+        ("repeat", b2s(evt.repeat)),
+        ("shiftKey", b2s(evt.shiftKey))
+      ]));
+      div(style("width:100%;height:100%"), props)
+  }
 }
 
 sig subscriptions : (Model) -> Sub(Msg)
-fun subscriptions(model) {
-  keyCodeHandler()
+fun subscriptions(_) {
+  onKeyDown(fun(evt) { UpdateEvent(evt) })
 }
 
 fun mainPage(_) {
-  var initialModel = (keyPressed = "None");
-  run("placeholder", initialModel, view,
+  run("placeholder", Nothing, view,
     fun(model, msg) { (updt(model, msg), NoCommand) }, subscriptions);
   page
   <html>
