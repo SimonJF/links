@@ -271,14 +271,25 @@ and phrasenode = [
 | `Raise
 ]
 and phrase = phrasenode with_pos
+and typety = name * (quantifier * tyvar option) list * datatype'
+and funty = (binder
+             * declared_linearity
+             * (tyvar list * funlit)
+                (* * (Types.datatype * Types.quantifier option list) option) * funlit) *)
+             * location
+             * datatype' option)
+and fun_binding = [
+| `Handler of binder * handlerlit * datatype' option
+| `Fun of funty
+]
 and bindingnode = [
 | `Val     of pattern * (tyvar list * phrase) * location * datatype' option
-| `Fun     of binder * declared_linearity * (tyvar list * funlit) * location * datatype' option
-| `Funs    of (binder * declared_linearity * ((tyvar list * (Types.datatype * Types.quantifier option list) option) * funlit) * location * datatype' option * position) list
-| `Handler of binder * handlerlit * datatype' option
+(* | `Fun     of binder * declared_linearity * (tyvar list * funlit) * location * datatype' option *)
+| `Funs    of fun_binding list
 | `Foreign of binder * name * name * name * datatype' (* Binder, raw function name, language, external file, type *)
 | `QualifiedImport of name list
-| `Type    of name * (quantifier * tyvar option) list * datatype'
+(* | `Type    of typety *)
+| `Types   of typety list
 | `Infix
 | `Exp     of phrase
 | `Module  of name * binding list

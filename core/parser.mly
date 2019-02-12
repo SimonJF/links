@@ -264,7 +264,7 @@ let parseRegexFlags f =
 
 interactive:
 | nofun_declaration                                            { `Definitions [$1] }
-| fun_declarations SEMICOLON                                   { `Definitions $1   }
+| fun_groups SEMICOLON                                         { `Definitions $1   }
 | SEMICOLON                                                    { `Definitions []   }
 | exp SEMICOLON                                                { `Expression $1    }
 | directive                                                    { `Directive $1     }
@@ -308,7 +308,8 @@ nofun_declaration:
                                                                  set assoc (from_option default_fixity $2) ($3.node);
                                                                  with_pos $loc `Infix }
 | signature? tlvarbinding SEMICOLON                            { val_binding' ~ppos:$loc($2) (sig_of_opt $1) $2 }
-| typedecl SEMICOLON | links_module | links_open SEMICOLON     { $1 }
+| typedecl_block SEMICOLON
+| links_module | links_open SEMICOLON                          { $1 }
 
 alien_datatype:
 | VARIABLE COLON datatype SEMICOLON                            { (binder ~ppos:$loc($1) $1, datatype $3) }
@@ -325,8 +326,14 @@ alien_block:
 module_name:
 | CONSTRUCTOR                                                  { $1 }
 
-fun_declarations:
-| fun_declaration+                                             { $1 }
+fun_declaration_groups:
+| fun_declaration_group+                                       { $1 }
+
+and_fun_declaration:
+| AND fun_declaration                                          { $2 }
+
+fun_declaration_group:
+| fun_declaration (and_fun_declaration)*                       { Funs ($1 :: $2) }
 
 fun_declaration:
 | tlfunbinding                                                 { fun_binding     ~ppos:$loc      NoSig   $1 }
@@ -361,6 +368,12 @@ tlvarbinding:
 signature:
 | SIG var COLON datatype                                       { with_pos $loc ($2, datatype $4) }
 | SIG op COLON datatype                                        { with_pos $loc ($2, datatype $4) }
+
+typedecl_block:
+| typedecl (and_typedecl)*                                     { `Types ($1 :: $2) }
+
+and_typedecl:
+| AND typedecl                                                 { $2 }
 
 typedecl:
 | TYPENAME CONSTRUCTOR typeargs_opt EQ datatype                { with_pos $loc (`Type ($2, $3, datatype $5)) }
@@ -839,13 +852,23 @@ record_labels:
 links_open:
 | OPEN separated_nonempty_list(DOT, CONSTRUCTOR)               { with_pos $loc (`QualifiedImport $2) }
 
-binding:
-| VAR pattern EQ exp SEMICOLON                                 { val_binding ~ppos:$loc $2 $4 }
-| exp SEMICOLON                                                { with_pos $loc (`Exp $1) }
+fn_binding:
 | signature linearity VARIABLE arg_lists block                 { fun_binding ~ppos:$loc (Sig $1) ($2, $3, $4, `Unknown, $5) }
 | linearity VARIABLE arg_lists block                           { fun_binding ~ppos:$loc  NoSig   ($1, $2, $3, `Unknown, $4) }
 | typed_handler_binding                                        { handler_binding ~ppos:$loc NoSig $1 }
-| typedecl SEMICOLON | links_module | alien_block | links_open { $1 }
+
+and_fn_binding:
+| AND fn_binding                                               { $2 }
+
+fn_binding_block:
+| fn_binding (and_fn_binding)*                                 { Funs ($1 :: $2)}
+
+binding:
+| VAR pattern EQ exp SEMICOLON                                 { val_binding ~ppos:$loc $2 $4 }
+| exp SEMICOLON                                                { with_pos $loc (`Exp $1) }
+| fn_binding_block                                             { $1 }
+| typedecl_block SEMICOLON
+| links_module | alien_block | links_open                      { $1 }
 
 bindings:
 | binding                                                      { [$1]      }

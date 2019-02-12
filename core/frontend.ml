@@ -57,7 +57,7 @@ struct
        ->- before_typing_ext session_exceptions DesugarSessionExceptions.wrap_linear_handlers
        ->- DesugarHandlers.desugar_handlers_early#program
        ->- DesugarLAttributes.desugar_lattributes#program
-       ->- RefineBindings.refine_bindings#program
+       (* ->- RefineBindings.refine_bindings#program *)
        ->- DesugarDatatypes.program tyenv.Types.tycon_env
        ->- TypeSugar.Check.program tyenv
         (*->- after_typing ((FixTypeAbstractions.fix_type_abstractions tyenv)#program ->- snd3)*)
