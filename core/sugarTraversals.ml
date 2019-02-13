@@ -669,8 +669,16 @@ class map =
                  let _x_i5 = o#position _x_i5
                  in (_x, _x1, (_x_i1, _x_i2), _x_i3, _x_i4, _x_i5))
               _x
+<<<<<<< HEAD
           in Funs _x
       | Handler (b, hnlit, t) ->
+=======
+          in `Funs _x
+      | `SugarFuns (bs) ->
+          let bs = o#list (fun o -> o#binding) bs in
+          `SugarFuns (bs)
+      | `Handler (b, hnlit, t) ->
+>>>>>>> [WIP] Explicit SugarFuns block, move `Type to `Types
           let b = o#binder b in
           let hnlit = o#handlerlit hnlit in
           let t     = o#option (fun o -> o#unknown) t in
@@ -684,6 +692,7 @@ class map =
           Foreign ((_x, _x_i1, _x_i2, _x_i3, _x_i4))
       | QualifiedImport _xs ->
           let _xs = o#list (fun o -> o#name) _xs in
+<<<<<<< HEAD
           QualifiedImport _xs
       | Type ((_x, _x_i1, _x_i2)) ->
           let _x = o#name _x in
@@ -698,6 +707,25 @@ class map =
       | Infix -> Infix
       | Exp _x -> let _x = o#phrase _x in Exp _x
       | Module (n, bs) ->
+=======
+          `QualifiedImport _xs
+      | `Types (ts) ->
+          let ts = List.map (fun (_x, _x_i1, _x_i2) ->
+            let _x = o#name _x in
+            let _x_i1 =
+              o#list
+                (fun o (_x, _x_i1) ->
+                   let _x = _x (*o#quantifier _x*) in
+                   let _x_i1 = o#unknown _x_i1
+                   in (_x, _x_i1))
+                _x_i1
+            in let _x_i2 = o#datatype' _x_i2 in (_x, _x_i1, _x_i2)
+          ) ts in
+          `Types ts
+      | `Infix -> `Infix
+      | `Exp _x -> let _x = o#phrase _x in `Exp _x
+      | `Module (n, bs) ->
+>>>>>>> [WIP] Explicit SugarFuns block, move `Type to `Types
           let n = o#name n in
           let bs = o#list (fun o -> o#binding) bs in
           Module (n, bs)
@@ -1327,7 +1355,14 @@ class fold =
                  let o = o#position _x_i5 in o)
               _x
           in o
+<<<<<<< HEAD
       | Handler (b, hnlit, t) ->
+=======
+      | `SugarFuns (bs) ->
+          let o = o#list (fun o -> o#binding) bs in
+          o
+      | `Handler (b, hnlit, t) ->
+>>>>>>> [WIP] Explicit SugarFuns block, move `Type to `Types
           let o = o#binder b in
           let o = o#handlerlit hnlit in
           let o = o#option (fun o -> o#unknown) t in o
@@ -1340,6 +1375,7 @@ class fold =
       | QualifiedImport _xs ->
           let o = o#list (fun o -> o#name) _xs in
           o
+<<<<<<< HEAD
       | Type ((_x, _x_i1, _x_i2)) ->
           let o = o#name _x in
           let o =
@@ -1353,6 +1389,22 @@ class fold =
       | Infix -> o
       | Exp _x -> let o = o#phrase _x in o
       | Module (n, bs) ->
+=======
+      | `Types (ts) ->
+          let o = o#list (fun o (_x, _x_i1, _x_i2) ->
+            let o = o#name _x in
+            let o =
+              o#list
+                (fun o (_x, _x_i1) ->
+                   let o = o (* #quantifier _x*) in
+                   let o = o#unknown _x_i1
+                   in o) _x_i1
+            in let o = o#datatype' _x_i2 in o) ts in
+          o
+      | `Infix -> o
+      | `Exp _x -> let o = o#phrase _x in o
+      | `Module (n, bs) ->
+>>>>>>> [WIP] Explicit SugarFuns block, move `Type to `Types
           let o = o#name n in
           let o = o#list (fun o -> o#binding) bs in
           o
@@ -2110,8 +2162,16 @@ class fold_map =
                  let (o, _x_i5) = o#position _x_i5
                  in (o, (_x, _x1, (_x_i1, _x_i2), _x_i3, _x_i4, _x_i5)))
               _x
+<<<<<<< HEAD
           in (o, (Funs _x))
       | Handler (b, hnlit, t) ->
+=======
+          in (o, (`Funs _x))
+      | `SugarFuns (bs) ->
+          let (o,bs) = o#list (fun o b -> o#binding b) bs in
+          (o, `SugarFuns bs)
+      | `Handler (b, hnlit, t) ->
+>>>>>>> [WIP] Explicit SugarFuns block, move `Type to `Types
           let (o, b) = o#binder b in
           let (o, hnlit) = o#handlerlit hnlit in
           let (o, t) = o#option (fun o -> o#unknown) t in
@@ -2125,6 +2185,7 @@ class fold_map =
           in (o, (Foreign ((_x, _x_i1, _x_i2, _x_i3, _x_i4))))
       | QualifiedImport _xs ->
           let (o, _xs) = o#list (fun o n -> o#name n) _xs in
+<<<<<<< HEAD
           (o, QualifiedImport _xs)
       | Type ((_x, _x_i1, _x_i2)) ->
           let (o, _x) = o#name _x in
@@ -2140,6 +2201,24 @@ class fold_map =
       | Infix -> (o, Infix)
       | Exp _x -> let (o, _x) = o#phrase _x in (o, (Exp _x))
       | Module (n, bs) ->
+=======
+          (o, `QualifiedImport _xs)
+      | `Types (ts) ->
+          let (o, ts) = o#list (fun o (_x, _x_i1, _x_i2) ->
+            let (o, _x) = o#name _x in
+            let (o, _x_i1) =
+              o#list
+                (fun o (_x, _x_i1) ->
+                   let (o, _x_i1) = o#option (fun o -> o#unknown) _x_i1
+                   in (o, (_x, _x_i1)))
+                _x_i1 in
+            let (o, _x_i2) = o#datatype' _x_i2
+            in (o, (_x, _x_i1, _x_i2))) ts
+          in (o, `Types ts)
+      | `Infix -> (o, `Infix)
+      | `Exp _x -> let (o, _x) = o#phrase _x in (o, (`Exp _x))
+      | `Module (n, bs) ->
+>>>>>>> [WIP] Explicit SugarFuns block, move `Type to `Types
           let (o, n) = o#string n in
           let (o, bs) = o#list (fun o -> o#binding) bs in
           (o, (Module (n, bs)))
