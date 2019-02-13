@@ -181,44 +181,56 @@ struct
         | `Table (r, w, n) -> `Table (datatype var_env r, datatype var_env w, datatype var_env n)
         | `List k -> `Application (Types.list, [`Type (datatype var_env k)])
         | `TypeApplication (tycon, ts) ->
+            let exception Kind_mismatch (* TODO add more information *) in
+            (* Matches kinds of the quantifiers against the type arguments.
+             * Returns Types.type_args based on the given frontend type arguments. *)
+            let match_quantifiers qs =
+              let match_kinds (q, t) =
+                let primary_kind_of_type_arg : Sugartypes.type_arg -> primary_kind = function
+                  | `Type _ -> `Type
+                  | `Row _ -> `Row
+                  | `Presence _ -> `Presence
+                in
+                if primary_kind_of_quantifier q <> primary_kind_of_type_arg t then
+                  raise Kind_mismatch
+                else (q, t)
+              in
+              let type_arg' var_env alias_env = function
+                | `Row r -> `Row (effect_row var_env alias_env r)
+                | t -> type_arg var_env alias_env t
+              in
+              begin
+                try
+                  let ts = ListUtils.zip' qs ts in
+                  List.map
+                    (fun (q,t) ->
+                      let (q, t) = match_kinds (q, t) in
+                      match subkind_of_quantifier q with
+                      | (_, `Effect) -> type_arg' var_env alias_env t
+                      | _ -> type_arg var_env alias_env t) ts
+                with
+                | ListUtils.Lists_length_mismatch ->
+                   failwith (Printf.sprintf
+                     "Arity mismatch: the type constructor %s expects %d arguments, "
+                     ^ "but %d arguments were provided"
+                     tycon (List.length qs) (List.length ts))
+                | Kind_mismatch ->
+                   failwith "Kind mismatch"
+              end in
+
             begin match SEnv.find alias_env tycon with
               | None -> raise (UnboundTyCon (pos,tycon))
               | Some (`Alias (qs, _dt)) ->
-                 let exception Kind_mismatch (* TODO add more information *) in
-                 let match_kinds (q, t) =
-                   let primary_kind_of_type_arg : Sugartypes.type_arg -> primary_kind = function
-                     | `Type _ -> `Type
-                     | `Row _ -> `Row
-                     | `Presence _ -> `Presence
-                   in
-                   if primary_kind_of_quantifier q <> primary_kind_of_type_arg t then
-                     raise Kind_mismatch
-                   else (q, t)
-                 in
-                 let type_arg' var_env alias_env = function
-                   | `Row r -> `Row (effect_row var_env alias_env r)
-                   | t -> type_arg var_env alias_env t
-                 in
-                 begin try
-                         let ts = ListUtils.zip' qs ts in
-                         let ts = List.map
-                           (fun (q,t) ->
-                             let (q, t) = match_kinds (q, t) in
-                             match subkind_of_quantifier q with
-                             | (_, `Effect) -> type_arg' var_env alias_env t
-                             | _ -> type_arg var_env alias_env t)
-                           ts
-                         in
-                         Instantiate.alias tycon ts alias_env
-                   with
-                   | ListUtils.Lists_length_mismatch ->
-                      failwith (Printf.sprintf "Arity mismatch: the type constructor %s expects %d arguments, but %d arguments were provided" tycon (List.length qs) (List.length ts))
-                   | Kind_mismatch ->
-                      failwith "Kind mismatch"
-                 end
+                  let ts = match_quantifiers qs in
+                  Instantiate.alias tycon ts alias_env
               | Some (`Abstract abstype) ->
                   (* TODO: check that the kinds match up *)
                   `Application (abstype, List.map (type_arg var_env alias_env) ts)
+              | Some (`Mutual qs) ->
+                  (* Check that the quantifiers / kinds match up, then generate
+                   * a `RecursiveApplication. *)
+                  let ts = match_quantifiers qs in
+                  `RecursiveApplication (tycon, ts)
             end
         | `Primitive k -> `Primitive k
         | `DB -> `Primitive `DB

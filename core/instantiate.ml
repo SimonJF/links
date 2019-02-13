@@ -418,8 +418,13 @@ let alias name tyargs env =
           List.fold_right2
             (fun q arg (tenv, renv, penv) ->
               if not (primary_kind_of_quantifier q = primary_kind_of_type_arg arg)
-              then failwith (Printf.sprintf
-"Argument '%s' to type alias '%s' has the wrong kind ('%s' instead of '%s')" (Types.string_of_type_arg arg) name (Types.string_of_primary_kind (primary_kind_of_type_arg arg)) (Types.string_of_primary_kind (primary_kind_of_quantifier q)));
+              then failwith
+                (Printf.sprintf
+                  "Argument '%s' to type alias '%s' has the wrong kind ('%s' instead of '%s')"
+                  (Types.string_of_type_arg arg)
+                  name
+                  (Types.string_of_primary_kind (primary_kind_of_type_arg arg))
+                  (Types.string_of_primary_kind (primary_kind_of_quantifier q)));
               let x = var_of_quantifier q in
                 match arg with
                 | `Type t ->
@@ -431,21 +436,6 @@ let alias name tyargs env =
             vars
             tyargs
             (IntMap.empty, IntMap.empty, IntMap.empty) in
-
-        (* TODO: the following commented out code appears to be
-           rubbish. There should never be any free flexible variables in
-           a type alias. Delete it? *)
-
-        (* freshen any free flexible type variables in the type alias *)
-        (* let bound_vars = *)
-        (*   List.fold_right (Types.var_of_quantifier ->- TypeVarSet.add) vars TypeVarSet.empty in *)
-        (* let ftvs = Types.flexible_type_vars bound_vars body in *)
-
-        (* let qs = IntMap.fold (fun _ q qs -> q::qs) ftvs [] in *)
-        (* let body = *)
-        (*   match freshen_quantifiers (`ForAll (Types.box_quantifiers qs, body)) with *)
-        (*     | `ForAll (_, body) -> body *)
-        (*     | t -> t *)
 
         (* instantiate the type variables bound by the alias
            definition with the type arguments *and* instantiate any

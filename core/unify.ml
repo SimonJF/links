@@ -587,6 +587,12 @@ let rec unify' : unify_env -> (datatype * datatype) -> unit =
                          "' with abstract type '"^string_of_datatype t2^"'")))
     | `Application (_, ls), `Application (_, rs) ->
        List.iter2 (fun lt rt -> unify_type_args' rec_env (lt, rt)) ls rs
+    | `RecursiveApplication (l, _), `Application (r, _) when l <> r ->
+       raise (Failure
+                (`Msg ("Cannot unify mutually-recursive type '" ^ l ^
+                         "' with mutually-recursive type '"^ r ^"'")))
+    | `RecursiveApplication (_, ls), `RecursiveApplication (_, rs) ->
+       List.iter2 (fun lt rt -> unify_type_args' rec_env (lt, rt)) ls rs
     | `ForAll (lsref, lbody), `ForAll (rsref, rbody) ->
        (* Check that all quantifiers that were originally rigid
                  are still distinct *)

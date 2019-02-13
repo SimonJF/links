@@ -160,6 +160,7 @@ type typ =
     | `Lens of lens_sort
     | `Alias of ((string * type_arg list) * typ)
     | `Application of (Abstype.t * type_arg list)
+    | `RecursiveApplication of (string * type_arg list)
     | `MetaTypeVar of meta_type_var
     | `ForAll of (quantifier list ref * typ)
     | (typ, row) session_type_basis ]
@@ -194,7 +195,11 @@ let is_present =
   | `Present _           -> true
   | (`Absent | `Var _) -> false
 
-type tycon_spec = [`Alias of quantifier list * typ | `Abstract of Abstype.t] [@@deriving show]
+type tycon_spec = [
+  | `Alias of quantifier list * typ
+  | `Abstract of Abstype.t
+  | `Recursive of quantifier list (* Type in same recursive group *)
+] [@@deriving show]
 
 let unbox_quantifiers = (!)
 let box_quantifiers = ref
