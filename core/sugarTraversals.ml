@@ -685,6 +685,9 @@ class map =
                  in (_x, _x1, (_x_i1, _x_i2), _x_i3, _x_i4, _x_i5))
               _x
           in `Funs _x
+      | `SugarFuns (bs) ->
+          let bs = o#list (fun o -> o#binding) bs in
+          `SugarFuns (bs)
       | `Handler (b, hnlit, t) ->
           let b = o#binder b in
           let hnlit = o#handlerlit hnlit in
@@ -700,16 +703,19 @@ class map =
       | `QualifiedImport _xs ->
           let _xs = o#list (fun o -> o#name) _xs in
           `QualifiedImport _xs
-      | `Type ((_x, _x_i1, _x_i2)) ->
-          let _x = o#name _x in
-          let _x_i1 =
-            o#list
-              (fun o (_x, _x_i1) ->
-                 let _x = _x (*o#quantifier _x*) in
-                 let _x_i1 = o#unknown _x_i1
-                 in (_x, _x_i1))
-              _x_i1
-          in let _x_i2 = o#datatype' _x_i2 in `Type ((_x, _x_i1, _x_i2))
+      | `Types (ts) ->
+          let ts = o#list (fun (_x, _x_i1, _x_i2) ->
+            let _x = o#name _x in
+            let _x_i1 =
+              o#list
+                (fun o (_x, _x_i1) ->
+                   let _x = _x (*o#quantifier _x*) in
+                   let _x_i1 = o#unknown _x_i1
+                   in (_x, _x_i1))
+                _x_i1
+            in let _x_i2 = o#datatype' _x_i2 in (_x, _x_i1, _x_i2)
+          ) ts in
+          `Types ts
       | `Infix -> `Infix
       | `Exp _x -> let _x = o#phrase _x in `Exp _x
       | `Module (n, bs) ->
@@ -1351,6 +1357,9 @@ class fold =
                  let o = o#position _x_i5 in o)
               _x
           in o
+      | `SugarFuns (bs) ->
+          let o = o#list (fun o -> o#binding) bs in
+          o
       | `Handler (b, hnlit, t) ->
           let o = o#binder b in
           let o = o#handlerlit hnlit in
@@ -1364,16 +1373,18 @@ class fold =
       | `QualifiedImport _xs ->
           let o = o#list (fun o -> o#name) _xs in
           o
-      | `Type ((_x, _x_i1, _x_i2)) ->
-          let o = o#name _x in
-          let o =
-            o#list
-              (fun o (_x, _x_i1) ->
-                 let o = o (* #quantifier _x*) in
-                 let o = o#unknown _x_i1
-                 in o)
-              _x_i1
-          in let o = o#datatype' _x_i2 in o
+      | `Types (ts) ->
+          let o = o#list (fun (_x, _x_i1, _x_i2) ->
+            let o = o#name _x in
+            let o =
+              o#list
+                (fun o (_x, _x_i1) ->
+                   let o = o (* #quantifier _x*) in
+                   let o = o#unknown _x_i1
+                   in o)
+                _x_i1
+            in let o = o#datatype' _x_i2 in o) ts in
+          o
       | `Infix -> o
       | `Exp _x -> let o = o#phrase _x in o
       | `Module (n, bs) ->
@@ -2144,6 +2155,9 @@ class fold_map =
                  in (o, (_x, _x1, (_x_i1, _x_i2), _x_i3, _x_i4, _x_i5)))
               _x
           in (o, (`Funs _x))
+      | `SugarFuns (bs) ->
+          let (o,bs) -> o#list (fun o b -> o#binding b) bs in
+          (o, `SugarFuns bs)
       | `Handler (b, hnlit, t) ->
           let (o, b) = o#binder b in
           let (o, hnlit) = o#handlerlit hnlit in
@@ -2159,17 +2173,18 @@ class fold_map =
       | `QualifiedImport _xs ->
           let (o, _xs) = o#list (fun o n -> o#name n) _xs in
           (o, `QualifiedImport _xs)
-      | `Type ((_x, _x_i1, _x_i2)) ->
-          let (o, _x) = o#name _x in
-          let (o, _x_i1) =
-            o#list
-              (fun o (_x, _x_i1) ->
-                 (*let (o, _x) = o#quantifier _x in*)
-                 let (o, _x_i1) = o#option (fun o -> o#unknown) _x_i1
-                 in (o, (_x, _x_i1)))
-              _x_i1 in
-          let (o, _x_i2) = o#datatype' _x_i2
-          in (o, (`Type ((_x, _x_i1, _x_i2))))
+      | `Types (ts) ->
+          let (o, ts) = o#list (fun o (_x, _x_i1, _x_i2) ->
+            let (o, _x) = o#name _x in
+            let (o, _x_i1) =
+              o#list
+                (fun o (_x, _x_i1) ->
+                   let (o, _x_i1) = o#option (fun o -> o#unknown) _x_i1
+                   in (o, (_x, _x_i1)))
+                _x_i1 in
+            let (o, _x_i2) = o#datatype' _x_i2
+            in (o, (_x, _x_i1, _x_i2))) ts
+          in (o, `Types (ts))
       | `Infix -> (o, `Infix)
       | `Exp _x -> let (o, _x) = o#phrase _x in (o, (`Exp _x))
       | `Module (n, bs) ->
