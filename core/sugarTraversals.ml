@@ -2156,7 +2156,7 @@ class fold_map =
               _x
           in (o, (`Funs _x))
       | `SugarFuns (bs) ->
-          let (o,bs) -> o#list (fun o b -> o#binding b) bs in
+          let (o,bs) = o#list (fun o b -> o#binding b) bs in
           (o, `SugarFuns bs)
       | `Handler (b, hnlit, t) ->
           let (o, b) = o#binder b in

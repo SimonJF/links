@@ -493,7 +493,6 @@ object (self)
 
   method! bindingnode = function
     | `Types ts ->
-
         (* Add all type declarations in the group to the alias
          * environment, as mutuals. *)
         let mutual_env = List.fold_left (fun env (t, args, dt) ->

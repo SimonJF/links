@@ -215,7 +215,7 @@ let parseRegexFlags f =
 %token <string> SLASHFLAGS
 %token UNDERSCORE AS
 %token <[`Left|`Right|`None|`Pre|`Post] -> int -> string -> unit> INFIX INFIXL INFIXR PREFIX POSTFIX
-%token TYPENAME
+%token TYPENAME AND
 %token TYPE ROW PRESENCE
 %token TRY OTHERWISE RAISE
 %token <string> PREFIXOP POSTFIXOP
@@ -327,7 +327,7 @@ module_name:
 | CONSTRUCTOR                                                  { $1 }
 
 rec_fun_declarations:
-| fun_declaration (and_fun_declaration)+                       { with_pos $loc (`SugarFuns ($1 :: $2)) }
+| fun_declaration and_fun_declaration+                         { with_pos $loc (`SugarFuns ($1 :: $2)) }
 
 and_fun_declaration:
 | AND fun_declaration                                          { $2 }
@@ -367,7 +367,7 @@ signature:
 | SIG op COLON datatype                                        { with_pos $loc ($2, datatype $4) }
 
 typedecls:
-| typedecl (and_typedecl)*                                     { with_pos $loc (`Types ($1 :: $2)) }
+| typedecl and_typedecl*                                       { with_pos $loc (`Types ($1 :: $2)) }
 
 and_typedecl:
 | AND typedecl                                                 { $2 }
@@ -858,7 +858,7 @@ and_function_binding:
 | AND function_binding                                         { $2 }
 
 rec_fun_bindings:
-| function_binding (and_function_binding)+                     { with_pos $loc (`RecFuns ( $1 :: $2)) }
+| function_binding and_function_binding+                       { with_pos $loc (`RecFuns ( $1 :: $2)) }
 
 
 
