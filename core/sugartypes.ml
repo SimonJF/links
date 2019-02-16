@@ -276,13 +276,13 @@ and bindingnode = [
 | `Fun     of binder * declared_linearity * (tyvar list * funlit) * location * datatype' option
 | `Funs    of (binder * declared_linearity * ((tyvar list * (Types.datatype * Types.quantifier option list) option) * funlit) * location * datatype' option * position) list
  (* Mutually-recursive function definitions may contain functions *or*
-  * handlers. RecFuns is an early-stage AST node which contains a list
+  * handlers. SugarFuns is an early-stage AST node which contains a list
   * of bindings, which can *only* be function or handler nodes.
   *
   * Then, desugarHandlers is run to ensure all handlers are desugared
   * into regular functions.
   *
-  * Finally, desugarRecFuns collapses this node into `Funs above *)
+  * Finally, desugarSugarFuns collapses this node into `Funs above *)
 | `SugarFuns of binding list
 | `Handler of binder * handlerlit * datatype' option
 | `Foreign of binder * name * name * name * datatype' (* Binder, raw function name, language, external file, type *)
@@ -497,11 +497,12 @@ struct
           List.fold_right
             (fun b (names, fnlits, handlerlits) ->
               match b with
-                | `Fun (bndr, _, (_, rhs), _, _, _)  ->
-                   (add (name_of_binder bndr) names, handlerlits, rhs::fnlits)
-                | `Handler (bndr, hl, _) ->
-                   (add (name_of_binder bndr) names, hl::handlerlits, fnlits))
-            bnds (empty, []) in
+                | {node=(`Fun (bndr, _, (_, rhs), _, _)); _ } ->
+                   (add (name_of_binder bndr) names, rhs::fnlits, handlerlits)
+                | {node=(`Handler (bndr, hl, _)); _ } ->
+                   (add (name_of_binder bndr) names, fnlits, hl::handlerlits)
+                | _ -> (names, fnlits, handlerlits))
+            bnds (empty, [], []) in
         let fnlit_fvs = union_map (fun fnlit -> funlit fnlit) fnlits in
         let hlit_fvs = union_map (fun hlit -> handlerlit hlit) hlits in
         let fvs = union fnlit_fvs hlit_fvs in
@@ -516,7 +517,7 @@ struct
           names, union_map (fun rhs -> diff (funlit rhs) names) rhss
     | `Foreign (bndr, _, _, _, _) -> singleton (name_of_binder bndr), empty
     | `QualifiedImport _
-    | `Type _
+    | `Types _
     | `Infix -> empty, empty
     | `Exp p -> empty, phrase p
     | `AlienBlock (_, _, decls) ->

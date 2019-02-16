@@ -74,7 +74,7 @@ object (self)
   method! bindingnode = function
     (* type declarations bind variables; exclude those from the
        analysis. *)
-    | `Type _    -> self
+    | `Types _    -> self
     | b          -> super#bindingnode b
 
   method! datatypenode = function
@@ -211,8 +211,7 @@ struct
                 with
                 | ListUtils.Lists_length_mismatch ->
                    failwith (Printf.sprintf
-                     "Arity mismatch: the type constructor %s expects %d arguments, "
-                     ^ "but %d arguments were provided"
+                     "Arity mismatch: the type constructor %s expects %d arguments, but %d arguments were provided"
                      tycon (List.length qs) (List.length ts))
                 | Kind_mismatch ->
                    failwith "Kind mismatch"
@@ -497,7 +496,7 @@ object (self)
          * environment, as mutuals. *)
         let mutual_env = List.fold_left (fun env (t, args, dt) ->
           let qs = List.map (fst) args in
-          SEnv.bind env (name, `Mutual qs)
+          SEnv.bind env (t, `Mutual qs)
         ) alias_env ts in
 
         (* Desugar all DTs, given the temporary new alias environment. *)

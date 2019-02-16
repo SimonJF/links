@@ -68,6 +68,8 @@ let instantiate_datatype : instantiation_maps -> datatype -> datatype =
               `Alias ((name, List.map (inst_type_arg rec_env) ts), inst rec_env d)
           | `Application (n, elem_type) ->
               `Application (n, List.map (inst_type_arg rec_env) elem_type)
+          | `RecursiveApplication (n, elem_type) ->
+              `RecursiveApplication (n, List.map (inst_type_arg rec_env) elem_type)
           | `Input (t, s) -> `Input (inst rec_env t, inst rec_env s)
           | `Output (t, s) -> `Output (inst rec_env t, inst rec_env s)
           | `Select fields -> `Select (inst_row rec_env fields)
@@ -409,6 +411,8 @@ let alias name tyargs env =
         failwith (Printf.sprintf "Unrecognised type constructor: %s" name)
     | Some (`Abstract _) ->
         failwith (Printf.sprintf "The type constructor: %s is abstract, not an alias" name)
+    | Some (`Mutual _) ->
+        failwith (Printf.sprintf "The type constructor: %s is a mutually-defined datatype, not an alias" name)
     | Some (`Alias (vars, _)) when List.length vars <> List.length tyargs ->
         failwith (Printf.sprintf
                     "Type alias %s applied with incorrect arity (%d instead of %d)"

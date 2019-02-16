@@ -2229,19 +2229,26 @@ struct
       | `Presence f -> "::Presence (" ^ presence bound_vars p f ^ ")"
 
   let tycon_spec bound_vars p =
+    let bound_vars tyvars =
+      List.fold_left
+        (fun bound_vars tyvar ->
+           TypeVarSet.add (var_of_quantifier tyvar) bound_vars)
+        bound_vars tyvars in
+
     function
       | `Alias (tyvars, body) ->
-          let bound_vars =
-            List.fold_left
-              (fun bound_vars tyvar ->
-                 TypeVarSet.add (var_of_quantifier tyvar) bound_vars)
-              bound_vars tyvars
-          in
-            begin
-              match tyvars with
-                | [] -> datatype bound_vars p body
-                | _ -> mapstrcat "," (quantifier p) tyvars ^"."^ datatype bound_vars p body
-            end
+          let bvs = bound_vars tyvars in
+          begin
+            match tyvars with
+              | [] -> datatype bvs p body
+              | _ -> mapstrcat "," (quantifier p) tyvars ^"."^ datatype bvs p body
+          end
+      | `Mutual (tyvars) ->
+          begin
+            match tyvars with
+              | [] -> "mutual"
+              | _ -> mapstrcat "," (quantifier p) tyvars ^ ". mutual"
+          end
       | `Abstract _ -> "abstract"
 
   let strip_quantifiers =

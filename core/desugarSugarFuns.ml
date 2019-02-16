@@ -1,4 +1,5 @@
 open Sugartypes
+open Utility
 
 (* Desugars SugarFuns. *)
 (* By this point, every binding within a SugarFuns block will have
@@ -11,7 +12,7 @@ open Sugartypes
 (* Simple check to see whether a function is recursive: checks whether the
  * binder occurs within the free variables of the function body. *)
 let is_recursive bnd fnlit =
-  StringSet.mem (name_of_binder bnd) Freevars.funlit fnlit
+  StringSet.mem (name_of_binder bnd) (Freevars.funlit fnlit)
 
 
 (* `Fun bindings must be lifted into `Funs if they are recursive. *)

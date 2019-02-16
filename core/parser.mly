@@ -264,8 +264,8 @@ let parseRegexFlags f =
 
 interactive:
 | nofun_declaration                                            { `Definitions [$1] }
-| fun_declaration SEMICOLON                                    { `Definitions $1   }
-| rec_fun_declarations SEMICOLON                               { `Definitions $1   }
+| fun_declaration SEMICOLON                                    { `Definitions [$1] }
+| rec_fun_declarations SEMICOLON                               { `Definitions [$1] }
 | SEMICOLON                                                    { `Definitions []   }
 | exp SEMICOLON                                                { `Expression $1    }
 | directive                                                    { `Directive $1     }
@@ -373,7 +373,7 @@ and_typedecl:
 | AND typedecl                                                 { $2 }
 
 typedecl:
-| TYPENAME CONSTRUCTOR typeargs_opt EQ datatype                { with_pos $loc (`Type ($2, $3, datatype $5)) }
+| TYPENAME CONSTRUCTOR typeargs_opt EQ datatype                { ($2, $3, datatype $5) }
 
 typeargs_opt:
 | /* empty */                                                  { [] }
@@ -858,7 +858,7 @@ and_function_binding:
 | AND function_binding                                         { $2 }
 
 rec_fun_bindings:
-| function_binding and_function_binding+                       { with_pos $loc (`RecFuns ( $1 :: $2)) }
+| function_binding and_function_binding+                       { with_pos $loc (`SugarFuns ( $1 :: $2)) }
 
 
 

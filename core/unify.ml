@@ -97,6 +97,11 @@ let rec eq_types : (datatype * datatype) -> bool =
               `Application (s', ts') -> s = s' && List.for_all2 (Utility.curry eq_type_args) ts ts'
             | _ -> false
           end
+      | `RecursiveApplication (s, ts) ->
+          begin match unalias t2 with
+              `Application (s', ts') -> s = s' && List.for_all2 (Utility.curry eq_type_args) ts ts'
+            | _ -> false
+          end
       | `ForAll (qs, t) ->
           begin match unalias t2 with
             | `ForAll (qs', t') ->
@@ -587,7 +592,7 @@ let rec unify' : unify_env -> (datatype * datatype) -> unit =
                          "' with abstract type '"^string_of_datatype t2^"'")))
     | `Application (_, ls), `Application (_, rs) ->
        List.iter2 (fun lt rt -> unify_type_args' rec_env (lt, rt)) ls rs
-    | `RecursiveApplication (l, _), `Application (r, _) when l <> r ->
+    | `RecursiveApplication (l, _), `RecursiveApplication (r, _) when l <> r ->
        raise (Failure
                 (`Msg ("Cannot unify mutually-recursive type '" ^ l ^
                          "' with mutually-recursive type '"^ r ^"'")))
