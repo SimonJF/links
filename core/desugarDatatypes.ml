@@ -492,18 +492,36 @@ object (self)
     | p -> super#phrasenode p
 
   method! bindingnode = function
-    | `Type (t, args, dt) ->
-        let args, dt' = Desugar.typename alias_env t args dt in
-        let (name, vars) = (t, args) in
-        let (t, dt) =
-            (match dt' with
-                 | (t, Some dt) -> (t, dt)
-                 | _ -> assert false) in
-          (* NB: type aliases are scoped; we allow shadowing.
-             We also allow type aliases to shadow abstract types. *)
-          ({< alias_env = SEnv.bind alias_env (name, `Alias (List.map (snd ->- val_of) vars, dt)) >},
-           `Type (name, vars, (t, Some dt)))
+    | `Types ts ->
 
+        (* Add all type declarations in the group to the alias
+         * environment, as mutuals. *)
+        let mutual_env = List.fold_left (fun env (t, args, dt) ->
+          let qs = List.map (fst) args in
+          SEnv.bind env (name, `Mutual qs)
+        ) alias_env ts in
+
+        (* Desugar all DTs, given the temporary new alias environment. *)
+        let desugared_mutuals =
+          List.map (fun (t, args, dt) ->
+          let args, dt' = Desugar.typename mutual_env t args dt in
+          let (name, vars) = (t, args) in
+          let (t, dt) =
+              (match dt' with
+                   | (t, Some dt) -> (t, dt)
+                   | _ -> assert false) in
+            (name, vars, (t, Some dt))
+          ) ts in
+
+        (* Finally, construct a new alias environment given the desugared
+         * datatypes. *)
+        (* NB: type aliases are scoped; we allow shadowing.
+           We also allow type aliases to shadow abstract types. *)
+        let alias_env = List.fold_left (fun env (t, args, dt) ->
+          SEnv.bind env (name, `Alias (List.map (snd ->- val_of) vars, dt))
+        ) alias_env desugared_mutuals in
+
+        ({< alias_env = alias_env >}, `Types desugared_mutuals)
     | `Val (pat, (tyvars, p), loc, dt) ->
         let o, pat = self#pattern pat in
         let o, p   = o#phrase p in

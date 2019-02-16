@@ -198,7 +198,7 @@ let is_present =
 type tycon_spec = [
   | `Alias of quantifier list * typ
   | `Abstract of Abstype.t
-  | `Recursive of quantifier list (* Type in same recursive group *)
+  | `Mutual of quantifier list (* Type in same recursive group *)
 ] [@@deriving show]
 
 let unbox_quantifiers = (!)

@@ -177,7 +177,12 @@ val dual_type : datatype -> datatype
 
 val type_var_number : quantifier -> int
 
-type tycon_spec = [`Alias of quantifier list * datatype | `Abstract of Abstype.t]
+type tycon_spec = [
+  | `Alias of quantifier list * typ
+  | `Abstract of Abstype.t
+  | `Mutual of quantifier list (* Type in same recursive group *)
+]
+
 
 type environment        = datatype Env.String.t
  and tycon_environment  = tycon_spec Env.String.t
