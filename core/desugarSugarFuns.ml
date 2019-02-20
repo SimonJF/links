@@ -17,22 +17,22 @@ let is_recursive bnd fnlit =
 
 (* `Fun bindings must be lifted into `Funs if they are recursive. *)
 let lift_funs =
-object
+object ((self : 'self_type))
     inherit SugarTraversals.map as super
-    method! bindingnode = function
-      |  `Fun (bndr, lin, (tvs, fnlit), location, dt) ->
+    method! binding = function
+      |  {node=`Fun (bndr, lin, (tvs, fnlit), location, dt); pos} ->
           if is_recursive bndr fnlit then
             let fnlit = self#funlit fnlit in
-            `Fun (bnd, lin, (tvs, fnlit), location, dt)
+            {node=`Fun (bndr, lin, (tvs, fnlit), location, dt); pos}
           else
             let fnlit = self#funlit fnlit in
-            `Funs [(bndr, lin, ((tvs, None), fnlit), location, dt)]
-      | b -> super#bindingnode b
+            {node=`Funs [(bndr, lin, ((tvs, None), fnlit), location, dt, pos)]; pos}
+      | b -> super#binding b
 end
 
 (* Desugars SugarFuns blocks *)
 let desugar_sugarfuns =
-object
+object ((self : 'self_type))
   inherit SugarTraversals.map as super
   method! bindingnode = function
     (* Empty or singleton SugarFuns should not have been constructed. *)
