@@ -34,23 +34,23 @@ end
 let desugar_sugarfuns =
 object ((self : 'self_type))
   inherit SugarTraversals.map as super
-  method! bindingnode = function
+  method! binding = function
     (* Empty or singleton SugarFuns should not have been constructed. *)
-    | `SugarFuns [] -> assert false
-    | `SugarFuns [x] -> assert false
-    | `SugarFuns bs ->
+    | {node = `SugarFuns []; _} -> assert false
+    | {node = `SugarFuns [_]; _} -> assert false
+    | {node = `SugarFuns bs; pos } ->
         (* Recursively apply *)
-        let bs = self#list (fun o -> o#binding) in
+        let bs = self#list (fun o -> o#binding) bs in
         (* All contained bindings must be of the form `Fun x. Extract these,
          * and turn them into the right form for Funs blocks. *)
         let fs =
           List.map (function
-            | `Fun (bnd, lin, (tvs, fnlit), loc, dt) ->
-                (bnd, lin, ((tvs, None), fnlit), loc, dt)
+            | {node=`Fun (bnd, lin, (tvs, fnlit), loc, dt); pos} ->
+                (bnd, lin, ((tvs, None), fnlit), loc, dt, pos)
             (* Due to parser construction and the fact we've desugared handlers
              * into `Funs already, something must have gone seriously wrong if
              * the block contains anything but `Funs. *)
             | _ -> assert false) bs in
-        `Funs fs
-    | b -> super#bindingnode b
+        {node = (`Funs fs); pos}
+    | b -> super#binding b
 end

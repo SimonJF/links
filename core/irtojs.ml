@@ -45,7 +45,6 @@ type venv = string VEnv.t
 
 module VariableInspection = struct
   let inspect_code_variables code =
-    let open Pervasives in
     let vars = ref (StringSet.empty) in
     let add_var s = vars := (StringSet.add s (!vars)) in
 
@@ -89,7 +88,6 @@ module VariableInspection = struct
     get_vars ()
 
   let get_affected_variables code =
-    let open Pervasives in
     inspect_code_variables code
     |> List.map (fun v -> Var(v))
 end
@@ -1169,7 +1167,6 @@ end = functor (K : CONTINUATION) -> struct
        body,
        location)
   and generate_cancel_stub env (action: code -> code) (kappa: K.t)  =
-    let open Pervasives in
     (* Compile a thunk to be invoked if the operation fails *)
     let cancellation_thunk_name =
       gensym ~prefix:"cancellation_thunk" () in

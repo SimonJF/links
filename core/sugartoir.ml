@@ -1141,7 +1141,14 @@ struct
                     (* Ignore type alias and infix declarations - they
                        shouldn't be needed in the IR *)
                     eval_bindings scope env bs e
-                | `Handler _ | `QualifiedImport _ | `Fun _ | `Foreign _ | `AlienBlock _ | `Module _ -> assert false
+                    (* The remaining constructs will have been desugared. *)
+                | `SugarFuns _
+                | `Handler _
+                | `QualifiedImport _
+                | `Fun _
+                | `Foreign _
+                | `AlienBlock _
+                | `Module _ -> assert false
             end
 
   and evalv env e =

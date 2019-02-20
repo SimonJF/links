@@ -274,7 +274,13 @@ and phrase = phrasenode with_pos
 and bindingnode = [
 | `Val     of pattern * (tyvar list * phrase) * location * datatype' option
 | `Fun     of binder * declared_linearity * (tyvar list * funlit) * location * datatype' option
-| `Funs    of (binder * declared_linearity * ((tyvar list * (Types.datatype * Types.quantifier option list) option) * funlit) * location * datatype' option * position) list
+| `Funs    of
+  (binder
+   * declared_linearity
+   * ((tyvar list * (Types.datatype * Types.quantifier option list) option) * funlit)
+   * location
+   * datatype' option
+   * position) list
  (* Mutually-recursive function definitions may contain functions *or*
   * handlers. SugarFuns is an early-stage AST node which contains a list
   * of bindings, which can *only* be function or handler nodes.
