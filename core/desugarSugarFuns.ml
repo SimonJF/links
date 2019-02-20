@@ -23,10 +23,10 @@ object ((self : 'self_type))
       |  {node=`Fun (bndr, lin, (tvs, fnlit), location, dt); pos} ->
           if is_recursive bndr fnlit then
             let fnlit = self#funlit fnlit in
-            {node=`Fun (bndr, lin, (tvs, fnlit), location, dt); pos}
+            {node=`Funs [(bndr, lin, ((tvs, None), fnlit), location, dt, pos)]; pos}
           else
             let fnlit = self#funlit fnlit in
-            {node=`Funs [(bndr, lin, ((tvs, None), fnlit), location, dt, pos)]; pos}
+            {node=`Fun (bndr, lin, (tvs, fnlit), location, dt); pos}
       | b -> super#binding b
 end
 
