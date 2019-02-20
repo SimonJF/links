@@ -85,7 +85,6 @@ struct
        ->- DesugarLAttributes.desugar_lattributes#sentence
        ->- DesugarSugarFuns.desugar_sugarfuns#sentence
        ->- DesugarSugarFuns.lift_funs#sentence
-       (* ->- RefineBindings.refine_bindings#sentence *)
        ->- DesugarDatatypes.sentence tyenv
        ->- uncurry TypeSugar.Check.sentence
         (*  ->- after_typing ((FixTypeAbstractions.fix_type_abstractions tyenv)#sentence ->- snd)*)

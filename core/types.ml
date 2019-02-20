@@ -682,8 +682,10 @@ let rec is_unl_type : (var_set * var_set) -> typ -> bool =
           (* An application is linear if the type it refers to is
            * also linear. We don't have this information. What we will
            * need to do is a pass to check whether each application (recursive
-           * applications notwithstanding) is linear. For now, fail. *)
-          failwith "Linearity checking for mutually-recursive types not yet implemented."
+           * applications notwithstanding) is linear. For now, we are saying that all recursive
+           * applications can be linear. This is incorrect and unsound, and *must* be fixed
+           * before considering a merge. *)
+          true
       | `MetaTypeVar point -> is_unl_point is_unl_type (rec_vars, quant_vars) point
       | `ForAll (qs, t) -> is_unl_type (rec_vars, add_quantified_vars !qs quant_vars) t
       | `Dual s -> is_unl_type (rec_vars, quant_vars) s
@@ -734,8 +736,7 @@ let rec type_can_be_unl : var_set * var_set -> typ -> bool =
          but we'd need to replace hd and tl with a split operation. *)
     (* | `Application ({Abstype.id="List"}, [`Type t]) -> tcu t *)
     | `Application _ -> true (* TODO: change this if we add linear abstract types *)
-    | `RecursiveApplication _ ->
-        failwith "Linearity checking for recursive applications not yet implemented."
+    | `RecursiveApplication _ -> true (* FIXME: This *must* be fixed before merging. *)
     | `MetaTypeVar point -> point_can_be_unl type_can_be_unl vars point
     | `ForAll (qs, t) -> type_can_be_unl (rec_vars, add_quantified_vars !qs quant_vars) t
     | `Dual s -> type_can_be_unl vars s
