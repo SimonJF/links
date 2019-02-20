@@ -1374,16 +1374,15 @@ class fold =
           let o = o#list (fun o -> o#name) _xs in
           o
       | `Types (ts) ->
-          let o = List.fold_left (fun o (_x, _x_i1, _x_i2) ->
+          let o = o#list (fun o (_x, _x_i1, _x_i2) ->
             let o = o#name _x in
             let o =
               o#list
                 (fun o (_x, _x_i1) ->
                    let o = o (* #quantifier _x*) in
                    let o = o#unknown _x_i1
-                   in o)
-                _x_i1
-            in let o = o#datatype' _x_i2 in o) o ts in
+                   in o) _x_i1
+            in let o = o#datatype' _x_i2 in o) ts in
           o
       | `Infix -> o
       | `Exp _x -> let o = o#phrase _x in o
@@ -2174,7 +2173,7 @@ class fold_map =
           let (o, _xs) = o#list (fun o n -> o#name n) _xs in
           (o, `QualifiedImport _xs)
       | `Types (ts) ->
-          let (o, ts_rev) = List.fold_left (fun (o, xs_rev) (_x, _x_i1, _x_i2) ->
+          let (o, ts) = o#list (fun o (_x, _x_i1, _x_i2) ->
             let (o, _x) = o#name _x in
             let (o, _x_i1) =
               o#list
@@ -2183,8 +2182,8 @@ class fold_map =
                    in (o, (_x, _x_i1)))
                 _x_i1 in
             let (o, _x_i2) = o#datatype' _x_i2
-            in (o, (_x, _x_i1, _x_i2) :: xs_rev)) o ts
-          in (o, `Types (List.rev ts_rev))
+            in (o, (_x, _x_i1, _x_i2))) ts
+          in (o, `Types ts)
       | `Infix -> (o, `Infix)
       | `Exp _x -> let (o, _x) = o#phrase _x in (o, (`Exp _x))
       | `Module (n, bs) ->

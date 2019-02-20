@@ -94,12 +94,14 @@ let rec eq_types : (datatype * datatype) -> bool =
          end
       | `Application (s, ts) ->
           begin match unalias t2 with
-              `Application (s', ts') -> s = s' && List.for_all2 (Utility.curry eq_type_args) ts ts'
+              `Application (s', ts') ->
+                s = s' && List.for_all2 (Utility.curry eq_type_args) ts ts'
             | _ -> false
           end
       | `RecursiveApplication (s, ts) ->
           begin match unalias t2 with
-              `Application (s', ts') -> s = s' && List.for_all2 (Utility.curry eq_type_args) ts ts'
+              `RecursiveApplication (s', ts') ->
+                s = s' && List.for_all2 (Utility.curry eq_type_args) ts ts'
             | _ -> false
           end
       | `ForAll (qs, t) ->

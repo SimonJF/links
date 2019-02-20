@@ -1136,7 +1136,7 @@ struct
                     let x  = Sugartypes.name_of_binder bndr in
                     let xt = Sugartypes.type_of_binder_exn bndr in
                     I.alien ((xt, x, scope), raw_name, language, fun v -> eval_bindings scope (extend [x] [(v, xt)] env) bs e)
-                | `Type _
+                | `Types _
                 | `Infix ->
                     (* Ignore type alias and infix declarations - they
                        shouldn't be needed in the IR *)

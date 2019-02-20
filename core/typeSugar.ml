@@ -112,7 +112,7 @@ struct
     | `Fun _
     | `Funs _
     | `Infix
-    | `Type _
+    | `Types _
     | `Handler _
     | `Foreign _ -> true
     | `Exp p -> is_pure p
@@ -1661,6 +1661,8 @@ let close_pattern_type : pattern list -> Types.datatype -> Types.datatype = fun 
       | `Lens _
       (* TODO: do we need to do something special for session types? *)
       | #Types.session_type
+      (* TODO: or anything special for recursive applications? *)
+      | `RecursiveApplication _
        (* TODO: expand applications? *)
       | `Application _ -> t
   in
