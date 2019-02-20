@@ -113,6 +113,31 @@ exception UnexpectedOperationEffects of string
 
 module Desugar =
 struct
+  (* Desugars quantifiers into Types.quantifiers,
+   * returning updated variable environment.
+   * Lifted / deduplicated from `typename` and `Forall` desugaring. *)
+  let desugar_quantifiers (var_env: var_env) (qs: Sugartypes.quantifier list) :
+      (Types.quantifier list * var_env) =
+      ListLabels.fold_right ~init:([], var_env) qs
+      ~f:(fun q (args, {tenv=tenv; renv=renv; penv=penv}) ->
+            let var = Types.fresh_raw_variable () in
+            match q with
+              | (name, (`Type, subkind), _freedom) ->
+                  let subkind = concrete_subkind subkind in
+                  let point = Unionfind.fresh (`Var (var, subkind, `Rigid)) in
+                    ((var, subkind, `Type point)::args,
+                     {tenv=StringMap.add name point tenv; renv=renv; penv=penv})
+              | (name, (`Row, subkind), _freedom) ->
+                  let subkind = concrete_subkind subkind in
+                  let point = Unionfind.fresh (`Var (var, subkind, `Rigid)) in
+                    ((var, subkind, `Row point)::args,
+                     {tenv=tenv; renv=StringMap.add name point renv; penv=penv})
+              | (name, (`Presence, subkind), _freedom) ->
+                  let subkind = concrete_subkind subkind in
+                  let point = Unionfind.fresh (`Var (var, subkind, `Rigid)) in
+                    ((var, subkind, `Presence point))::args,
+                     {tenv=tenv; renv=renv; penv=StringMap.add name point penv})
+
   let rec datatype var_env (alias_env : Types.tycon_environment) t' =
     let datatype var_env t' = datatype var_env alias_env t' in
     match t' with
@@ -138,34 +163,7 @@ struct
             let _ = Unionfind.change point (`Recursive (var, datatype {var_env with tenv=tenv} t)) in
               `MetaTypeVar point
         | `Forall (qs, t) ->
-            let desugar_quantifier (var_env, qs) =
-              fun (name, kind, _freedom) ->
-                match kind with
-                | `Type, subkind ->
-                    let subkind = concrete_subkind subkind in
-                    let var = Types.fresh_raw_variable () in
-                    let point = Unionfind.fresh (`Var (var, subkind, `Rigid)) in
-                    let q = (var, subkind, `Type point) in
-                    let var_env = {var_env with tenv=StringMap.add name point var_env.tenv} in
-                      var_env, q::qs
-                | `Row, subkind ->
-                    let subkind = concrete_subkind subkind in
-                    let var = Types.fresh_raw_variable () in
-                    let point = Unionfind.fresh (`Var (var, subkind, `Rigid)) in
-                    let q = (var, subkind, `Row point) in
-                    let var_env = {var_env with renv=StringMap.add name point var_env.renv} in
-                      var_env, q::qs
-                | `Presence, subkind ->
-                    let subkind = concrete_subkind subkind in
-                    let var = Types.fresh_raw_variable () in
-                    let point = Unionfind.fresh (`Var (var, subkind, `Rigid)) in
-                    let q = (var, subkind, `Presence point) in
-                    let var_env = {var_env with penv=StringMap.add name point var_env.penv} in
-                      var_env, q::qs in
-
-            let var_env, qs =
-              List.fold_left desugar_quantifier (var_env, []) qs in
-            let qs = List.rev qs in
+            let (qs: Types.quantifier list), var_env = desugar_quantifiers var_env qs in
             let t = datatype var_env t in
               `ForAll (Types.box_quantifiers qs, t)
         | `Unit -> Types.unit_type
@@ -378,31 +376,16 @@ struct
 
   (* Desugar a typename declaration.  Free variables are not allowed
      here (except for the parameters, of course). *)
-  let typename alias_env name args (rhs : Sugartypes.datatype') =
+  let typename alias_env name sugar_qs (rhs : Sugartypes.datatype') :
+      ((Sugartypes.quantifier * Types.quantifier option) list * Sugartypes.datatype') =
       try
         let empty_envs =
           {tenv=StringMap.empty; renv=StringMap.empty; penv=StringMap.empty} in
-        let args, envs =
-          ListLabels.fold_right ~init:([], empty_envs) args
-            ~f:(fun (q, _) (args, {tenv=tenv; renv=renv; penv=penv}) ->
-                  let var = Types.fresh_raw_variable () in
-                    match q with
-                      | (name, (`Type, subkind), _freedom) ->
-                          let subkind = concrete_subkind subkind in
-                          let point = Unionfind.fresh (`Var (var, subkind, `Rigid)) in
-                            ((q, Some (var, subkind, `Type point))::args,
-                             {tenv=StringMap.add name point tenv; renv=renv; penv=penv})
-                      | (name, (`Row, subkind), _freedom) ->
-                          let subkind = concrete_subkind subkind in
-                          let point = Unionfind.fresh (`Var (var, subkind, `Rigid)) in
-                            ((q, Some (var, subkind, `Row point))::args,
-                             {tenv=tenv; renv=StringMap.add name point renv; penv=penv})
-                      | (name, (`Presence, subkind), _freedom) ->
-                          let subkind = concrete_subkind subkind in
-                          let point = Unionfind.fresh (`Var (var, subkind, `Rigid)) in
-                            ((q, Some (var, subkind, `Presence point))::args,
-                             {tenv=tenv; renv=renv; penv=StringMap.add name point penv})) in
-          (args, datatype' envs alias_env rhs)
+        let qs, envs = desugar_quantifiers empty_envs sugar_qs in
+        let qs =
+          ListUtils.zip' sugar_qs qs
+           |> List.map (fun (sq, q) -> (sq, Some(q))) in
+        (qs, datatype' envs alias_env rhs)
       with
         | UnexpectedFreeVar x ->
             failwith ("Free variable ("^ x ^") in definition of typename "^ name)
@@ -493,18 +476,20 @@ object (self)
   method! bindingnode = function
     | `Types ts ->
         (* Add all type declarations in the group to the alias
-         * environment, as mutuals. *)
-        let mutual_env = List.fold_left (fun env (t, args, dt) ->
+         * environment, as mutuals. Quantifiers need to be desugared. *)
+        let mutual_env = List.fold_left (fun env (t, args, _) ->
           let qs = List.map (fst) args in
+          let qs, _ =  Desugar.desugar_quantifiers empty_env qs in
           SEnv.bind env (t, `Mutual qs)
         ) alias_env ts in
 
         (* Desugar all DTs, given the temporary new alias environment. *)
         let desugared_mutuals =
           List.map (fun (t, args, dt) ->
-          let args, dt' = Desugar.typename mutual_env t args dt in
-          let (name, vars) = (t, args) in
-          let (t, dt) =
+            let sugar_qs = List.map (fst) args in
+            let args, dt' = Desugar.typename mutual_env t sugar_qs dt in
+            let (name, vars) = (t, args) in
+            let (t, dt) =
               (match dt' with
                    | (t, Some dt) -> (t, dt)
                    | _ -> assert false) in
@@ -515,8 +500,9 @@ object (self)
          * datatypes. *)
         (* NB: type aliases are scoped; we allow shadowing.
            We also allow type aliases to shadow abstract types. *)
-        let alias_env = List.fold_left (fun env (t, args, dt) ->
-          SEnv.bind env (name, `Alias (List.map (snd ->- val_of) vars, dt))
+        let alias_env = List.fold_left (fun env (t, args, (_, dt')) ->
+          let dt = OptionUtils.val_of dt' in
+          SEnv.bind env (t, `Alias (List.map (snd ->- val_of) args, dt))
         ) alias_env desugared_mutuals in
 
         ({< alias_env = alias_env >}, `Types desugared_mutuals)
