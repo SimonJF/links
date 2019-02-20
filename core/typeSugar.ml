@@ -111,6 +111,7 @@ struct
     | `Module _
     | `Fun _
     | `Funs _
+    | `SugarFuns _
     | `Infix
     | `Types _
     | `Handler _
@@ -3848,15 +3849,23 @@ and type_binding : context -> binding -> binding * context * usagemap =
            (bind_var empty_context (name_of_binder bndr, datatype)),
            StringMap.empty)
       | `Foreign _ -> assert false
-      | `Type (name, vars, (_, Some dt)) as t ->
-          t, bind_tycon empty_context (name, `Alias (List.map (snd ->- val_of) vars, dt)), StringMap.empty
-      | `Type _ -> assert false
+      | `Types ts ->
+          let env = List.fold_left (fun env (name, vars, (_, dt')) ->
+            begin
+              match dt' with
+                | Some dt ->
+                    bind_tycon env (name, `Alias (List.map (snd ->- val_of) vars, dt))
+                | None -> failwith "typeSugar.ml: unannotated type"
+            end
+          ) empty_context ts in
+          (`Types ts, env, StringMap.empty)
       | `Infix -> `Infix, empty_context, StringMap.empty
       | `Exp e ->
           let e = tc e in
           let () = unify pos ~handle:Gripers.bind_exp
             (pos_and_typ e, no_pos Types.unit_type) in
           `Exp (erase e), empty_context, usages e
+      | `SugarFuns _
       | `Handler _
       | `QualifiedImport _
       | `AlienBlock _
