@@ -135,6 +135,7 @@ and meta_var = [ `Type of meta_type_var | `Row of meta_row_var | `Presence of me
 and quantifier = int * subkind * meta_var
 and type_arg =
     [ `Type of typ | `Row of row | `Presence of field_spec ]
+    [@@deriving show]
 
 type session_type = (typ, row) session_type_basis
 
