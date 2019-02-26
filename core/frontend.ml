@@ -60,7 +60,7 @@ struct
        ->- DesugarSugarFuns.desugar_sugarfuns#program
        ->- DesugarSugarFuns.lift_funs#program
        ->- DesugarDatatypes.program tyenv.Types.tycon_env
-       ->- TypeSugar.Check.program tyenv
+       ->- uncurry TypeSugar.Check.program
         (*->- after_typing ((FixTypeAbstractions.fix_type_abstractions tyenv)#program ->- snd3)*)
        ->- after_typing ((DesugarCP.desugar_cp tyenv)#program ->- snd3)
        ->- after_typing ((DesugarInners.desugar_inners tyenv)#program ->- snd3)

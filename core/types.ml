@@ -195,11 +195,29 @@ let is_present =
   | `Present _           -> true
   | (`Absent | `Var _) -> false
 
+type alias_type = quantifier list * typ
+
 type tycon_spec = [
-  | `Alias of quantifier list * typ
+  | `Alias of alias_type
   | `Abstract of Abstype.t
   | `Mutual of quantifier list (* Type in same recursive group *)
 ] [@@deriving show]
+
+(* To allow shadowing, each group of recursive types has a unique
+ * identifier.
+ * Since type aliases cannot be abstract, and `Mutual bindings are
+ * only used when desugaring recursive groups, it makes sense that
+ * we need only store the alias types.
+ * Within each group, we have a map from type alias names to alias
+ * types, which can be used during unification. *)
+type recty_environment = alias_type StringMap.t
+type tygroup_environment = recty_environment IntMap.t
+
+(* Generation of fresh tygroup names *)
+let tygroup_counter = ref 0
+let fresh_tygroup_name : unit -> int =
+  function () ->
+    incr tygroup_counter; !tygroup_counter
 
 let unbox_quantifiers = (!)
 let box_quantifiers = ref
@@ -2451,10 +2469,10 @@ let string_of_quantifier ?(policy=Print.default_policy) ?(refresh_tyvar_names=tr
 
 type environment       = datatype Env.t
 and tycon_environment  = tycon_spec Env.t
-and typing_environment = { var_env    : environment
-                         ; tycon_env  : tycon_environment
-                         ; effect_row : row }
-     [@@deriving show]
+and typing_environment = { var_env   : environment ;
+                           tycon_env : tycon_environment ;
+                           effect_row : row;
+                           tygroup_env : tygroup_environment }
 
 let empty_typing_environment = { var_env = Env.empty; tycon_env =  Env.empty; effect_row = make_empty_closed_row ()  }
 

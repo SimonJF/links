@@ -573,6 +573,11 @@ let rec unify' : unify_env -> (datatype * datatype) -> unit =
        end
     | `Alias (_, t1), t2
       | t1, `Alias (_, t2) -> ut (t1, t2)
+    | `RecursiveApplication (n, _), t
+      | t, RecursiveApplication (n, _) ->
+          (* TODO: Need cycle checking here. *)
+          (* TODO: This is where we'll need the various recursive environments. *)
+
     | `Function (lfrom, lm, lto), `Function (rfrom, rm, rto) ->
        (ut (lfrom, rfrom);
         ur (lm, rm);
