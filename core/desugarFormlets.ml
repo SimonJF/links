@@ -43,6 +43,7 @@ object (o : 'self_type)
             let t = Types.fresh_type_variable (`Any, `Any) in
             let () =
               Unify.datatypes
+                tygroup_env
                 (ft, Instantiate.alias "Formlet" [`Type t] tycon_env) in
             let name = Utility.gensym ~prefix:"_formlet_" () in
             let (xb, x) = (binder name ~ty:t, var name) in

@@ -9,7 +9,7 @@
   particular that there are no free variables.
 *)
 let program =
-  fun ({Types.var_env=env; Types.tycon_env=_; effect_row=_} as tyenv) code ->
+  fun ({Types.var_env=env; Types.tycon_env=_; _} as tyenv) code ->
     let dumper = object (o)
       inherit SugarTraversals.fold as super
 

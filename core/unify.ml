@@ -98,10 +98,12 @@ let rec eq_types : (datatype * datatype) -> bool =
                 s = s' && List.for_all2 (Utility.curry eq_type_args) ts ts'
             | _ -> false
           end
-      | `RecursiveApplication (s, ts) ->
+      | `RecursiveApplication (id, s, ts) ->
           begin match unalias t2 with
-              `RecursiveApplication (s', ts') ->
-                s = s' && List.for_all2 (Utility.curry eq_type_args) ts ts'
+              `RecursiveApplication (id', s', ts') ->
+                id = id' &&
+                s = s' &&
+                List.for_all2 (Utility.curry eq_type_args) ts ts'
             | _ -> false
           end
       | `ForAll (qs, t) ->
@@ -173,6 +175,18 @@ and eq_type_args =
 type unify_type_env = (datatype list) IntMap.t
 type unify_row_env = (row list) IntMap.t
 
+(* When expanding (mutually)-recursive defined as self- or mutual-references,
+ * as opposed to structurally (i.e., with explicit "mu" binders references),
+ * we need to ensure that there are no cycles. We do this in a similar way to
+ * `unify_type_env`, but need to record both the group ID and the name.
+ * Alas, this means some gymnastics to define IntStringPair maps. *)
+module IntStringPair = struct
+  type t = int * string [@@deriving show]
+  let compare = Pervasives.compare
+end
+module IntStringMap = Map.Make(IntStringPair)
+type unify_recty_env = (datatype list) IntStringMap.t
+
 type quantifier_stack = int * int IntMap.t * int IntMap.t
 
 let compatible_quantifiers (lvar, rvar) (_, lenv, renv) =
@@ -180,13 +194,25 @@ let compatible_quantifiers (lvar, rvar) (_, lenv, renv) =
     | Some ldepth, Some rdepth when ldepth=rdepth -> true
     | _ -> false
 
-type unify_env = {tenv: unify_type_env; renv: unify_row_env; qstack: quantifier_stack}
+type unify_env =
+  {tenv: unify_type_env;
+   renv: unify_row_env;
+   qstack: quantifier_stack;
+   tygroup_env: Types.tygroup_environment;
+   recty_env: unify_recty_env
+  }
 
 let rec unify' : unify_env -> (datatype * datatype) -> unit =
   let counter = ref 0 in
   fun rec_env ->
   let rec_types = rec_env.tenv in
   let qstack = rec_env.qstack in
+
+  (* Lookup a datatype given a type group ID and type name *)
+  (* This will have been populated in desugarDatatypes. *)
+  let resolve_recty tygroup_id name =
+    let tygroup_map = IntMap.find tygroup_id rec_env.tygroup_env in
+    StringMap.find name tygroup_map in
 
   let is_unguarded_recursive t =
     let rec is_unguarded rec_types t =
@@ -234,7 +260,29 @@ let rec unify' : unify_env -> (datatype * datatype) -> unit =
         || List.exists (fun t -> eq_types (t, lbody)) rts) then
       ()
     else
-      unify' {rec_env with tenv=(IntMap.add lvar (rbody::lts) ->- IntMap.add rvar (lbody::rts)) rec_types} (lbody, rbody) in
+      unify' {rec_env with
+        tenv=(IntMap.add lvar (rbody::lts)
+              ->- IntMap.add rvar (lbody::rts)) rec_types} (lbody, rbody) in
+
+
+  (* Unification of recursive applications in the same recursive group.
+   * Similar to above, but uses a different environment. *)
+  let unify_recty (tygroup_id, tyname) t =
+    let recty_env = rec_env.recty_env in
+    let (_qs, body) = resolve_recty tygroup_id tyname in
+    let ts =
+      if IntStringMap.mem (tygroup_id, tyname) recty_env then
+        IntStringMap.find (tygroup_id, tyname) recty_env
+      else
+        [body]
+    in
+    (* break cycles *)
+    if List.exists (fun t' -> eq_types (t, t')) ts then
+      ()
+    else
+      let new_recty_env =
+        IntStringMap.add (tygroup_id, tyname) (t :: ts) recty_env in
+      unify' {rec_env with recty_env = new_recty_env} (body, t) in
 
   (* introduce a recursive type
      give an error if it is non-well-founded and
@@ -573,11 +621,6 @@ let rec unify' : unify_env -> (datatype * datatype) -> unit =
        end
     | `Alias (_, t1), t2
       | t1, `Alias (_, t2) -> ut (t1, t2)
-    | `RecursiveApplication (n, _), t
-      | t, RecursiveApplication (n, _) ->
-          (* TODO: Need cycle checking here. *)
-          (* TODO: This is where we'll need the various recursive environments. *)
-
     | `Function (lfrom, lm, lto), `Function (rfrom, rm, rto) ->
        (ut (lfrom, rfrom);
         ur (lm, rm);
@@ -599,12 +642,17 @@ let rec unify' : unify_env -> (datatype * datatype) -> unit =
                          "' with abstract type '"^string_of_datatype t2^"'")))
     | `Application (_, ls), `Application (_, rs) ->
        List.iter2 (fun lt rt -> unify_type_args' rec_env (lt, rt)) ls rs
-    | `RecursiveApplication (l, _), `RecursiveApplication (r, _) when l <> r ->
+    | `RecursiveApplication (id1, l, _), `RecursiveApplication (id2, r, _) when
+        (id1 == id2) && (l <> r) ->
        raise (Failure
                 (`Msg ("Cannot unify mutually-recursive type '" ^ l ^
                          "' with mutually-recursive type '"^ r ^"'")))
-    | `RecursiveApplication (_, ls), `RecursiveApplication (_, rs) ->
+    | `RecursiveApplication (id1, _, ls), `RecursiveApplication (id2, _, rs) when (id1 == id2) ->
        List.iter2 (fun lt rt -> unify_type_args' rec_env (lt, rt)) ls rs
+    | `RecursiveApplication (tygroup_id, name, _), t2 ->
+       unify_recty (tygroup_id, name) t2
+    |  t1, `RecursiveApplication (tygroup_id, name, _) ->
+       unify_recty (tygroup_id, name) t1
     | `ForAll (lsref, lbody), `ForAll (rsref, rbody) ->
        (* Check that all quantifiers that were originally rigid
                  are still distinct *)
@@ -1277,11 +1325,22 @@ and unify_type_args' : unify_env -> (type_arg * type_arg) -> unit =
   | l, r ->
      raise (Failure (`Msg ("Couldn't match "^ string_of_type_arg l ^" against "^ string_of_type_arg r)))
 
-let unify (t1, t2) =
-  unify' {tenv=IntMap.empty; renv=IntMap.empty; qstack=(0, IntMap.empty, IntMap.empty)} (t1, t2)
+let unify tygroup_env (t1, t2) =
+  unify'
+    {tenv=IntMap.empty;
+     renv=IntMap.empty;
+     qstack=(0, IntMap.empty, IntMap.empty);
+     tygroup_env;
+     recty_env=IntStringMap.empty } (t1, t2)
+
 (* Debug.if_set (show_unification) (fun () -> "Unified types: " ^ string_of_datatype t1) *)
 and unify_rows (row1, row2) =
-  unify_rows' {tenv=IntMap.empty; renv=IntMap.empty; qstack=(0, IntMap.empty, IntMap.empty)} (row1, row2)
+  unify_rows'
+    {tenv=IntMap.empty;
+     renv=IntMap.empty;
+     qstack=(0, IntMap.empty, IntMap.empty);
+     tygroup_env=IntMap.empty;
+     recty_env=IntStringMap.empty} (row1, row2)
 
 (* external interface *)
 let datatypes = unify

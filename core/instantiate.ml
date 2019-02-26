@@ -68,8 +68,8 @@ let instantiate_datatype : instantiation_maps -> datatype -> datatype =
               `Alias ((name, List.map (inst_type_arg rec_env) ts), inst rec_env d)
           | `Application (n, elem_type) ->
               `Application (n, List.map (inst_type_arg rec_env) elem_type)
-          | `RecursiveApplication (n, elem_type) ->
-              `RecursiveApplication (n, List.map (inst_type_arg rec_env) elem_type)
+          | `RecursiveApplication (id, n, elem_type) ->
+              `RecursiveApplication (id, n, List.map (inst_type_arg rec_env) elem_type)
           | `Input (t, s) -> `Input (inst rec_env t, inst rec_env s)
           | `Output (t, s) -> `Output (inst rec_env t, inst rec_env s)
           | `Select fields -> `Select (inst_row rec_env fields)

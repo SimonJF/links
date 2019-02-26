@@ -5,5 +5,7 @@ type error = [
 
 exception Failure of error
 
-val datatypes : Types.datatype * Types.datatype -> unit
+val datatypes :
+  Types.tygroup_environment ->
+  Types.datatype * Types.datatype -> unit
 val rows : Types.row * Types.row -> unit

@@ -84,7 +84,7 @@ let rec get_type_args : gen_kind -> TypeVarSet.t -> datatype -> type_arg list =
               get_type_args kind (List.fold_right (Types.type_var_number ->- TypeVarSet.add) qs bound_vars) t
         | `Application (_, args) ->
             Utility.concat_map (get_type_arg_type_args kind bound_vars) args
-        | `RecursiveApplication (_, args) ->
+        | `RecursiveApplication (_, _, args) ->
             Utility.concat_map (get_type_arg_type_args kind bound_vars) args
         | `Input (t, s)
         | `Output (t, s) -> gt t @ gt s

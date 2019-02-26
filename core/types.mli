@@ -100,6 +100,11 @@ type lens_phrase =
 
 (* End Lenses *)
 
+(* Type groups *)
+type tygroup_id = int [@@deriving show]
+
+(* Types *)
+
 type typ =
     [ `Not_typed
     | `Primitive of primitive
@@ -112,7 +117,7 @@ type typ =
     | `Lens of lens_sort
     | `Alias of ((string * type_arg list) * typ)
     | `Application of (Abstype.t * type_arg list)
-    | `RecursiveApplication of (string * type_arg list)
+    | `RecursiveApplication of (tygroup_id * string * type_arg list)
     | `MetaTypeVar of meta_type_var
     | `ForAll of (quantifier list ref * typ)
     | (typ, row) session_type_basis ]
@@ -178,15 +183,19 @@ val dual_row : row -> row
 val dual_type : datatype -> datatype
 
 val type_var_number : quantifier -> int
-type alias_type = quantifier list * typ
+type alias_type = quantifier list * typ [@@deriving show]
 
 type tycon_spec = [
   | `Alias of alias_type
   | `Abstract of Abstype.t
-  | `Mutual of quantifier list (* Type in same recursive group *)
+  | `Mutual of (tygroup_id * quantifier list) (* Type in same recursive group *)
 ]
-type tygroup_counter = int ref
-val fresh_tygroup_name : unit -> int
+
+val tygroup_counter : tygroup_id ref
+val fresh_tygroup_name : unit -> tygroup_id
+
+type recty_environment = alias_type Utility.StringMap.t
+type tygroup_environment = recty_environment Utility.IntMap.t
 
 type environment        = datatype Env.String.t
  and tycon_environment  = tycon_spec Env.String.t
@@ -358,9 +367,6 @@ val is_sub_type : datatype * datatype -> bool
 val is_sub_row : row * row -> bool
 
 (** environments *)
-type recty_environment = alias_type StringMap.t
-type tygroup_environment = recty_environment IntMap.t
-
 type inference_type_map =
     ((datatype Unionfind.point) Utility.IntMap.t ref *
        (row Unionfind.point) Utility.IntMap.t ref)

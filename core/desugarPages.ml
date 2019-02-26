@@ -22,11 +22,11 @@ let rec is_raw phrase =
      - the effecs are the same throughout the page literal
      - the environment is unchanged after calling o#phrase formlet
 *)
-let rec desugar_page (o, page_type) =
+let rec desugar_page groups (o, page_type) =
   let desugar_nodes : phrase list -> phrase =
     fun children ->
      fn_appl "joinManyP" [`Row (o#lookup_effects)]
-       [list ~ty:page_type (List.map (desugar_page (o, page_type)) children)]
+       [list ~ty:page_type (List.map (desugar_page groups (o, page_type)) children)]
   in
     fun ({node=e; pos} as phrase) ->
       match e with
@@ -39,9 +39,10 @@ let rec desugar_page (o, page_type) =
             let a = Types.fresh_type_variable (`Any, `Any) in
             let b = Types.fresh_type_variable (`Any, `Any) in
             let _template = `Alias (("Formlet", [`Type a]), b) in
-              Unify.datatypes (`Alias (("Formlet", [`Type a]), b), formlet_type);
-              fn_appl "formP" [`Type a; `Row (o#lookup_effects)]
-                      [formlet; handler; attributes]
+              Unify.datatypes groups
+                (`Alias (("Formlet", [`Type a]), b), formlet_type);
+                fn_appl "formP" [`Type a; `Row (o#lookup_effects)]
+                        [formlet; handler; attributes]
         | `PagePlacement (page) -> page
         | `Xml ("#", [], _, children) ->
             desugar_nodes children
@@ -63,7 +64,7 @@ object
     | `Page e ->
         let (o, e, _t) = super#phrase e in
         let page_type = Instantiate.alias "Page" [] env.Types.tycon_env in
-        let e = desugar_page (o, page_type) e in
+        let e = desugar_page env.Types.tygroup_env (o, page_type) e in
           (o, e.node, page_type)
     | e -> super#phrasenode e
 end

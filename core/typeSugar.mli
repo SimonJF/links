@@ -3,10 +3,10 @@ module Check :
     open Sugartypes
 
     val program : Types.typing_environment
-               -> (program * Types.tygroup_environment)
+               -> program
                -> program * Types.datatype * Types.typing_environment
 
     val sentence : Types.typing_environment
-                -> (sentence * Types.tygroup_environment)
+                -> sentence
                 -> sentence * Types.datatype * Types.typing_environment
   end
