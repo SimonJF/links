@@ -374,22 +374,6 @@ struct
   let datatype' map alias_env (dt, _ : datatype') =
     (dt, Some (datatype map alias_env dt))
 
-  (* Desugar a typename declaration.  Free variables are not allowed
-     here (except for the parameters, of course). *)
-  let typename alias_env name sugar_qs (rhs : Sugartypes.datatype') :
-      ((Sugartypes.quantifier * Types.quantifier option) list * Sugartypes.datatype') =
-      try
-        let empty_envs =
-          {tenv=StringMap.empty; renv=StringMap.empty; penv=StringMap.empty} in
-        let qs, envs = desugar_quantifiers empty_envs sugar_qs in
-        let qs =
-          ListUtils.zip' sugar_qs qs
-           |> List.map (fun (sq, q) -> (sq, Some(q))) in
-        (qs, datatype' envs alias_env rhs)
-      with
-        | UnexpectedFreeVar x ->
-            failwith ("Free variable ("^ x ^") in definition of typename "^ name)
-
   (* Desugar a foreign function declaration.  Foreign declarations
      cannot use type variables from the context.  Any type variables
      found are implicitly universally quantified at this point. *)
@@ -474,6 +458,27 @@ object (self)
        this point, so we ignore them.  *)
     | p -> super#phrasenode p
 
+(*
+ 
+  (* Desugar a typename declaration.  Free variables are not allowed
+     here (except for the parameters, of course). *)
+  let typename alias_env name (qs: Types.quantifier) (rhs : Sugartypes.datatype') :
+      ((Sugartypes.quantifier * Types.quantifier option) list * Sugartypes.datatype') =
+      try
+        let empty_envs =
+          {tenv=StringMap.empty; renv=StringMap.empty; penv=StringMap.empty} in
+        let qs, envs = desugar_quantifiers empty_envs sugar_qs in
+        let qs =
+          ListUtils.zip' sugar_qs qs
+           |> List.map (fun (sq, q) -> (sq, Some(q))) in
+        (qs, datatype' envs alias_env rhs)
+      with
+        | UnexpectedFreeVar x ->
+            failwith ("Free variable ("^ x ^") in definition of typename "^ name)
+*
+ *)
+
+
   method! bindingnode = function
     | `Types ts ->
         (* Get ourselves a new tygroup ID *)
@@ -481,23 +486,39 @@ object (self)
 
         (* Add all type declarations in the group to the alias
          * environment, as mutuals. Quantifiers need to be desugared. *)
-        let mutual_env = List.fold_left (fun env (t, args, _) ->
-          let qs = List.map (fst) args in
-          let qs, _ =  Desugar.desugar_quantifiers empty_env qs in
-          SEnv.bind env (t, `Mutual (tygroup_id, qs))
-        ) alias_env ts in
+        let (mutual_env, var_env) =
+          List.fold_left (fun (alias_env, var_env) (t, args, _) ->
+            let qs = List.map (fst) args in
+            let qs, var_env =  Desugar.desugar_quantifiers var_env qs in
+            (SEnv.bind alias_env (t, `Mutual (tygroup_id, qs)), var_env) )
+            (alias_env, empty_env) ts in
 
         (* Desugar all DTs, given the temporary new alias environment. *)
         let desugared_mutuals =
-          List.map (fun (t, args, dt) ->
+          List.map (fun (name, args, dt) ->
             let sugar_qs = List.map (fst) args in
-            let args, dt' = Desugar.typename mutual_env t sugar_qs dt in
-            let (name, vars) = (t, args) in
+
+            (* Semantic quantifiers have already been constructed,
+             * so retrieve them *)
+            let sem_qs =
+                begin
+                  match SEnv.find mutual_env name with
+                    | Some (`Mutual (_, qs)) -> qs
+                    | _ -> assert false
+                end in
+
+            let args =
+              ListUtils.zip' sugar_qs sem_qs
+                |> List.map (fun (sq, q) -> (sq, Some(q))) in
+
+            (* Desugar the datatype *)
+            let dt' = Desugar.datatype' var_env alias_env dt in
+            (* Check if the datatype has actually been desugared *)
             let (t, dt) =
               (match dt' with
                    | (t, Some dt) -> (t, dt)
                    | _ -> assert false) in
-            (name, vars, (t, Some dt))
+            (name, args, (t, Some dt))
           ) ts in
 
         (* Finally, construct a new alias environment, and a map from names
