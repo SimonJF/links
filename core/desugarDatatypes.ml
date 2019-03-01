@@ -512,7 +512,7 @@ object (self)
                 |> List.map (fun (sq, q) -> (sq, Some(q))) in
 
             (* Desugar the datatype *)
-            let dt' = Desugar.datatype' var_env alias_env dt in
+            let dt' = Desugar.datatype' var_env mutual_env dt in
             (* Check if the datatype has actually been desugared *)
             let (t, dt) =
               (match dt' with
