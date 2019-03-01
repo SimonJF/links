@@ -257,36 +257,6 @@ let rec unify' : unify_env -> (datatype * datatype) -> unit =
 
   (* Unification of recursive applications in the same recursive group.
    * Similar to above, but uses a different environment. *)
-  (* ISSUE:
-    * In code:
-      * typename List(a) = [| Nil | Cons:(a, List(a)) |];
-        sig f2 : () -> List(String)
-        fun f2() {
-          Cons("Hello", Cons("You", Cons("Dears", Nil)))
-        }
-
-      the following arises:
-
-      Unifying List(20) (String) with [|Cons:(String, [|Cons:(String, [|Nil|9023::Any|])|9024::Any|])|9025::Any|](7)
-      Unifying [|Cons:(8925, List(20) (8925))|Nil|] with [|Cons:(String, [|Cons:(String, [|Nil|9023::Any|])|9024::Any|])|9025::Any|](8)
-      Unifying (8925, List(20) (8925)) with (String, [|Cons:(String, [|Nil|9023::Any|])|9024::Any|])(9)
-      Unifying 8925 with String(10)
-      Unification error: Couldn't unify the rigid type variable 8925 with the type String
-      list.links:24: Type error: The non-recursive function definition has return type
-          `[|Cons:(String, [|Cons:(String, [|Cons:(String, [|Nil|9023::Any|])|9024::Any|])|9025::Any|])|9026::Any|]'
-      but its annotation has return type
-          `List (String)'
-      In expression: fun f2() {
-        Cons("Hello", Cons("You", Cons("Dears", Nil)))
-      }.
-
-
-      The issue, I am *guessing*, is that desugarDatatypes has already instantiated List.
-      When we're unfolding, the type variable is rigid so can't be unified, and since
-      desugarDatatypes has already instantiated the datatype, we can't do a straightforward
-      type application.
-      Little puzzled, to be honest.
-    *)
   let unify_recty (name, args, tygroup_ref) t =
     let (qs, body) = StringMap.find name !tygroup_ref in
     let body = Instantiate.recursive_application name qs args body in
