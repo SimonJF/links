@@ -163,10 +163,7 @@ let rec directives
      "dynamically load in a Links extension");
 
     "withtype",
-    ((fun (_, _,
-      { Types.var_env = tenv;
-        Types.tycon_env = aliases;
-        Types.tygroup_env = tygroups; _} as envs) args ->
+    ((fun (_, _, {Types.var_env = tenv; Types.tycon_env = aliases; _} as envs) args ->
         match args with
           [] -> prerr_endline "syntax: @withtype type"; envs
           | _ -> let t = DesugarDatatypes.read ~aliases (String.concat " " args) in
@@ -177,7 +174,7 @@ let rec directives
                      let ttype = Types.string_of_datatype t' in
                      let fresh_envs = Types.make_fresh_envs t' in
                      let t' = Instantiate.datatype fresh_envs t' in
-                       Unify.datatypes tygroups (t,t');
+                       Unify.datatypes (t,t');
                        Printf.fprintf stderr " %s : %s\n" id ttype
                    end with _ -> ())
                 (Env.String.domain tenv)

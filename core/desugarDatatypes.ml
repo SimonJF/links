@@ -223,11 +223,11 @@ struct
               | Some (`Abstract abstype) ->
                   (* TODO: check that the kinds match up *)
                   `Application (abstype, List.map (type_arg var_env alias_env) ts)
-              | Some (`Mutual (tygroup_id, qs)) ->
+              | Some (`Mutual (qs, tymap_ref)) ->
                   (* Check that the quantifiers / kinds match up, then generate
                    * a `RecursiveApplication. *)
                   let ts = match_quantifiers qs in
-                  `RecursiveApplication (tygroup_id, tycon, ts)
+                  `RecursiveApplication (tycon, ts, tymap_ref)
             end
         | `Primitive k -> `Primitive k
         | `DB -> `Primitive `DB
@@ -417,12 +417,11 @@ end
 
 
 (* convert a syntactic type into a semantic type, using `map' to resolve free type variables *)
-let desugar initial_alias_env initial_tygroup_env map =
+let desugar initial_alias_env map =
 object (self)
   inherit SugarTraversals.fold_map as super
 
   val alias_env = initial_alias_env
-  val tygroup_env = initial_tygroup_env
 
   method! patternnode = function
     | `HasType (pat, dt) ->
@@ -481,8 +480,10 @@ object (self)
 
   method! bindingnode = function
     | `Types ts ->
-        (* Get ourselves a new tygroup ID *)
-        let tygroup_id = Types.fresh_tygroup_name () in
+        (* Maps types in the recursive group to their denotations. *)
+        (* This must be empty to start off with, because there's a cycle
+         * in calculating the denotations. We then later populate it. *)
+        let tymap_ref = ref StringMap.empty in
 
         (* Add all type declarations in the group to the alias
          * environment, as mutuals. Quantifiers need to be desugared. *)
@@ -490,7 +491,7 @@ object (self)
           List.fold_left (fun (alias_env, var_env) (t, args, _) ->
             let qs = List.map (fst) args in
             let qs, var_env =  Desugar.desugar_quantifiers var_env qs in
-            (SEnv.bind alias_env (t, `Mutual (tygroup_id, qs)), var_env) )
+            (SEnv.bind alias_env (t, `Mutual (qs, tymap_ref)), var_env) )
             (alias_env, empty_env) ts in
 
         (* Desugar all DTs, given the temporary new alias environment. *)
@@ -503,7 +504,7 @@ object (self)
             let sem_qs =
                 begin
                   match SEnv.find mutual_env name with
-                    | Some (`Mutual (_, qs)) -> qs
+                    | Some (`Mutual (qs, _)) -> qs
                     | _ -> assert false
                 end in
 
@@ -521,22 +522,22 @@ object (self)
             (name, args, (t, Some dt))
           ) ts in
 
-        (* Finally, construct a new alias environment, and a map from names
-         * to datatypes for this block, given the desugared datatypes. *)
+        (* Finally, construct a new alias environment, and populate the map from
+         * strings to the desugared datatypes which in turn allows recursive type
+         * unwinding in unification. *)
         (* NB: type aliases are scoped; we allow shadowing.
            We also allow type aliases to shadow abstract types. *)
-        let (alias_env, recty_env) =
-          List.fold_left (fun (alias_env, recty_env) (t, args, (_, dt')) ->
+        let alias_env =
+          List.fold_left (fun alias_env (t, args, (_, dt')) ->
             let dt = OptionUtils.val_of dt' in
             let semantic_qs = List.map (snd ->- val_of) args in
             let alias_env =
               SEnv.bind alias_env (t, `Alias (List.map (snd ->- val_of) args, dt)) in
-            let recty_env = StringMap.add t (semantic_qs, dt) recty_env in
-            (alias_env, recty_env)
-        ) (alias_env, StringMap.empty) desugared_mutuals in
+            tymap_ref := StringMap.add t (semantic_qs, dt) !tymap_ref;
+            alias_env
+        ) alias_env desugared_mutuals in
 
-        let tygroup_env = IntMap.add tygroup_id recty_env tygroup_env in
-        ({< alias_env = alias_env; tygroup_env = tygroup_env >}, `Types desugared_mutuals)
+        ({< alias_env = alias_env >}, `Types desugared_mutuals)
     | `Val (pat, (tyvars, p), loc, dt) ->
         let o, pat = self#pattern pat in
         let o, p   = o#phrase p in
@@ -579,42 +580,41 @@ object (self)
       self, (bindings, e)
 
   method aliases = alias_env
-  method tygroups = tygroup_env
 end
 
-let phrase alias_env tygroup_env p =
+let phrase alias_env p =
   let tvars = (typevars#phrase p)#tyvar_list in
-    (desugar alias_env tygroup_env (snd (Desugar.generate_var_mapping tvars)))#phrase p
+    (desugar alias_env (snd (Desugar.generate_var_mapping tvars)))#phrase p
 
-let binding alias_env tygroup_env b =
+let binding alias_env b =
   let tvars = (typevars#binding b)#tyvar_list in
-    (desugar alias_env tygroup_env (snd (Desugar.generate_var_mapping tvars)))#binding b
+    (desugar alias_env (snd (Desugar.generate_var_mapping tvars)))#binding b
 
-let toplevel_bindings alias_env tygroup_env bs =
-  let alias_env, tygroup_env, bnds =
+let toplevel_bindings alias_env bs =
+  let alias_env, bnds =
     List.fold_left
-      (fun (alias_env, tygroup_env, bnds) bnd ->
-         let o, bnd = binding alias_env tygroup_env bnd in
-           (o#aliases, o#tygroups, bnd::bnds))
-    (alias_env, tygroup_env, [])
+      (fun (alias_env, bnds) bnd ->
+         let o, bnd = binding alias_env bnd in
+           (o#aliases, bnd::bnds))
+    (alias_env, [])
       bs
-  in (alias_env, tygroup_env, List.rev bnds)
+  in (alias_env, List.rev bnds)
 
 let program typing_env (bindings, p : Sugartypes.program) :
     (Types.typing_environment * Sugartypes.program) =
   let alias_env = typing_env.tycon_env in
-  let alias_env, tygroup_env, bindings =
-    toplevel_bindings alias_env IntMap.empty bindings in
-  let typing_env = { typing_env with tycon_env = alias_env; tygroup_env } in
-  (typing_env, (bindings, opt_map ((phrase alias_env tygroup_env) ->- snd) p))
+  let alias_env, bindings =
+    toplevel_bindings alias_env bindings in
+  let typing_env = { typing_env with tycon_env = alias_env } in
+  (typing_env, (bindings, opt_map ((phrase alias_env) ->- snd) p))
 
 let sentence typing_env = function
   | `Definitions bs ->
-      let alias_env, tygroup_env, bs' =
-        toplevel_bindings typing_env.tycon_env typing_env.tygroup_env bs in
-      {typing_env with tycon_env = alias_env; tygroup_env}, `Definitions bs'
+      let alias_env, bs' =
+        toplevel_bindings typing_env.tycon_env bs in
+      {typing_env with tycon_env = alias_env}, `Definitions bs'
   | `Expression  p  ->
-      let o, p = phrase typing_env.tycon_env typing_env.tygroup_env p in
+      let o, p = phrase typing_env.tycon_env p in
       {typing_env with tycon_env = o#aliases}, `Expression p
   | `Directive   d  -> typing_env, `Directive d
 

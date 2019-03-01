@@ -1645,9 +1645,7 @@ let type_env : Types.environment =
 
 let typing_env = {Types.var_env = type_env;
                   tycon_env = alias_env;
-                  Types.effect_row = Types.make_singleton_closed_row ("wild", `Present Types.unit_type);
-                  Types.tygroup_env = IntMap.empty
-                 }
+                  Types.effect_row = Types.make_singleton_closed_row ("wild", `Present Types.unit_type)}
 
 let primitive_names = StringSet.elements (Env.String.domain type_env)
 

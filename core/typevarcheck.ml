@@ -70,7 +70,7 @@ let rec is_guarded : TypeVarSet.t -> int -> datatype -> bool =
         | `Lens _sort -> true (* does not contain type variables *)
         | `Alias (_, t) -> is_guarded bound_vars var t
         | `Application (_, ts)
-        | `RecursiveApplication (_, _, ts) ->
+        | `RecursiveApplication (_, ts, _) ->
             (* don't treat abstract / recursive type constructors as guards *)
             List.for_all (is_guarded_type_arg bound_vars var) ts
         | `Input (t, s)
@@ -138,7 +138,7 @@ let rec is_negative : TypeVarSet.t -> int -> datatype -> bool =
         | `Lens sort -> is_negative_lens_sort bound_vars var sort
         | `Alias (_, t) -> isn t
         | `Application (_, ts)
-        | `RecursiveApplication (_, _, ts) ->
+        | `RecursiveApplication (_, ts, _) ->
             List.exists (is_negative_type_arg bound_vars var) ts
         | `Input (t, s)
         | `Output (t, s) -> isn t && isn s
@@ -208,7 +208,7 @@ and is_positive : TypeVarSet.t -> int -> datatype -> bool =
         | `Lens sort -> is_positive_lens_sort bound_vars var sort
         | `Alias (_, t) -> isp t
         | `Application (_, ts)
-        | `RecursiveApplication (_, _, ts) ->
+        | `RecursiveApplication (_, ts, _) ->
             List.exists (is_positive_type_arg bound_vars var) ts
         | `Input (t, s)
         | `Output (t, s) -> isp t && isp s

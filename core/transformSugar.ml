@@ -126,7 +126,6 @@ class transform (env : Types.typing_environment) =
   object (o : 'self_type)
     val var_env = env.Types.var_env
     val tycon_env = env.Types.tycon_env
-    val tygroup_env = env.Types.tygroup_env
     val formlet_env = TyEnv.empty
     val effect_row = fst (Types.unwrap_row env.Types.effect_row)
 
@@ -134,11 +133,10 @@ class transform (env : Types.typing_environment) =
     method get_tycon_env : unit -> Types.tycon_environment = fun () -> tycon_env
     method get_formlet_env : unit -> Types.environment = fun () -> formlet_env
 
-    method backup_envs = var_env, tycon_env, formlet_env, effect_row, tygroup_env
-
-    method restore_envs (var_env, tycon_env, formlet_env, effect_row, tygroup_env) =
+    method backup_envs = var_env, tycon_env, formlet_env, effect_row
+    method restore_envs (var_env, tycon_env, formlet_env, effect_row) =
       {< var_env = var_env; tycon_env = tycon_env; formlet_env = formlet_env;
-         effect_row = effect_row; tygroup_env = tygroup_env >}
+         effect_row = effect_row >}
 
     method with_var_env var_env =
       {< var_env = var_env >}

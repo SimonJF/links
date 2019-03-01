@@ -36,10 +36,7 @@ module Make_RealPage (C : JS_PAGE_COMPILER) (G : JS_CODEGEN) = struct
                ("ConcatMap", dt "((a) -> [b], [a]) -> [b]"))
             ("stringifyB64", dt "(a) -> String");
        Types.tycon_env = tyenv.Types.tycon_env;
-       Types.effect_row = tyenv.Types.effect_row;
-       Types.tygroup_env = tyenv.Types.tygroup_env
-      } in
-
+       Types.effect_row = tyenv.Types.effect_row } in
     let nenv =
       Env.String.bind
         (Env.String.bind nenv

@@ -68,8 +68,8 @@ let instantiate_datatype : instantiation_maps -> datatype -> datatype =
               `Alias ((name, List.map (inst_type_arg rec_env) ts), inst rec_env d)
           | `Application (n, elem_type) ->
               `Application (n, List.map (inst_type_arg rec_env) elem_type)
-          | `RecursiveApplication (id, n, elem_type) ->
-              `RecursiveApplication (id, n, List.map (inst_type_arg rec_env) elem_type)
+          | `RecursiveApplication (name, ty_args, tymap_ref) ->
+              `RecursiveApplication (name, List.map (inst_type_arg rec_env) ty_args, tymap_ref)
           | `Input (t, s) -> `Input (inst rec_env t, inst rec_env s)
           | `Output (t, s) -> `Output (inst rec_env t, inst rec_env s)
           | `Select fields -> `Select (inst_row rec_env fields)
@@ -400,6 +400,37 @@ let replace_quantifiers t qs' =
         in
           `ForAll (Types.box_quantifiers qs', apply_type t tyargs)
     | t -> t
+
+let recursive_application name qs tyargs body =
+  (*FIXME: DUPLICATE CODE*)
+  let tenv, renv, penv =
+    List.fold_right2
+      (fun q arg (tenv, renv, penv) ->
+        if not (primary_kind_of_quantifier q = primary_kind_of_type_arg arg)
+        then failwith
+          (Printf.sprintf
+            "Argument '%s' to type alias '%s' has the wrong kind ('%s' instead of '%s')"
+            (Types.string_of_type_arg arg)
+            name
+            (Types.string_of_primary_kind (primary_kind_of_type_arg arg))
+            (Types.string_of_primary_kind (primary_kind_of_quantifier q)));
+        let x = var_of_quantifier q in
+          match arg with
+          | `Type t ->
+            IntMap.add x t tenv, renv, penv
+          | `Row row ->
+            tenv, IntMap.add x row renv, penv
+          | `Presence f  ->
+            tenv, renv, IntMap.add x f penv)
+      qs
+      tyargs
+      (IntMap.empty, IntMap.empty, IntMap.empty) in
+
+  (* instantiate the type variables bound by the alias
+     definition with the type arguments *and* instantiate any
+     top-level quantifiers *)
+  let (_, body) = typ (instantiate_datatype (tenv, renv, penv) body) in
+  body
 
 let alias name tyargs env =
   (* This is just type application.
