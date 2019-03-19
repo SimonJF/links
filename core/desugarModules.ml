@@ -199,7 +199,9 @@ and perform_renaming module_table path term_ht type_ht =
     method! bindingnode = function
       | (Module     _) as m  -> (self, m )
       | (AlienBlock _) as ab -> (self, ab)
-      | (Foreign    _) as f  -> (self, f )
+      | Foreign (bnd, raw, lang, ext, ty) ->
+          let (o, ty) = self#datatype' ty in
+          (o, Foreign (bnd, raw, lang, ext, ty))
       | Typenames ts ->
           (* Add all type bindings *)
           let (o, ts_rev) =
