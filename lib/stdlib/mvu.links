@@ -126,3 +126,11 @@ fun runSimple(placeholder, model, view, updt) {
     fun(msg, model) { (updt(msg, model), NoCommand)},
     fun(_) { SubEmpty } )
 }
+
+sig runStatic :
+  forall
+    model :: Type(Unl, Any) .
+  (String, model, (model) ~%~> HTML(())) ~%~> ()
+fun runStatic(placeholder, model, view) {
+  runSimple(placeholder, model, view, fun(_, model) { model })
+}

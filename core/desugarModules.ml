@@ -197,19 +197,23 @@ and perform_renaming module_table path term_ht type_ht =
           (o, Pattern.Variant (fqn, p_opt'))
       | p -> super#patternnode p
 
+      (*
     method! row = function
       | (xs, rv) ->
           let (o, xs') =
             self#list (fun o (name, fspec) ->
               let (o, fspec') = o#fieldspec fspec in
               (o, (name, fspec'))) xs in
-          let (_, rv') = o#row_var rv in
-          (self, (xs', rv'))
+          let (o, rv') = o#row_var rv in
+          (o, (xs', rv'))
+          *)
 
     method! bindingnode = function
       | (Module     _) as m  -> (self, m )
       | (AlienBlock _) as ab -> (self, ab)
-      | (Foreign    _) as f  -> (self, f )
+      | (Foreign (bnd, raw, lang, ext, ty)) -> 
+          let (o, ty) = self#datatype' ty in
+          (o, Foreign (bnd, raw, lang, ext, ty))
       | Typenames ts ->
           let (o, ts) = self#list (fun o (n, tvs, dt, pos) ->
             (* Type will already have been renamed. *)
@@ -256,16 +260,6 @@ and perform_renaming module_table path term_ht type_ht =
                 term_ht type_ht)#phrase phr in
           (self, Block (bs', phr'))
       | Var n -> (self, Var (resolve n term_shadow_table))
-      | RecordLit (xs, p_opt) ->
-          let (_, xs') =
-            self#list (fun o (n, p) ->
-              let (o, p') = o#phrase p in
-              (o, (n, p'))) xs in
-          let (_, p_opt') = self#option (fun o -> o#phrase) p_opt in
-          (self, RecordLit (xs', p_opt'))
-      | Projection (p, n) ->
-          let (_, p') = self#phrase p in
-          (self, Projection (p', n))
       | ConstructorLit (n, p_opt, dt_opt) ->
           (* Resolve constructor name using term table *)
           let fqn = resolve n term_shadow_table in
@@ -283,8 +277,9 @@ and perform_renaming module_table path term_ht type_ht =
       function
       | Function (dts, row, dt) ->
           let (_, dts') = self#list (fun o -> o#datatype) dts in
+          let (_, row') = self#row row in
           let (_, dt') = self#datatype dt in
-          (self, Function (dts', row, dt'))
+          (self, Function (dts', row', dt'))
       | TypeApplication (n, args) ->
           let fqn = resolve n type_shadow_table in
           let (_, args') = self#list (fun o -> o#type_arg) args in
