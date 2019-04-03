@@ -179,14 +179,12 @@ let is_empty_body x =
 (* Inferring the type of an expression is straightforward because all
    variables are annotated with their types. *)
 let rec type_of_expression : Q.t -> Types.datatype = fun v ->
-  Debug.print <| "Finding type for " ^ (Q.show v);
   let te = type_of_expression in
   let record fields : Types.datatype =
     Types.make_record_type (StringMap.map te fields)
   in
     let open Q in
     match v with
-      | Concat ([]) -> raise (Errors.internal_error ~filename:"query" ~message:"can haz backtrace")
       | Concat (v::_) -> te v
       | For (_, _, _os, body) -> te body
       | Singleton t -> Types.make_list_type (te t)
