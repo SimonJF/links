@@ -125,12 +125,12 @@ end
 
 module RelationalLenses =
 struct
-    let relational_lenses = Settings.add_bool("relational_lenses", false, `User)
+    let relational_lenses = Settings.add_bool ("relational_lenses", false, `User)
 
     (* Use naive/non-incremental relational lenses instead of incremental ones *)
     let classic_lenses = Settings.add_bool("relational_lenses_classic", false, `User)
 
-    let debug = Settings.add_bool("relational_lenses_debug", false, `User)
+    let debug = Settings.add_bool ~hook:Lens.Debug.set_debug ("relational_lenses_debug", false, `User)
 end
 
 
@@ -175,6 +175,15 @@ let print_pretty = Settings.add_bool ("print_pretty", false, `User)
 let print_types_pretty = Settings.add_bool ("print_types_pretty", true, `User)
 
 let print_colors = Settings.add_bool ("print_colors", false, `User)
+
+(* Print Sugar AST before frontend processing? *)
+let show_pre_frontend_ast = Settings.add_bool("show_pre_frontend_ast", false, `User)
+
+(* Print Sugar AST after frontend processing? *)
+let show_post_frontend_ast = Settings.add_bool("show_post_frontend_ast", false, `User)
+
+(* When dumping sugar constructs, shall we print the embedded position information *)
+let show_sugar_positions =  Settings.add_bool("show_sugar_positions", false, `User)
 
 (* Base URL for websocket connections *)
 let websocket_url = Settings.add_string("websocket_url", "/ws/", `User)
@@ -234,6 +243,8 @@ module Ir = struct
   (* Print the lib.ml functions and their types. In particular, map their integer identifiers to their original names *)
   let show_lib_function_env = Settings.add_bool("show_lib_function_env", false, `User)
   let typecheck_ir = Settings.add_bool("typecheck_ir", false, `User)
+  (* Abort compilation on IR typing error *)
+  let fail_on_ir_type_error = Settings.add_bool("fail_on_ir_type_error", false, `User)
 end
 
 (* Generalise stuff *)
