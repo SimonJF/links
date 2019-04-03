@@ -162,16 +162,31 @@ let rec tail_of_t : Q.t -> Q.t = fun v ->
       | For (_tag, _gs, _os, If (_, t, Concat [])) -> tt (For (_tag, _gs, _os, t))
       | _ -> (* Debug.print ("v: "^string_of_t v); *) assert false
 
+let is_empty_body x =
+  let open Q in
+  let rec ieb = function
+    | Concat ([]) -> true
+    | For (_, _, _, b) -> ieb b
+    | If (_, t, _) -> ieb t
+    | Singleton t -> ieb t
+    | Record fields ->
+        StringMap.bindings fields
+        |> List.exists (fun (_, b) -> ieb b)
+    | _ -> false in
+  ieb x
+
 (** Return the type associated with an expression *)
 (* Inferring the type of an expression is straightforward because all
    variables are annotated with their types. *)
 let rec type_of_expression : Q.t -> Types.datatype = fun v ->
+  Debug.print <| "Finding type for " ^ (Q.show v);
   let te = type_of_expression in
   let record fields : Types.datatype =
     Types.make_record_type (StringMap.map te fields)
   in
     let open Q in
     match v with
+      | Concat ([]) -> raise (Errors.internal_error ~filename:"query" ~message:"can haz backtrace")
       | Concat (v::_) -> te v
       | For (_, _, _os, body) -> te body
       | Singleton t -> Types.make_list_type (te t)

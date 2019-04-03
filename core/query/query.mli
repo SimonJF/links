@@ -42,6 +42,7 @@ val used_database : Lang.t -> Value.database option
 
 val string_of_t : Lang.t -> string
 
+val is_empty_body : Lang.t -> bool
 val type_of_expression : Lang.t -> Types.datatype
 
 val default_of_base_type : Primitive.t -> Lang.t
