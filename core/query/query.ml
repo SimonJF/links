@@ -793,7 +793,6 @@ struct
 
       | Concat vs ->
         reduce_concat (List.map (fun v -> reduce_where_then (c, v)) vs)
-      | For (_, _, _, Concat []) -> Concat []
       | For (_, gs, os, body) ->
         For (None, gs, os, reduce_where_then (c, body))
       | If (c', t', Concat []) ->

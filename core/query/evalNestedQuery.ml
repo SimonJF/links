@@ -789,7 +789,12 @@ let compile_shredded : Value.env -> (int * int) option * Ir.computation
   fun env (range, e) ->
     let v = Q.Eval.eval env e in
       match Q.used_database v with
-        | None    -> NoDatabase
+        | None    ->
+            (* Hackity hack *)
+            if (v = Query.Lang.Concat []) then
+              EmptyQueryBody
+            else
+              NoDatabase
         | Some db ->
           if Q.is_empty_body v then
             EmptyQueryBody
