@@ -1330,6 +1330,23 @@ fun maximum(a,b) {
 }
 
 ####
+
+sig partition : ((a) ~b~> Bool, [a]) ~b~> ([a], [a])
+fun partition(pred, xs) {
+  fun go(ayes, noes, xs) {
+    switch(xs) {
+      case [] -> (ayes, noes)
+      case x :: xs ->
+        if (pred(x)) {
+          go(x :: ayes, noes, xs)
+        } else {
+          go(ayes, x :: noes, xs)
+        }
+    }
+  }
+  go([], [], xs)
+}
+
 sig groupByFlat : ((a) -b-> c, [a]) -b-> [(c, [a])]
 fun groupByFlat(project, ts) {
   for(t <- ts)
