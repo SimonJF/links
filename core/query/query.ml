@@ -162,16 +162,6 @@ let rec tail_of_t : Q.t -> Q.t = fun v ->
       | For (_tag, _gs, _os, If (_, t, Concat [])) -> tt (For (_tag, _gs, _os, t))
       | _ -> (* Debug.print ("v: "^string_of_t v); *) assert false
 
-let is_empty_body x =
-  let open Q in
-  let rec ieb = function
-    | Concat ([]) -> true
-    | For (_, _, _, b) -> ieb b
-    | If (_, t, _) -> ieb t
-    | Singleton t -> ieb t
-    | _ -> false in
-  ieb x
-
 (** Return the type associated with an expression *)
 (* Inferring the type of an expression is straightforward because all
    variables are annotated with their types. *)

@@ -686,10 +686,8 @@ struct
             Some (Value.unbox_int (value env limit), Value.unbox_int (value env offset)) in
        if Settings.get_value Basicsettings.Shredding.shredding then
          match EvalNestedQuery.compile_shredded env (range, e) with
-         | EvalNestedQuery.NoDatabase -> computation env cont e
-         | EvalNestedQuery.EmptyQueryBody ->
-             apply_cont cont env (`List [])
-         | EvalNestedQuery.Success (db, p) ->
+         | None -> computation env cont e
+         | Some (db, p) ->
             if db#supports_shredding () then
               let get_fields t =
                 match t with

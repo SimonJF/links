@@ -779,27 +779,14 @@ let unordered_query_package db (range: (int * int) option) t v =
   let typed_query_package = Shred.pzip query_package query_type_package in
     typed_query_package
 
-type compile_nested_query_result =
-  | NoDatabase
-  | EmptyQueryBody
-  | Success of (Value.database * (string * Shred.flat_type) Shred.package)
-
 let compile_shredded : Value.env -> (int * int) option * Ir.computation
-                       -> compile_nested_query_result =
+                       -> (Value.database * (string * Shred.flat_type) Shred.package) option =
   fun env (range, e) ->
     let v = Q.Eval.eval env e in
       match Q.used_database v with
-        | None    ->
-            (* Hackity hack *)
-            if (v = Query.Lang.Concat []) then
-              EmptyQueryBody
-            else
-              NoDatabase
+        | None    -> None
         | Some db ->
-          if Q.is_empty_body v then
-            EmptyQueryBody
-          else
           let t = Q.type_of_expression v in
           let p = unordered_query_package db range t v in
-            Success (db, p)
+            Some (db, p)
 
