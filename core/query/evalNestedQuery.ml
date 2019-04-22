@@ -783,6 +783,7 @@ let compile_shredded : Value.env -> (int * int) option * Ir.computation
                        -> (Value.database * (string * Shred.flat_type) Shred.package) option =
   fun env (range, e) ->
     let v = Q.Eval.eval env e in
+(*    Debug.print ("Query: " ^ (Q.Lang.show v)); *)
       match Q.used_database v with
         | None    -> None
         | Some db ->
