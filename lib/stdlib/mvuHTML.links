@@ -38,6 +38,10 @@ fun concat(nodes) {
   fold_right(fun(x, acc) { append(x, acc) }, HTMLEmpty, nodes)
 }
 
+fun concatMap(f, nodes) {
+  fold_right(fun(x, acc) { append(f(x), acc) }, HTMLEmpty, nodes)
+}
+
 fun html(attrs, children) {
     tag("html", attrs, children)
 }
