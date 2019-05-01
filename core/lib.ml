@@ -20,26 +20,6 @@ let alias_env : Types.tycon_environment =
 
 let datatype = DesugarDatatypes.read ~aliases:alias_env
 
-(*
-  assumption:
-    the only kind of lists that are allowed to be inserted into databases
-    are strings
-*)
-let value_as_string db =
-  function
-    | `String s -> "\'" ^ db # escape_string s ^ "\'"
-    | v -> Value.string_of_value v
-
-let row_columns = function
-  | `List ((`Record fields)::_) -> map fst fields
-  | r -> failwith ("Internal error: forming query from non-row (row_columns): "^ Value.string_of_value r)
-and row_values db = function
-  | `List records ->
-        (List.map (function
-                     | `Record fields -> map (value_as_string db -<- snd) fields
-                     | _ -> failwith "Internal error: forming query from non-row") records)
-  | r -> failwith ("Internal error: forming query from non-row (row_values): "^ Value.string_of_value r)
-
 type primitive =
 [ Value.t
 | `PFun of RequestData.request_data -> Value.t list -> Value.t ]
@@ -1048,6 +1028,11 @@ let env : (string * (located_primitive * Types.datatype * pure)) list = [
    datatype "() ~> Int",
    IMPURE);
 
+  "clientTimeMilliseconds",
+  (`Client,
+   datatype "() ~> Int",
+   IMPURE);
+
   "serverTime",
   (`Server
      (`PFun (fun _ _ ->
@@ -1070,14 +1055,14 @@ let env : (string * (located_primitive * Types.datatype * pure)) list = [
                  Value.unbox_int (List.assoc s r) in
                let tm = {
                  Unix.tm_sec = lookup "seconds";
-   	         Unix.tm_min = lookup "minutes";
-   	         Unix.tm_hour = lookup "hours";
-   	         Unix.tm_mday = lookup "day";
-   	         Unix.tm_mon = lookup "month";
-   	         Unix.tm_year = (lookup "year" - 1900);
-   	         Unix.tm_wday = 0; (* ignored *)
-   	         Unix.tm_yday =  0; (* ignored *)
-   	         Unix.tm_isdst = false} in
+                Unix.tm_min = lookup "minutes";
+                Unix.tm_hour = lookup "hours";
+                Unix.tm_mday = lookup "day";
+                Unix.tm_mon = lookup "month";
+                Unix.tm_year = (lookup "year" - 1900);
+                Unix.tm_wday = 0; (* ignored *)
+                Unix.tm_yday =  0; (* ignored *)
+                Unix.tm_isdst = false} in
 
                let t, _ = Unix.mktime tm in
                  Value.box_int (int_of_float t)
@@ -1105,59 +1090,16 @@ let env : (string * (located_primitive * Types.datatype * pure)) list = [
    datatype "(TableHandle(r, w, n)) -> [r]",
   IMPURE);
 
-  "InsertRows",
-  (`Server
-     (p2 (fun table rows ->
-            match table, rows with
-              | `Table _, `List [] -> `Record []
-              | `Table ((db, _params), table_name, _, _), _ ->
-                  let field_names = row_columns rows in
-                  let vss = row_values db rows in
-                    Debug.print ("RUNNING INSERT QUERY:\n" ^ (db#make_insert_query(table_name, field_names, vss)));
-                    (Database.execute_insert (table_name, field_names, vss) db)
-              | _ -> failwith "Internal error: insert row into non-database")),
-   datatype "(TableHandle(r, w, n), [s]) ~> ()",
-  IMPURE);
-
-  (* FIXME:
-
-     Choose a semantics for InsertReturning.
-
-     Currently it is well-defined if exactly one row is inserted, but
-     is not necessarily well-defined otherwise.
-
-     Perhaps the easiest course of action is to restrict it to the
-     case of inserting a single row.
-  *)
-  "InsertReturning",
-  (`Server
-     (p3 (fun table rows returning ->
-            match table, rows, returning with
-              | `Table _, `List [], _ ->
-                  failwith "InsertReturning: undefined for empty list of rows"
-              | `Table ((db, _params), table_name, _, _), _, _ ->
-                  let field_names = row_columns rows in
-                  let vss = row_values db rows in
-
-                  let returning = Value.unbox_string returning in
-                    Debug.print ("RUNNING INSERT ... RETURNING QUERY:\n" ^
-                                    String.concat "\n"
-                                    (db#make_insert_returning_query(table_name, field_names, vss, returning)));
-                    (Database.execute_insert_returning (table_name, field_names, vss, returning) db)
-              | _ -> failwith "Internal error: insert row into non-database")),
-   datatype "(TableHandle(r, w, n), [s], String) ~> Int",
-  IMPURE);
-
   "getDatabaseConfig",
   (`PFun
      (fun _ _ ->
-	let driver = Settings.get_value Basicsettings.database_driver
-	and args = Settings.get_value Basicsettings.database_args in
-	  if driver = "" then
-	    failwith "Internal error: default database driver not defined"
-	  else
-	    `Record(["driver", Value.box_string driver;
-		     "args", Value.box_string args])),
+    let driver = Settings.get_value Basicsettings.database_driver
+    and args = Settings.get_value Basicsettings.database_args in
+      if driver = "" then
+        failwith "Internal error: default database driver not defined"
+      else
+        `Record(["driver", Value.box_string driver;
+             "args", Value.box_string args])),
    datatype "() ~> (driver:String, args:String)",
   IMPURE);
 
@@ -1216,19 +1158,19 @@ let env : (string * (located_primitive * Types.datatype * pure)) list = [
     (`Server (p2 (fun s r ->
         let (re, ngroups) = Linksregex.Regex.ofLinksNGroups r
         and string = Value.unbox_string s in
-	let regex = Regex.compile_ocaml re in
-	match (Str.string_match regex string 0) with
-	 false -> `List []
-	| _ ->
-	(let rec accumMatches l : int -> Value.t = function
+    let regex = Regex.compile_ocaml re in
+    match (Str.string_match regex string 0) with
+     false -> `List []
+    | _ ->
+    (let rec accumMatches l : int -> Value.t = function
            0 -> `List ((Value.box_string (Str.matched_group 0 string))::l)
-	|  i ->
-	(try
-	let m = Str.matched_group i string in
+    |  i ->
+    (try
+    let m = Str.matched_group i string in
         accumMatches ((Value.box_string m)::l) (i - 1)
-	with
-	   NotFound _ -> accumMatches ((`String "")::l) (i - 1)) in
-	   accumMatches [] ngroups))),
+    with
+       NotFound _ -> accumMatches ((`String "")::l) (i - 1)) in
+       accumMatches [] ngroups))),
      datatype "(String, Regex) ~> [String]",
    PURE));
 
@@ -1237,8 +1179,8 @@ let env : (string * (located_primitive * Types.datatype * pure)) list = [
    (`Server (p2 (fun s r ->
         let open Regex in
         match Linksregex.Regex.ofLinks r with
-	| Replace (l, t) ->
-	   let (regex, tmpl) = Regex.compile_ocaml l, t in
+    | Replace (l, t) ->
+       let (regex, tmpl) = Regex.compile_ocaml l, t in
            let string = Value.unbox_string s in
            Value.box_string (Utility.decode_escapes (Str.replace_first regex tmpl string))
         | Any | StartAnchor | EndAnchor | Simply _ | Seq _ | Quote _ | Group _
@@ -1250,28 +1192,28 @@ let env : (string * (located_primitive * Types.datatype * pure)) list = [
   (* String utilities *)
   ("charAt",
    (p2 (fun s i ->
-	  let int = Value.unbox_int in
-	    try
+      let int = Value.unbox_int in
+        try
               Value.box_char ((Value.unbox_string s).[int i])
-	    with
-		Invalid_argument _ -> failwith "charAt: invalid index"),
+        with
+        Invalid_argument _ -> failwith "charAt: invalid index"),
     datatype ("(String, Int) ~> Char"),
     IMPURE));
 
   ("strsub",
    (p3 (fun s start len ->
-	  let int = Value.unbox_int in
-	    try
-	      Value.box_string (String.sub (Value.unbox_string s) (int start) (int len))
-	    with
-		Invalid_argument _ -> failwith "strsub: invalid arguments"),
+      let int = Value.unbox_int in
+        try
+          Value.box_string (String.sub (Value.unbox_string s) (int start) (int len))
+        with
+        Invalid_argument _ -> failwith "strsub: invalid arguments"),
     datatype "(String, Int, Int) ~> String",
     IMPURE));
 
   ("strlen",
    (p1 (fun s -> match s with
           | `String s -> `Int (String.length s)
-	  |  _ -> failwith "Internal error: strlen got wrong arguments"),
+      |  _ -> failwith "Internal error: strlen got wrong arguments"),
     datatype ("(String) ~> Int "),
     PURE));
 
@@ -1293,31 +1235,31 @@ let env : (string * (located_primitive * Types.datatype * pure)) list = [
 
   ("implode",
    (p1 (fun l ->
-		   let chars = List.map Value.unbox_char (Value.unbox_list l) in
-		   let len = List.length chars in
-		   let s = Bytes.create len in
-		   let rec aux i l =
-		     match l with
-		       | [] -> ()
-		       | c :: cs -> Bytes.set s i c; aux (i + 1) cs
-		   in
-		     aux 0 chars;
-		     Value.box_string (Bytes.to_string s)),
+           let chars = List.map Value.unbox_char (Value.unbox_list l) in
+           let len = List.length chars in
+           let s = Bytes.create len in
+           let rec aux i l =
+             match l with
+               | [] -> ()
+               | c :: cs -> Bytes.set s i c; aux (i + 1) cs
+           in
+             aux 0 chars;
+             Value.box_string (Bytes.to_string s)),
     datatype ("([Char]) ~> String"),
     PURE));
 
   ("explode",
    (p1 (fun s -> match s with
-	           | `String s ->
-		       let rec aux i l =
-			 if i < 0 then
-			   l
-			 else
-			   aux (i - 1) (s.[i] :: l)
-		       in
-		       let chars = aux ((String.length s) - 1) [] in
-			 Value.box_list (List.map Value.box_char chars)
-	           | _  -> failwith "Internal error: non-String in implode"),
+               | `String s ->
+               let rec aux i l =
+             if i < 0 then
+               l
+             else
+               aux (i - 1) (s.[i] :: l)
+               in
+               let chars = aux ((String.length s) - 1) [] in
+             Value.box_list (List.map Value.box_char chars)
+               | _  -> failwith "Internal error: non-String in implode"),
     datatype ("(String) ~> [Char]"),
     PURE));
 
@@ -1368,139 +1310,139 @@ let env : (string * (located_primitive * Types.datatype * pure)) list = [
    datatype "() -> Float",
    IMPURE);
 
-	(* LINKS GAME LIBRARY *)
+    (* LINKS GAME LIBRARY *)
 
-	(* GENERAL JAVASCRIPT / EVENTS *)
+    (* GENERAL JAVASCRIPT / EVENTS *)
 
-	"jsSetInterval",
-	(`Client, datatype "(() ~e~> (), Int) ~e~> ()", IMPURE);
+    "jsSetInterval",
+    (`Client, datatype "(() ~e~> (), Int) ~e~> ()", IMPURE);
 
-	"jsRequestAnimationFrame",
-	(`Client, datatype "(() ~e~> ()) ~e~> ()", IMPURE);
+    "jsRequestAnimationFrame",
+    (`Client, datatype "(() ~e~> ()) ~e~> ()", IMPURE);
 
-	"jsSave",
-	(`Client, datatype "(a) ~> ()", IMPURE);
+    "jsSave",
+    (`Client, datatype "(a) ~> ()", IMPURE);
 
-	"jsRestore",
-	(`Client, datatype "(a) ~> ()", IMPURE);
+    "jsRestore",
+    (`Client, datatype "(a) ~> ()", IMPURE);
 
-	"jsSetOnKeyDown",
-	(`Client, datatype "(DomNode, (Event) ~e~> ()) ~e~> ()", IMPURE);
+    "jsSetOnKeyDown",
+    (`Client, datatype "(DomNode, (Event) ~e~> ()) ~e~> ()", IMPURE);
 
-	"jsSetOnEvent",
-	(`Client, datatype "(DomNode, String, (Event) ~e~> (), Bool) ~e~> ()", IMPURE);
+    "jsSetOnEvent",
+    (`Client, datatype "(DomNode, String, (Event) ~e~> (), Bool) ~e~> ()", IMPURE);
 
-	"jsSetOnLoad",
-	(`Client, datatype "((Event) ~e~> ()) ~e~> ()", IMPURE);
+    "jsSetOnLoad",
+    (`Client, datatype "((Event) ~e~> ()) ~e~> ()", IMPURE);
 
-	(* GLOBAL STATE MANIPULATION *)
+    (* GLOBAL STATE MANIPULATION *)
 
-	"jsSaveGlobalObject",
-	(`Client, datatype "(String, a) ~> ()", IMPURE);
+    "jsSaveGlobalObject",
+    (`Client, datatype "(String, a) ~> ()", IMPURE);
 
-	"jsLoadGlobalObject",
-	(`Client, datatype "(String) ~> a", IMPURE);
+    "jsLoadGlobalObject",
+    (`Client, datatype "(String) ~> a", IMPURE);
 
-	(* CANVAS SPECIFIC *)
+    (* CANVAS SPECIFIC *)
 
-	"jsGetContext2D",
-	(`Client, datatype "(DomNode) ~> a", IMPURE); (* the a here should be something like Context2D *)
+    "jsGetContext2D",
+    (`Client, datatype "(DomNode) ~> a", IMPURE); (* the a here should be something like Context2D *)
 
-	"jsFillText",
-	(`Client, datatype "(a, String, Float, Float) ~> ()", IMPURE);
+    "jsFillText",
+    (`Client, datatype "(a, String, Float, Float) ~> ()", IMPURE);
 
-	"jsCanvasFont",
-	(`Client, datatype "(a, String) ~> ()", IMPURE);
+    "jsCanvasFont",
+    (`Client, datatype "(a, String) ~> ()", IMPURE);
 
-	"jsDrawImage",
-	(`Client, datatype "(a, DomNode, Float, Float) ~> ()", IMPURE);
+    "jsDrawImage",
+    (`Client, datatype "(a, DomNode, Float, Float) ~> ()", IMPURE);
 
-	"jsFillRect",
-	(`Client, datatype "(a, Float, Float, Float, Float) ~> ()", IMPURE);
+    "jsFillRect",
+    (`Client, datatype "(a, Float, Float, Float, Float) ~> ()", IMPURE);
 
-	"jsFillCircle",
-	(`Client, datatype "(a, Float, Float, Float) ~> ()", IMPURE);
+    "jsFillCircle",
+    (`Client, datatype "(a, Float, Float, Float) ~> ()", IMPURE);
 
-	"jsBeginPath",
-	(`Client, datatype "(a) ~> ()", IMPURE);
+    "jsBeginPath",
+    (`Client, datatype "(a) ~> ()", IMPURE);
 
-	"jsClosePath",
-	(`Client, datatype "(a) ~> ()", IMPURE);
+    "jsClosePath",
+    (`Client, datatype "(a) ~> ()", IMPURE);
 
-	"jsFill",
-	(`Client, datatype "(a) ~> ()", IMPURE);
+    "jsFill",
+    (`Client, datatype "(a) ~> ()", IMPURE);
 
-	"jsArc",
-	(`Client, datatype "(a, Float, Float, Float, Float, Float, Bool) ~> ()", IMPURE);
+    "jsArc",
+    (`Client, datatype "(a, Float, Float, Float, Float, Float, Bool) ~> ()", IMPURE);
 
-	"jsMoveTo",
-	(`Client, datatype "(a, Float, Float) ~> ()", IMPURE);
+    "jsMoveTo",
+    (`Client, datatype "(a, Float, Float) ~> ()", IMPURE);
 
-	"jsLineTo",
-	(`Client, datatype "(a, Float, Float) ~> ()", IMPURE);
+    "jsLineTo",
+    (`Client, datatype "(a, Float, Float) ~> ()", IMPURE);
 
-	"jsLineWidth",
-	(`Client, datatype "(a, Float) ~> ()", IMPURE);
+    "jsLineWidth",
+    (`Client, datatype "(a, Float) ~> ()", IMPURE);
 
-	"jsScale",
-	(`Client, datatype "(a, Float, Float) ~> ()", IMPURE);
+    "jsScale",
+    (`Client, datatype "(a, Float, Float) ~> ()", IMPURE);
 
-	"jsTranslate",
-	(`Client, datatype "(a, Float, Float) ~> ()", IMPURE);
+    "jsTranslate",
+    (`Client, datatype "(a, Float, Float) ~> ()", IMPURE);
 
-	"jsStrokeStyle",
-	(`Client, datatype "(a, a) ~> ()", IMPURE);
+    "jsStrokeStyle",
+    (`Client, datatype "(a, a) ~> ()", IMPURE);
 
-	"jsStroke",
-	(`Client, datatype "(a) ~> ()", IMPURE);
+    "jsStroke",
+    (`Client, datatype "(a) ~> ()", IMPURE);
 
-	"jsSetFillColor",
-	(`Client, datatype "(a, String) ~> ()", IMPURE);
+    "jsSetFillColor",
+    (`Client, datatype "(a, String) ~> ()", IMPURE);
 
-	"jsClearRect",
-	(`Client, datatype "(a, Float, Float, Float, Float) ~> ()", IMPURE);
+    "jsClearRect",
+    (`Client, datatype "(a, Float, Float, Float, Float) ~> ()", IMPURE);
 
-	"jsCanvasWidth",
-	(`Client, datatype "(a) ~> Float", IMPURE);
+    "jsCanvasWidth",
+    (`Client, datatype "(a) ~> Float", IMPURE);
 
-	"jsCanvasHeight",
-	(`Client, datatype "(a) ~> Float", IMPURE);
+    "jsCanvasHeight",
+    (`Client, datatype "(a) ~> Float", IMPURE);
 
-	"jsSaveCanvas",
-	(`Client, datatype "(DomNode, DomNode, String) ~> ()", IMPURE);
+    "jsSaveCanvas",
+    (`Client, datatype "(DomNode, DomNode, String) ~> ()", IMPURE);
 
-	(* END OF LINKS GAME LIBRARY *)
+    (* END OF LINKS GAME LIBRARY *)
 
-	(* FOR DEBUGGING *)
+    (* FOR DEBUGGING *)
 
-	"debugGetStats",
-	(`Client, datatype "(String) ~> a", IMPURE);
+    "debugGetStats",
+    (`Client, datatype "(String) ~> a", IMPURE);
 
-	"debugChromiumGC",
-	(`Client, datatype "() ~> ()", IMPURE);
+    "debugChromiumGC",
+    (`Client, datatype "() ~> ()", IMPURE);
 
-	(* END OF DEBUGGING FUNCTIONS *)
-
-
-	(* EQUALITY *)
-
-	"stringEq",
-	(`Client, datatype "(String, String) -> Bool", PURE);
-
-	"intEq",
-	(`Client, datatype "(Int, Int) -> Bool", PURE);
-
-	"floatEq",
-	(`Client, datatype "(Float, Float) -> Bool", PURE);
-
-	"floatNotEq",
-	(`Client, datatype "(Float, Float) -> Bool", PURE);
-
-	"objectEq",
-	(`Client, datatype "(a, a) -> Bool", PURE);
+    (* END OF DEBUGGING FUNCTIONS *)
 
 
-	(* END OF EQUALITY FUNCTIONS *)
+    (* EQUALITY *)
+
+    "stringEq",
+    (`Client, datatype "(String, String) -> Bool", PURE);
+
+    "intEq",
+    (`Client, datatype "(Int, Int) -> Bool", PURE);
+
+    "floatEq",
+    (`Client, datatype "(Float, Float) -> Bool", PURE);
+
+    "floatNotEq",
+    (`Client, datatype "(Float, Float) -> Bool", PURE);
+
+    "objectEq",
+    (`Client, datatype "(a, a) -> Bool", PURE);
+
+
+    (* END OF EQUALITY FUNCTIONS *)
 
         "gensym",
         (let idx = ref 0 in
@@ -1737,7 +1679,7 @@ let apply_pfun_by_code var args req_data =
   match primitive_by_code var with
   | Some #Value.t ->
       failwith("Attempt to apply primitive non-function "
-	       ^ "(#" ^string_of_int var^ ").")
+           ^ "(#" ^string_of_int var^ ").")
   | Some (`PFun p) -> p req_data args
   | None -> assert false
 

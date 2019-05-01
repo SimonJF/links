@@ -65,7 +65,7 @@ let lookup_name_and_type name (nenv, tenv, _eff) =
   let var = NEnv.lookup nenv name in
     var, TEnv.lookup tenv var
 
-let lookup_effects (_, _, eff)= eff
+let lookup_effects (_, _, eff) = eff
 
 (* Hmm... shouldn't we need to use something like this? *)
 
@@ -128,6 +128,9 @@ sig
   val coerce : value sem * datatype -> value sem
 
   val query : (value sem * value sem) option * tail_computation sem -> tail_computation sem
+
+  val db_insert : env -> (value sem * value sem) -> tail_computation sem
+  val db_insert_returning : env -> (value sem * value sem * value sem) -> tail_computation sem
 
   val db_update : env -> (CompilePatterns.Pattern.t * value sem * tail_computation sem option * tail_computation sem) -> tail_computation sem
   val db_delete : env -> (CompilePatterns.Pattern.t * value sem * tail_computation sem option) -> tail_computation sem
@@ -471,8 +474,8 @@ struct
       (fun database ->
          bind table
            (fun table ->
-	     bind keys
-		(fun keys ->  lift (Special (Table (database, table, keys, (r, w, n))),
+         bind keys
+        (fun keys ->  lift (Special (Table (database, table, keys, (r, w, n))),
                                `Table (r, w, n)))))
 
   let lens_handle (table, sort) =
@@ -534,6 +537,22 @@ struct
                 let tenv = TEnv.bind tenv (var, sem_type v) in
                 let (bs, tc) = CompilePatterns.compile_choices (nenv, tenv, eff) (t, var, cases) in
                   reflect (bs, (tc, t))))
+
+  let db_insert _env (source, rows) =
+    bind source
+      (fun source ->
+	bind rows
+	  (fun rows ->
+            lift (Special (InsertRows (source, rows)), Types.unit_type)))
+
+  let db_insert_returning _env (source, rows, returning) =
+    bind source
+      (fun source ->
+	bind rows
+	  (fun rows ->
+	    bind returning
+	      (fun returning ->
+		lift (Special (InsertReturning (source, rows, returning)), Types.int_type))))
 
   let db_update env (p, source, where, body) =
     let source_type = sem_type source in
@@ -752,6 +771,7 @@ struct
           | _ -> false in
 
       let eff = lookup_effects env in
+
       let instantiate_mb name = instantiate name [`Row eff] in
       let cofv = I.comp_of_value in
       let ec = eval env in
@@ -865,15 +885,20 @@ struct
              let vs = evs ps in
              I.do_operation (name, vs, t)
           | Handle { sh_expr; sh_effect_cases; sh_value_cases; sh_descr } ->
+             (* it happens that the ambient effects are the right ones
+                for all of the patterns here (they match those of the
+                initial computations for parameterised handlers and
+                the bodies of the cases) *)
+             let eff = lookup_effects env in
              let henv, params =
-               let empty_env = (NEnv.empty, TEnv.empty, Types.make_empty_open_row (lin_any, res_any)) in
+               let empty_env = (NEnv.empty, TEnv.empty, eff) in
                 match (sh_descr.shd_params) with
                 | None -> empty_env, []
                 | Some { shp_bindings = bindings; shp_types = types } ->
                    let env, bindings =
                      List.fold_left2
                        (fun (env, bindings) (body, p) t ->
-                         let p, penv = CompilePatterns.desugar_pattern p in
+                         let p, penv = CompilePatterns.desugar_pattern eff p in
                          let bindings = ((fun env -> eval env body), p, t) :: bindings in
                          ((env ++ penv), bindings))
                        (empty_env, []) bindings types
@@ -883,14 +908,14 @@ struct
              let eff_cases =
                List.map
                  (fun (p, body) ->
-                   let p, penv = CompilePatterns.desugar_pattern p in
+                   let p, penv = CompilePatterns.desugar_pattern eff p in
                    (p, fun env -> eval ((env ++ henv) ++ penv) body))
                  sh_effect_cases
              in
              let val_cases =
                 List.map
                   (fun (p, body) ->
-                    let p, penv = CompilePatterns.desugar_pattern p in
+                    let p, penv = CompilePatterns.desugar_pattern eff p in
                     (p, fun env -> eval ((env ++ henv) ++ penv) body))
                   sh_value_cases
              in
@@ -899,7 +924,7 @@ struct
               let cases =
                 List.map
                   (fun (p, body) ->
-                     let p, penv = CompilePatterns.desugar_pattern p in
+                     let p, penv = CompilePatterns.desugar_pattern (lookup_effects env) p in
                        (p, fun env ->  eval (env ++ penv) body))
                   cases
               in
@@ -968,9 +993,17 @@ struct
           | Block (bs, e) -> eval_bindings Scope.Local env bs e
           | Query (range, e, _) ->
               I.query (opt_map (fun (limit, offset) -> (ev limit, ev offset)) range, ec e)
-
+	  | DBInsert (source, _fields, rows, None) ->
+	      let source = ev source in
+	      let rows = ev rows in
+	      I.db_insert env (source, rows)
+	  | DBInsert (source, _fields, rows, Some returning) ->
+	      let source = ev source in
+	      let rows = ev rows in
+	      let returning = ev returning in
+	      I.db_insert_returning env (source, rows, returning)
           | DBUpdate (p, source, where, fields) ->
-              let p, penv = CompilePatterns.desugar_pattern p in
+              let p, penv = CompilePatterns.desugar_pattern (lookup_effects env) p in
               let env' = env ++ penv in
               let source = ev source in
               let where =
@@ -980,7 +1013,7 @@ struct
               let body = eval env' (WithPos.make ~pos (RecordLit (fields, None))) in
                 I.db_update env (p, source, where, body)
           | DBDelete (p, source, where) ->
-              let p, penv = CompilePatterns.desugar_pattern p in
+              let p, penv = CompilePatterns.desugar_pattern (lookup_effects env) p in
               let env' = env ++ penv in
               let source = ev source in
               let where =
@@ -993,10 +1026,11 @@ struct
           | Select (l, e) ->
              I.select (l, ev e)
           | Offer (e, cases, Some t) ->
-              let cases =
+             let eff = lookup_effects env in
+             let cases =
                 List.map
                   (fun (p, body) ->
-                     let p, penv = CompilePatterns.desugar_pattern p in
+                     let p, penv = CompilePatterns.desugar_pattern eff p in
                        (p, fun env ->  eval (env ++ penv) body))
                   cases
               in
@@ -1009,7 +1043,6 @@ struct
           | FunLit _
           | Iteration _
           | InfixAppl ((_, BinaryOp.RegexMatch _), _, _)
-          | DBInsert _
           | Regex _
           | Formlet _
           | Page _
@@ -1060,7 +1093,7 @@ struct
                          fun v ->
                            eval_bindings scope (extend [x] [(v, xt)] env) bs e)
                 | Val (p, (_, body), _, _) ->
-                    let p, penv = CompilePatterns.desugar_pattern p in
+                    let p, penv = CompilePatterns.desugar_pattern (lookup_effects env) p in
                     let env' = env ++ penv in
                     let s = ev body in
                     let ss = eval_bindings scope env' bs e in
@@ -1069,10 +1102,11 @@ struct
                      when Binder.has_type bndr ->
                     let f  = Binder.to_name bndr in
                     let ft = Binder.to_type_exn bndr in
+                    let eff = TypeUtils.effect_row ft in
                     let ps, body_env =
                       List.fold_right
                         (fun p (ps, body_env) ->
-                           let p, penv = CompilePatterns.desugar_pattern p in
+                           let p, penv = CompilePatterns.desugar_pattern eff p in
                              p::ps, body_env ++ penv)
                         ps
                         ([], env) in
@@ -1084,6 +1118,8 @@ struct
                 | Exp e' ->
                     I.comp env (CompilePatterns.Pattern.Any, ev e', eval_bindings scope env bs e)
                 | Funs defs ->
+                   (* FIXME: inner and outers should be the same now,
+                      so we shouldn't need to do all of this *)
                     let fs, inner_fts, outer_fts =
                       List.fold_right
                         (fun (bndr, _, ((_tyvars, inner_opt), _), _, _, _) (fs, inner_fts, outer_fts) ->
@@ -1099,11 +1135,12 @@ struct
                           assert (List.length pss = 1);
                           let f  = Binder.to_name bndr in
                           let ft = Binder.to_type_exn bndr in
+                          let eff = TypeUtils.effect_row ft in
                           let ps = List.hd pss in
-                           let ps, body_env =
+                          let ps, body_env =
                              List.fold_right
                                (fun p (ps, body_env) ->
-                                  let p, penv = CompilePatterns.desugar_pattern p in
+                                  let p, penv = CompilePatterns.desugar_pattern eff p in
                                     p::ps, body_env ++ penv)
                                ps
                                ([], env) in

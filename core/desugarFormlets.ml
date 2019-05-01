@@ -30,6 +30,8 @@ let pure_str          = "pure"
 let plug_str          = "plug"
 let atatat_str        = "@@@"
 
+let closed_wild = Types.row_with ("wild", `Present Types.unit_type) (Types.make_empty_closed_row ())
+
 class desugar_formlets env =
 object (o : 'self_type)
   inherit (TransformSugar.transform env) as super
@@ -44,7 +46,8 @@ object (o : 'self_type)
     fun ph ->
       match WithPos.node ph with
         | _ when is_raw ph ->
-            [tuple_pat []], [tuple []], [Types.unit_type]
+            (* [tuple_pat []], [tuple []], [Types.unit_type] *)
+           [], [], []
         | FormBinding (f, p) ->
             let (_o, _f, ft) = o#phrase f in
             let t = Types.fresh_type_variable (lin_any, res_any) in
@@ -106,13 +109,12 @@ object (o : 'self_type)
                     ([], [], []) contents
                 in
                   List.rev pss, List.rev vs, List.rev ts in
-              let empty_eff = Types.make_empty_closed_row () in
               let ft =
                 List.fold_right
                   (fun t ft ->
-                     `Function (Types.make_tuple_type [t], empty_eff, ft))
+                     `Function (Types.make_tuple_type [t], closed_wild, ft))
                   ts (tt ts) in
-              let args = List.map (fun t -> (Types.make_tuple_type [t], empty_eff)) ts in
+              let args = List.map (fun t -> (Types.make_tuple_type [t], closed_wild)) ts in
                 begin
                   match args with
                     | [] ->
@@ -120,12 +122,12 @@ object (o : 'self_type)
                           super#phrasenode (Xml ("#", [], None, contents))
                         in (o, fn_appl_node xml_str [`Row (o#lookup_effects)]
                                             [with_dummy_pos e],
-                            Types.xml_type)
+                            Types.unit_type)
                     | _ ->
                         let (o, es, _) = TransformSugar.list o (fun o -> o#formlet_body) contents in
-                        let mb = `Row (o#lookup_effects) in
+                        let eff = `Row (o#lookup_effects) in
                         let base : phrase =
-                          fn_appl pure_str [`Type ft; mb]
+                          fn_appl pure_str [`Type ft; eff]
                             [fun_lit ~args:(List.rev args) dl_unl (List.rev pss)
                                      (tuple vs)] in
                         let p, et =
@@ -134,7 +136,7 @@ object (o : 'self_type)
                                let arg_type = List.hd (TypeUtils.arg_types ft) in
                                let ft = TypeUtils.return_type ft in
                                let base : phrase =
-                                 fn_appl atatat_str [`Type arg_type; `Type ft; mb]
+                                 fn_appl atatat_str [`Type arg_type; `Type ft; `Row closed_wild]
                                          [arg; base]
                                in base, ft)
                             es (base, ft)
@@ -147,7 +149,7 @@ object (o : 'self_type)
               let eff = o#lookup_effects in
               let context : phrase =
                 let name = Utility.gensym ~prefix:"_formlet_" () in
-                fun_lit ~args:[Types.make_tuple_type [Types.xml_type], eff]
+                fun_lit ~args:[Types.make_tuple_type [Types.xml_type], closed_wild]
                         dl_unl
                         [[variable_pat ~ty:(Types.xml_type) name]]
                         (xml tag attrs attrexp [block ([], var name)]) in
@@ -164,11 +166,14 @@ object (o : 'self_type)
     | Formlet (body, yields) ->
         (* pure (fun q^ -> [[e]]* ) <*> q^o *)
         (* let e_in = `Formlet (body, yields) in *)
-        let empty_eff = Types.make_empty_closed_row () in
+
+        let eff = o#lookup_effects in
+        let o = o#with_effects closed_wild in
         let (ps, _, ts) = o#formlet_patterns body in
         let (o, body, _body_type) = o#formlet_body body in
         let (o, ps) = TransformSugar.listu o (fun o -> o#pattern) ps in
         let (o, yields, yields_type) = o#phrase yields in
+        let o = o#with_effects eff in
 
         let pss =
           match ps with
@@ -176,14 +181,13 @@ object (o : 'self_type)
             | _ -> [[tuple_pat ps]] in
 
         let arg_type = Types.make_tuple_type ts in
-        let mb = `Row (o#lookup_effects) in
 
         let e =
           fn_appl_node atatat_str
-             [`Type arg_type; `Type yields_type; mb]
+             [`Type arg_type; `Type yields_type; `Row eff]
              [body; fn_appl pure_str
-                    [`Type (`Function (Types.make_tuple_type [arg_type], empty_eff, yields_type)); mb]
-                    [fun_lit ~args:[Types.make_tuple_type [arg_type], empty_eff] dl_unl pss yields]]
+                    [`Type (`Function (Types.make_tuple_type [arg_type], closed_wild, yields_type)); `Row eff]
+                    [fun_lit ~args:[Types.make_tuple_type [arg_type], closed_wild] dl_unl pss yields]]
         in
           (o, e, Instantiate.alias "Formlet" [`Type yields_type] tycon_env)
     | e -> super#phrasenode e
