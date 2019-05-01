@@ -3728,7 +3728,7 @@ and type_binding : context -> binding -> binding * context * usagemap =
                              (usages body)
             else () in
 
-          let (tyvars, _tyargs), ft = Utils.generalise context.var_env ft in
+          (* let (tyvars, _tyargs), ft = Utils.generalise context.var_env ft in *)
 
           (* FIXME: We should do the following check, but currently it
              breaks some of our examples.  *)
@@ -3738,32 +3738,30 @@ and type_binding : context -> binding -> binding * context * usagemap =
              or promising that they're complete - in order to denote
              their kinds if nothing else *)
 
-          (* let tyvars, ft =
-           *   (\* generalise *\)
-           *   let (tyvars, _tyargs), ft = Utils.generalise context.var_env ft in
-           *   (\* check that tyvars matches up those from any type
-           *      annotation *\)
-           *   match t with
-           *   | None -> tyvars, ft
-           *   | Some (_, Some t) ->
-           *      begin
-           *        match TypeUtils.quantifiers t with
-           *        | [] -> tyvars, ft
-           *        | t_tyvars ->
-           *           if not
-           *                (List.for_all
-           *                   (fun q ->
-           *                     let n = Types.type_var_number q in
-           *                     List.exists (fun q -> Types.type_var_number q = n) t_tyvars) tyvars)
-           *           then
-           *             begin
-           *               Debug.print ("t: "^Types.string_of_datatype t);
-           *               Debug.print ("ft: "^Types.string_of_datatype ft);
-           *               failwith "inconsistent quantifiers (fun)"
-           *             end;
-           *           t_tyvars, t
-           *      end
-           *   | Some (_, None) -> assert false in *)
+          let tyvars, ft =
+            let (tyvars, _tyargs), ft = Utils.generalise context.var_env ft in
+            match t with
+            | None -> tyvars, ft
+            | Some (_, Some t) ->
+               begin
+                 match TypeUtils.quantifiers t with
+                 | [] -> tyvars, ft
+                 | t_tyvars ->
+                    if not
+                         (List.for_all
+                            (fun q ->
+                              let n = Types.type_var_number q in
+                              List.exists (fun q -> Types.type_var_number q = n) t_tyvars) tyvars)
+                    then
+                      begin
+                        Debug.print ("name: " ^ Binder.to_name bndr);
+                        Debug.print ("t: "^Types.string_of_datatype t);
+                        Debug.print ("ft: "^Types.string_of_datatype ft);
+                        failwith "inconsistent quantifiers (fun)"
+                      end;
+                    t_tyvars, t
+               end
+            | Some (_, None) -> assert false in
 
           (* let ft = Instantiate.freshen_quantifiers ft in *)
             (Fun (Binder.set_type bndr ft,

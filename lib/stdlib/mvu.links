@@ -15,8 +15,8 @@ module VirtualDom {
 module VDom {
   alien javascript "/lib/vdom.js" {
     runDom : forall a :: Type(Any, Any) .
-      (String, HTML(a), AP(?a.End), Sub(a)) ~%~> ();
-    updateDom : forall a :: Type(Any, Any) . (HTML(a), Sub(a)) ~%~> ();
+      (String, HTML(a), AP(?a.End), Sub(a)) {}~> ();
+    updateDom : forall a :: Type(Any, Any) . (HTML(a), Sub(a)) {}~> ();
   }
 }
 
@@ -34,7 +34,8 @@ fun applySpawnLinear(f) { f() }
 
 # TODO: Generalise to monoidal interface
 sig processCommand :
-  forall msg :: Type(Any, Any) . (Command(msg), AP(?msg.End)) ~> ()
+  forall msg :: Type(Any, Any), e :: Row .
+  (Command(msg), AP(?msg.End)) ~e~> ()
 fun processCommand(cmd, ap) {
   switch(cmd) {
     case NoCommand -> ()
@@ -58,11 +59,11 @@ sig evtLoop :
         unrModel :: Type(Unl, Any) .
   (AP(?msg.End),
    model,
-   (unrModel) ~%~> HTML(msg),
-   (msg, model) ~%~> (model, Command(msg)),
-   (unrModel) ~%~> Sub(msg),
-   (model) ~%~> (model, unrModel),
-   Sub(msg)) ~%~> ()
+   (unrModel) {}~> HTML(msg),
+   (msg, model) {}~> (model, Command(msg)),
+   (unrModel) {}~> Sub(msg),
+   (model) {}~> (model, unrModel),
+   Sub(msg)) {}~> ()
 fun evtLoop(ap, model, view, updt, subscriptionsFn, extract, prevSubscriptions) {
   var (message, s) = receive(accept(ap));
   close(s);
@@ -84,11 +85,11 @@ sig runLinear:
     unrModel::Type(Unl, Any) .
   (String,
    model,
-   (unrModel) ~%~> HTML(msg),
-   (msg, model) ~%~> (model, Command(msg)),
-   (unrModel) ~%~> Sub(msg),
-   (model) ~%~> (model, unrModel)
-   ) ~%~> ()
+   (unrModel) {}~> HTML(msg),
+   (msg, model) {}~> (model, Command(msg)),
+   (unrModel) {}~> Sub(msg),
+   (model) {}~> (model, unrModel)
+   ) {}~> ()
 fun runLinear(placeholder, model, view, updt, subscriptions, extract) {
   var (model, unrModel) = extract(model);
   var evtHandler = spawnClient {
@@ -106,9 +107,9 @@ sig run:
     model :: Type(Unl, Any) .
   (String,
     model,
-    (model) ~%~> HTML(msg),
-    (msg, model) ~%~> (model, Command(msg)),
-    (model) ~%~> Sub(msg)) ~%~> ()
+    (model) {}~> HTML(msg),
+    (msg, model) {}~> (model, Command(msg)),
+    (model) {}~> Sub(msg)) {}~> ()
 fun run(placeholder, model, view, updt, subscriptions) {
   runLinear(placeholder, model, view, updt, subscriptions, fun(x) { (x, x) })
 }
@@ -119,8 +120,8 @@ sig runSimple :
     model :: Type(Unl, Any) .
   (String,
     model,
-    (model) ~%~> HTML(msg),
-    (msg, model) ~%~> model) ~%~> ()
+    (model) {}~> HTML(msg),
+    (msg, model) {}~> model) {}~> ()
 fun runSimple(placeholder, model, view, updt) {
   run(placeholder, model, view,
     fun(msg, model) { (updt(msg, model), NoCommand)},
@@ -130,7 +131,7 @@ fun runSimple(placeholder, model, view, updt) {
 sig runStatic :
   forall
     model :: Type(Unl, Any) .
-  (String, model, (model) ~%~> HTML(())) ~%~> ()
+  (String, model, (model) {}~> HTML(())) {}~> ()
 fun runStatic(placeholder, model, view) {
   runSimple(placeholder, model, view, fun(_, model) { model })
 }
