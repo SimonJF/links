@@ -99,7 +99,7 @@ end
 
 module IntPair = struct
   type t = int * int
-	[@@deriving show]
+    [@@deriving show]
   (*let compare = Pervasives.compare*)
   (*This is a bit of a hack, but should be OK as long as the integers are between 0 and 2^30 or so. *)
   let compare (i1,i2) (j1,j2) = if i1 = j1 then i2-j2 else i1-j1
@@ -982,6 +982,8 @@ let getenv : string -> string option =
 let safe_getenv s =
   try Sys.getenv s
   with NotFound _ ->
+    (* We need to retain this `failwith` since `errors.ml` depends on
+     * Utility.ml *)
     failwith ("The environment variable " ^ s ^ " is not set")
 
 (** Initialise the random number generator *)

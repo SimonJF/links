@@ -4,7 +4,7 @@ open Ir
 open Var
 
 let internal_error message =
-  raise (Errors.internal_error ~filename:"irTraversals.ml" ~message)
+  Errors.internal_error ~filename:"irTraversals.ml" ~message
 
 (** Traversal with type reconstruction
 
@@ -212,12 +212,12 @@ struct
                   TApp (v, ts), t, o
               with
                   Instantiate.ArityMismatch _ ->
-                  internal_error
+                  raise (internal_error
                     (Printf.sprintf
                        "Arity mismatch in type application (Ir.Transform). Expression: %s\n type: %s\n args: %s\n"
                        (show_value (TApp (v, ts)))
                        (Types.string_of_datatype t)
-                       (String.concat "," (List.map (fun t -> Types.string_of_type_arg t) ts)))
+                       (String.concat "," (List.map (fun t -> Types.string_of_type_arg t) ts))))
               end
         | XmlNode (tag, attributes, children) ->
             let (attributes, _, o) = o#name_map (fun o -> o#value) attributes in
@@ -340,6 +340,15 @@ struct
                 range in
             let e, t, o = o#computation e in
               Query (range, e, t), t, o
+        | InsertRows (source, rows) ->
+            let source, _, o = o#value source in
+	    let rows, _, o = o#value rows in
+              InsertRows(source, rows), Types.unit_type, o
+        | InsertReturning (source, rows, returning) ->
+            let source, _, o = o#value source in
+	    let rows, _, o = o#value rows in
+	    let returning, _, o = o#value returning in
+              InsertReturning(source, rows, returning), Types.unit_type, o
         | Update ((x, source), where, body) ->
             let source, _, o = o#value source in
             let x, o = o#binder x in
@@ -366,8 +375,8 @@ struct
                          (b, c), t, o) bs in
            let t = (StringMap.to_alist ->- List.hd ->- snd) branch_types in
            Choice (v, bs), t, o
-	| Handle ({ ih_comp; ih_cases; ih_return; ih_depth }) ->
-	   let (comp, _, o) = o#computation ih_comp in
+    | Handle ({ ih_comp; ih_cases; ih_return; ih_depth }) ->
+       let (comp, _, o) = o#computation ih_comp in
            (* TODO FIXME traverse parameters *)
            let (depth, o) =
              match ih_depth with
@@ -383,24 +392,24 @@ struct
                 Deep (List.rev bindings), o
              | Shallow -> Shallow, o
            in
-	   let (cases, _branch_types, o) =
-	     o#name_map
+       let (cases, _branch_types, o) =
+         o#name_map
                (fun o (x, resume, c) ->
                  let (x, o) = o#binder x in
-		 let (resume, o) = o#binder resume in
-		 let (c, t, o) = o#computation c in
-		 (x, resume, c), t, o)
-	       ih_cases
-	   in
+         let (resume, o) = o#binder resume in
+         let (c, t, o) = o#computation c in
+         (x, resume, c), t, o)
+           ih_cases
+       in
            let (return, t, o) =
              let (b, o) = o#binder (fst ih_return) in
              let (comp, t, o) = o#computation (snd ih_return) in
              (b, comp), t, o
            in
-	   Handle { ih_comp = comp; ih_cases = cases; ih_return = return; ih_depth = depth}, t, o
-	| DoOperation (name, vs, t) ->
-	   let (vs, _, o) = o#list (fun o -> o#value) vs in
-	   (DoOperation (name, vs, t), t, o)
+       Handle { ih_comp = comp; ih_cases = cases; ih_return = return; ih_depth = depth}, t, o
+    | DoOperation (name, vs, t) ->
+       let (vs, _, o) = o#list (fun o -> o#value) vs in
+       (DoOperation (name, vs, t), t, o)
 
    method bindings : binding list -> (binding list * 'self_type) =
       fun bs ->
@@ -853,7 +862,10 @@ module CheckForCycles =
            (* Debug.print ("Method typ, mu_vars is " ^ Utility.IntSet.show mu_vars); *)
            match List.assoc_opt t seen_types with
            | Some _ ->
-                failwith "descending into type cycle"
+               raise (
+                Errors.internal_error
+                  ~filename:"irTraversals.ml"
+                  ~message:"descending into type cycle")
            | None ->
               let o' = {<seen_types =  (t,()) :: seen_types>} in
               let (t, _) = o'#typ_super t in
@@ -861,7 +873,10 @@ module CheckForCycles =
 
          method! row r =
            match List.assoc_opt r seen_rows with
-           | Some _ ->  failwith "descending into row cycle"
+           | Some _ ->
+               raise (Errors.internal_error
+                 ~filename:"irTraversals.ml"
+                 ~message:"descending into row cycle")
            | None ->
               let o' = {<seen_rows =  (r,()) :: seen_rows>} in
               let (r,_) = o'#row_super r in

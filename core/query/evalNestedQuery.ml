@@ -650,38 +650,38 @@ Fast unflattening.
       match t with
       `Primitive _ -> `Primitive name
     | `Record rcd ->
-	`Record (List.map (fun (nm,t') ->
-	  (nm,make_tmpl_inner (name ^"@"^nm) t'))
-		   (StringMap.to_alist rcd))
+    `Record (List.map (fun (nm,t') ->
+      (nm,make_tmpl_inner (name ^"@"^nm) t'))
+           (StringMap.to_alist rcd))
     and make_tmpl_outer t =
       match t with
-	`Primitive _ -> `Primitive ""
-      |	`Record rcd -> `Record (List.map (fun (nm,t') ->
-	  (nm,make_tmpl_inner nm t'))
-		   (StringMap.to_alist rcd))
+    `Primitive _ -> `Primitive ""
+      |    `Record rcd -> `Record (List.map (fun (nm,t') ->
+      (nm,make_tmpl_inner nm t'))
+           (StringMap.to_alist rcd))
     in make_tmpl_outer ty
 
   let build_unflattened_record : string template -> Value.t -> Value.t =
       fun template v_record  ->
-	let record =
-	  match v_record with
-	    `Record r -> r
-	  | _ -> assert false
-	in
-	let rec build t =
-	  match t with
-	    `Record rcd -> `Record (List.map (fun (n,t') -> (n,build t')) rcd)
-	  | `Primitive field -> List.assoc field record
+    let record =
+      match v_record with
+        `Record r -> r
+      | _ -> assert false
+    in
+    let rec build t =
+      match t with
+        `Record rcd -> `Record (List.map (fun (n,t') -> (n,build t')) rcd)
+      | `Primitive field -> List.assoc field record
 
-	in build template
+    in build template
 
   let unflatten_list : (Value.t * flat_type) -> Value.t =
     fun (v, t) ->
       match v with
         | `List vs ->
-	    let st = unflatten_type t in
-	    let tmpl = make_template st in
-	  `List (List.map (build_unflattened_record tmpl) vs)
+        let st = unflatten_type t in
+        let tmpl = make_template st in
+      `List (List.map (build_unflattened_record tmpl) vs)
         | _ -> assert false
 
 end
@@ -713,9 +713,9 @@ struct
             (List.map (fun (l, v) -> (l, stitch v (StringMap.find l fts))) fs)
         | `Record [("1", `Int a); ("2", `Int d)], `List (t, m) ->
           (*`List (List.map (fun w -> stitch w t)
-		   (lookup (a, d) m))*)
+           (lookup (a, d) m))*)
           `List (List.fold_left (fun l w -> stitch w t::l) []
-		   (lookup (a, d) m))
+           (lookup (a, d) m))
         | _, _ -> assert false
 
 
@@ -727,22 +727,34 @@ Avoiding unnecessary static indexes, or multiplexing pairs (a,d) where a is usua
     fun template array ->
     let rec build t =
       match t with
-	`Record rcd -> `Record (List.map (fun (n,t') -> (n,build t')) rcd)
+    `Record rcd -> `Record (List.map (fun (n,t') -> (n,build t')) rcd)
       | `Primitive (ty,idx) -> Database.value_of_db_string (Array.get array idx) ty
 
     in build template
 
-
   let build_stitch_map (((vs:Value.dbvalue),rs),t) =
     let st = FlattenRecords.unflatten_type t in
     let tmpl = FlattenRecords.make_template st in
-    let tmpl' = FlattenRecords.template_map (fun x -> List.assoc x rs) tmpl in
-    let (a_idx,d_idx,w_tmpl) =
-       match tmpl' with
-      | `Record [("1", (`Record [ ("1", `Primitive(_,a_idx));
-				  ("2", `Primitive(_,d_idx))]));
-		  ("2", w_tmpl)] -> (a_idx,d_idx,w_tmpl)
-      |	 _ -> assert false in
+    let sql_map x = match List.assoc_opt x rs with
+      | Some y -> y
+      (* HACK HACK
+         dummy empty queries don't have indices, so we can't find "1@1" or "1@2"
+         in rs: we output a dummy column position (-1) instead *)
+      | _ when x = "1@1" || x = "1@2" -> (`Primitive Primitive.Int, -1)
+      | _ -> assert false
+    in
+    let idx_and_val = function
+      | `Record fl ->
+           let w_tmpl = try List.assoc "2" fl with NotFound _ -> `Record [] in
+           (match List.assoc "1" fl with
+            | `Record fl' -> (match List.assoc "1" fl', List.assoc "2" fl' with
+              | `Primitive (_,a_idx), `Primitive (_,d_idx) -> (a_idx,d_idx,w_tmpl)
+              | _ -> assert false)
+            | _ -> assert false)
+      | _ -> assert false
+    in
+    let tmpl' = FlattenRecords.template_map sql_map tmpl in
+    let (a_idx,d_idx,w_tmpl) = idx_and_val tmpl' in
     let add_row_to_map row m =
       let w = build_unflattened_record_from_array w_tmpl row in
       let a = int_of_string(Array.get row a_idx) in
