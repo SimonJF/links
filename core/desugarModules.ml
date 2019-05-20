@@ -35,15 +35,14 @@
  *)
 
 (* Resolution strategy: We make use of a two-level scope data
-   structure to build up static scopes. The "outer" level represents
-   the parent scope, whilst the "inner" represents the scope being
-   built. Upon entry to a module scope the "inner" scope becomes an
-   "outer" scope, and exploration of the module initiates with an
-   empty "inner" scope. Meaning that after the exploration, the
-   "inner" scope only contains the top-level bindings of the said
-   module. After exploration we restore the old "outer" and "inner"
-   context, and add the explored module to the "inner" context with
-   its scope. *)
+   structure to build up static scopes. The "visible" level contains
+   everything that is visible in the current scope, whilst the "delta"
+   level contains everything that is *defined* in the immediate
+   scope. The "delta" is emptied upon entry to a module scope. Meaning
+   that after the exploration, the "delta" scope only contains the
+   top-level bindings of the said module. After exploration we restore
+   the previous context, and bind the name of module to the computed
+   "delta" in both the "visible" and "delta" contexts. *)
 
 
 open Utility
@@ -167,9 +166,14 @@ end
 module Scope = struct
   module S = BasicScope
   type scope = S.t
-  type t = { inner: scope; outer: scope }
+  type t =
+    { visible: scope;   (* Everything which is *visible*. *)
+      delta: scope }    (* Everything which is *defined* in the current
+                           scope but not in the parent scope. *)
 
-  let empty = { inner = S.empty; outer = S.empty }
+  let empty =
+    { visible = S.empty;
+      delta = S.empty }
 
   module Resolve = struct
     (* We do not produce an error if a name fails to resolve, which
@@ -179,25 +183,20 @@ module Scope = struct
     let best_guess : name list -> name
       = String.concat "."
 
+    let generic_name_resolve : (name list -> scope -> name) -> name list -> t -> name
+      = fun resolver prefix scopes ->
+      try resolver prefix scopes.visible
+      with Notfound.NotFound _ -> best_guess prefix
+
     let module' : name list -> t -> scope
       = fun names scopes ->
-      try S.Resolve.module' names scopes.inner
-      with Notfound.NotFound _ ->
-        S.Resolve.module' names scopes.outer (* Allow any errors to propagate. *)
+      S.Resolve.module' names scopes.visible (* Allow any errors to propagate. *)
 
     let qualified_var : name list -> t -> name
-      = fun names scopes ->
-      try S.Resolve.var names scopes.inner
-      with Notfound.NotFound _ ->
-        try S.Resolve.var names scopes.outer
-        with Notfound.NotFound _ -> best_guess names
+      = generic_name_resolve S.Resolve.var
 
     let qualified_typename : name list -> t -> name
-      = fun names scopes ->
-      try S.Resolve.typename names scopes.inner
-      with Notfound.NotFound _ ->
-        try S.Resolve.typename names scopes.outer
-        with Notfound.NotFound _ -> best_guess names
+      = generic_name_resolve S.Resolve.typename
 
     let var : name -> t -> name
       = fun name scopes -> qualified_var [name] scopes
@@ -209,30 +208,35 @@ module Scope = struct
   module Extend = struct
     let module' : name -> t -> t -> t
       = fun module_name module_scope scopes ->
-      { scopes with inner = S.Extend.module' module_name module_scope.inner scopes.inner }
+      let delta = S.Extend.module' module_name module_scope.delta scopes.delta in
+      let visible = S.Extend.module' module_name module_scope.delta scopes.visible in
+      { visible; delta }
 
     let var : name -> string -> t -> t
       = fun term_name prefixed_name scopes ->
-      { scopes with inner = S.Extend.var term_name prefixed_name scopes.inner }
+      let delta = S.Extend.var term_name prefixed_name scopes.delta in
+      let visible = S.Extend.var term_name prefixed_name scopes.visible in
+      { visible; delta }
 
     let typename : name -> string -> t -> t
       = fun typename prefixed_name scopes ->
-      { scopes with inner = S.Extend.typename typename prefixed_name scopes.inner }
+      let delta = S.Extend.typename typename prefixed_name scopes.delta in
+      let visible = S.Extend.typename typename prefixed_name scopes.visible in
+      { visible; delta }
 
     let synthetic_module : name list -> scope -> t -> t
       = fun path module_scope scopes ->
-      { scopes with inner = S.Extend.synthetic_module path module_scope scopes.inner }
+      let visible = S.Extend.synthetic_module path module_scope scopes.visible in
+      { scopes with visible }
   end
 
   let open_module : scope -> t -> t
     = fun module_scope scopes ->
-    let inner = S.shadow scopes.inner module_scope in
-    { scopes with inner }
+    { scopes with visible = S.shadow scopes.visible module_scope }
 
   let renew : t -> t
     = fun scopes ->
-    let outer = S.shadow scopes.outer scopes.inner in
-    { outer; inner = S.empty }
+    { scopes with delta = S.empty }
 end
 
 let rec desugar_module : ?toplevel:bool -> Epithet.t -> Scope.t -> Sugartypes.binding -> binding list * Scope.t
@@ -245,13 +249,13 @@ let rec desugar_module : ?toplevel:bool -> Epithet.t -> Scope.t -> Sugartypes.bi
      let scope'' = Scope.Extend.module' name scope' scope in
      (bs', scope'')
   | _ -> assert false
-and desugar ?(toplevel=false) (renamer : Epithet.t) (scope : Scope.t) =
+and desugar ?(toplevel=false) (renamer' : Epithet.t) (scope' : Scope.t) =
   let open Sugartypes in
   object(self : 'self_type)
     inherit SugarTraversals.map as super
 
-    val mutable scope = scope
-    val mutable renamer = renamer
+    val mutable scope = scope'
+    val mutable renamer = renamer'
     method get_renamer = renamer
     method get_scope = scope
 
@@ -481,9 +485,11 @@ and desugar ?(toplevel=false) (renamer : Epithet.t) (scope : Scope.t) =
 
     method bindings = function
       | [] -> []
-      | { node = Import names; pos } :: bs ->
+      | { node = Import { path; pollute }; pos } :: bs ->
          self#extension_guard pos;
-         self#import_module pos names; self#bindings bs
+         self#import_module pos path;
+         (if pollute then self#open_module pos path);
+         self#bindings bs
       | { node = Open names; pos } :: bs ->
         (* Affects [scope]. *)
          self#extension_guard pos;
@@ -506,25 +512,32 @@ and desugar ?(toplevel=false) (renamer : Epithet.t) (scope : Scope.t) =
 
     method! sentence : sentence -> sentence = function
       | Definitions defs -> Definitions (self#bindings defs)
+      | Expression exp -> Expression (self#phrase exp)
       | s -> super#sentence s
   end
 
+(* To make modules behave as expected in interactive mode, we need to
+   keep a little bit of state around. *)
+let scope : Scope.t ref = ref Scope.empty
+let renamer : Epithet.t ref = ref Epithet.empty
+
 let desugar_program : Sugartypes.program -> Sugartypes.program
   = fun program ->
+  let interacting = Settings.get_value Basicsettings.interactive_mode in
   (* TODO move to this logic to the loader. *)
   let program = Chaser.add_dependencies program in
   let program = DesugarAlienBlocks.transform_alien_blocks program in
   (* Printf.fprintf stderr "Before elaboration:\n%s\n%!" (Sugartypes.show_program program); *)
-  let result = (desugar ~toplevel:true Epithet.empty Scope.empty)#program program in
+  let renamer', scope' = if interacting then !renamer, !scope else Epithet.empty, Scope.empty in
+  let desugar = desugar ~toplevel:true renamer' scope' in
+  let result = desugar#program program in
   (* Printf.fprintf stderr "After elaboration:\n%s\n%!" (Sugartypes.show_program result); *)
+  ignore (if interacting then (scope := desugar#get_scope; renamer := desugar#get_renamer));
   result
 
 
-let desugar_sentence : unit -> Sugartypes.sentence -> Sugartypes.sentence
-  = fun () ->
-  let scope : Scope.t ref = ref Scope.empty in
-  let renamer : Epithet.t ref = ref Epithet.empty in
-  fun sentence ->
+let desugar_sentence : Sugartypes.sentence -> Sugartypes.sentence
+  = fun sentence ->
   let sentence = Chaser.add_dependencies_sentence sentence in
   let sentence = DesugarAlienBlocks.sentence sentence in
   let visitor = desugar ~toplevel:true !renamer !scope in
