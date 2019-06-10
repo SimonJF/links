@@ -144,7 +144,8 @@ and rec_appl = {
   r_unwind: type_arg list -> bool -> typ;
   r_linear: unit -> bool option
 }
-and typ =    [ `Not_typed
+and typ =
+    [ `Not_typed
     | `Primitive of Primitive.t
     | `Function of (typ * row * typ)
     | `Lolli of (typ * row * typ)
@@ -2261,14 +2262,33 @@ struct
                sd w ^ "," ^
                sd n ^ ")"
           | `Lens typ ->
-            let sort = Lens.Type.sort typ in
-            let cols = Lens.Sort.cols sort in
+            let open Lens in
+            let sort = Type.sort typ in
+            let cols = Sort.present_colset sort |> Column.Set.elements in
+            let fds = Sort.fds sort in
+            let predicate =
+              Sort.predicate sort
+              |> OptionUtils.from_option (Phrase.Constant.bool true) in
             let pp_col f col =
               Format.fprintf f "%s : %a"
                 (Lens.Column.alias col)
-                Lens.Phrase.Type.pp (Lens.Column.typ col) in
-            Format.asprintf "Lens(%a)"
-              (Lens.Utility.Format.pp_comma_list pp_col) cols
+                Lens.Phrase.Type.pp_pretty (Lens.Column.typ col) in
+            if Lens.Type.is_abstract typ
+            then
+              if Lens.Type.is_checked typ
+              then
+                Format.asprintf "LensChecked((%a), { %a })"
+                  (Lens.Utility.Format.pp_comma_list pp_col) cols
+                  Lens.Fun_dep.Set.pp_pretty fds
+              else
+                Format.asprintf "LensUnchecked((%a), { %a })"
+                  (Lens.Utility.Format.pp_comma_list pp_col) cols
+                  Lens.Fun_dep.Set.pp_pretty fds
+            else
+              Format.asprintf "Lens((%a), %a, { %a })"
+                (Lens.Utility.Format.pp_comma_list pp_col) cols
+                Lens.Database.fmt_phrase_dummy predicate
+                Lens.Fun_dep.Set.pp_pretty fds
           | `Alias ((s,[]), _) ->  Module_hacks.Name.prettify s
           | `Alias ((s,ts), _) ->
              Printf.sprintf "%s (%s)"
