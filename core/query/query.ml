@@ -31,50 +31,177 @@ struct
       | Erase     of t * StringSet.t
       | Variant   of string * t
       | XML       of Value.xmlitem
-      | Apply     of string * t list
+      | Apply     of t * t list
       | Closure   of (Ir.var list * Ir.computation) * env
+      | Case      of t * (binder * t) StringMap.t * (binder * t) option
       | Primitive of string
       | Var       of Var.var * Types.datatype StringMap.t
       | Constant  of Constant.t
   and env = Value.env * t Env.Int.t
       [@@deriving show]
 
+  let rec tail_of_t : t -> t = fun v ->
+    let tt = tail_of_t in
+      match v with
+        | For (_, _gs, _os, Singleton (Record fields)) -> Record fields
+        | For (_tag, _gs, _os, If (_, t, Concat [])) -> tt (For (_tag, _gs, _os, t))
+        | _ -> (* Debug.print ("v: "^string_of_t v); *) assert false
+
+  (** Return the type associated with an expression *)
+  (* Inferring the type of an expression is straightforward because all
+     variables are annotated with their types. *)
+  let rec type_of_expression : t -> Types.datatype = fun v ->
+    let te = type_of_expression in
+    let record fields : Types.datatype =
+      Types.make_record_type (StringMap.map te fields)
+    in
+      match v with
+        | Concat [] -> Types.make_list_type(Types.unit_type)
+        | Concat (v::_) -> te v
+        | For (_, _, _os, body) -> te body
+        | Singleton t -> Types.make_list_type (te t)
+        | Record fields -> record fields
+        | If (_, t, _) -> te t
+        | Table (_, _, _, row) -> `Record row
+        | Constant (Constant.Bool   _) -> Types.bool_type
+        | Constant (Constant.Int    _) -> Types.int_type
+        | Constant (Constant.Char   _) -> Types.char_type
+        | Constant (Constant.Float  _) -> Types.float_type
+        | Constant (Constant.String _) -> Types.string_type
+        | Project (Var (_, field_types), name) -> StringMap.find name field_types
+        | Apply (Primitive "Empty", _) -> Types.bool_type (* HACK *)
+		| Apply (Primitive f, _) -> TypeUtils.return_type (Env.String.lookup Lib.type_env f)
+        | e -> Debug.print("Can't deduce type for: " ^ show e); assert false
+
+  let default_of_base_type =
+    function
+      | Primitive.Bool   -> Constant (Constant.Bool false)
+      | Primitive.Int    -> Constant (Constant.Int 42)
+      | Primitive.Char   -> Constant (Constant.Char '?')
+      | Primitive.Float  -> Constant (Constant.Float 0.0)
+      | Primitive.String -> Constant (Constant.String "")
+      | _                -> assert false
+
+  let rec value_of_expression = fun v ->
+    let ve = value_of_expression in
+    let value_of_singleton = fun s ->
+      match s with
+        | Singleton v -> ve v
+        | _ -> assert false
+    in
+      match v with
+        | Constant (Constant.Bool   b) -> `Bool b
+        | Constant (Constant.Int    i) -> `Int i
+        | Constant (Constant.Char   c) -> `Char c
+        | Constant (Constant.Float  f) -> `Float f
+        | Constant (Constant.String s) -> Value.box_string s
+        | Table t -> `Table t
+        | Concat vs -> `List (List.map value_of_singleton vs)
+        | Variant (name, v) -> `Variant (name, ve v)
+        | XML xmlitem -> `XML xmlitem
+        | Record fields ->
+            `Record (List.rev (StringMap.fold (fun name v fields ->
+                                                 (name, ve v)::fields)
+                                 fields []))
+        | _ -> assert false
+
+  let rec freshen_for_bindings : Var.var Env.Int.t -> t -> t =
+    fun env v ->
+      let ffb = freshen_for_bindings env in
+        match v with
+        | For (tag, gs, os, b) ->
+          let gs', env' =
+            List.fold_left
+              (fun (gs', env') (x, source) ->
+                let y = Var.fresh_raw_var () in
+                  ((y, ffb source)::gs', Env.Int.bind env' (x, y)))
+              ([], env)
+              gs
+          in
+            For (tag, List.rev gs', List.map (freshen_for_bindings env') os, freshen_for_bindings env' b)
+        | If (c, t, e) -> If (ffb c, ffb t, ffb e)
+        | Table _ as t -> t
+        | Singleton v -> Singleton (ffb v)
+        | Database db -> Database db
+        | Concat vs -> Concat (List.map ffb vs)
+        | Record fields -> Record (StringMap.map ffb fields)
+        | Variant (name, v) -> Variant (name, ffb v)
+        | XML xmlitem -> XML xmlitem
+        | Project (v, name) -> Project (ffb v, name)
+        | Erase (v, names) -> Erase (ffb v, names)
+        | Apply (u, vs) -> Apply (ffb u, List.map ffb vs)
+        | Closure _ as c ->
+          (* we don't attempt to freshen closure bindings *)
+          c
+        | Case (u, cl, d) -> Case (ffb u, StringMap.map (fun (x,y) -> (x, ffb y)) cl, opt_app (fun (x,y) -> Some (x, ffb y)) None d)
+        | Primitive f -> Primitive f
+        | Var (x, ts) as v ->
+          begin
+            match Env.Int.find env x with
+            | None -> v (* Var (x, ts) *)
+            | Some y -> Var (y, ts)
+          end
+        | Constant c -> Constant c
+
+  let table_field_types (_, _, _, (fields, _, _)) =
+    StringMap.map (function
+                    | `Present t -> t
+                    | _ -> assert false) fields
+
+  let unbox_xml =
+    function
+      | XML xmlitem -> xmlitem
+      | _ -> raise (runtime_type_error "failed to unbox XML")
+
+  let unbox_pair =
+    function
+      | Record fields ->
+          let x = StringMap.find "1" fields in
+          let y = StringMap.find "2" fields in
+            x, y
+      | _ -> raise (runtime_type_error "failed to unbox pair")
+
+  let rec unbox_list =
+    function
+      | Concat vs -> concat_map unbox_list vs
+      | Singleton v -> [v]
+      | _ -> raise (runtime_type_error "failed to unbox list")
+
+  let unbox_string =
+    function
+      | Constant (Constant.String s) -> s
+      | (Concat _ | Singleton _) as v ->
+          implode
+            (List.map
+               (function
+                  | Constant (Constant.Char c) -> c
+                  | _ -> raise (runtime_type_error "failed to unbox string"))
+               (unbox_list v))
+      | _ -> raise (runtime_type_error "failed to unbox string")
+
+  let rec field_types_of_list =
+    function
+      | Concat (v::_) -> field_types_of_list v
+      | Singleton (Record fields) -> StringMap.map type_of_expression fields
+      | Table table -> table_field_types table
+      | _ -> assert false
+
+  (* takes a normal form expression and returns true iff it has list type *)
+  let is_list =
+    function
+      | For _
+      | Table _
+      | Singleton _
+      | Concat _
+      | If (_, _, Concat []) -> true
+      | _ -> false
+
+
 end
 
 module Q = Lang
 
 let _show_env = Q.show_env (* Generated by ppx_deriving show *)
-
-let unbox_xml =
-  function
-    | Q.XML xmlitem -> xmlitem
-    | _ -> raise (runtime_type_error "failed to unbox XML")
-
-let unbox_pair =
-  function
-    | Q.Record fields ->
-        let x = StringMap.find "1" fields in
-        let y = StringMap.find "2" fields in
-          x, y
-    | _ -> raise (runtime_type_error "failed to unbox pair")
-
-let rec unbox_list =
-  function
-    | Q.Concat vs -> concat_map unbox_list vs
-    | Q.Singleton v -> [v]
-    | _ -> raise (runtime_type_error "failed to unbox list")
-
-let unbox_string =
-  function
-    | Q.Constant (Constant.String s) -> s
-    | (Q.Concat _ | Q.Singleton _) as v ->
-        implode
-          (List.map
-             (function
-                | Q.Constant (Constant.Char c) -> c
-                | _ -> raise (runtime_type_error "failed to unbox string"))
-             (unbox_list v))
-    | _ -> raise (runtime_type_error "failed to unbox string")
 
 (** Returns which database was used if any.
 
@@ -124,8 +251,9 @@ struct
     | Erase     of pt * StringSet.t
     | Variant   of string * pt
     | XML       of Value.xmlitem
-    | Apply     of string * pt list
+    | Apply     of pt * pt list
     | Lam       of Ir.var list * Ir.computation
+    | Case      of pt * (binder * pt) StringMap.t * (binder * pt) option
     | Primitive of string
     | Var       of (Var.var * Types.datatype StringMap.t)
     | Constant  of Constant.t
@@ -147,7 +275,8 @@ struct
         | Q.XML xmlitem -> XML xmlitem
         | Q.Project (v, name) -> Project (bt v, name)
         | Q.Erase (v, names) -> Erase (bt v, names)
-        | Q.Apply (f, vs) -> Apply (f, List.map bt vs)
+        | Q.Apply (u, vs) -> Apply (bt u, List.map bt vs)
+        | Q.Case (u, cl, d) -> Case (bt u, StringMap.map (fun (x,y) -> (x, bt y)) cl, opt_app (fun (x,y) -> Some (x, bt y)) None d)
         | Q.Closure ((xs, e), _) -> Lam (xs, e)
         | Q.Primitive f -> Primitive f
         | Q.Var (v, t) -> Var (v, t)
@@ -158,112 +287,6 @@ struct
 end
 
 let string_of_t = S.t
-
-let rec tail_of_t : Q.t -> Q.t = fun v ->
-  let tt = tail_of_t in
-  let open Q in
-    match v with
-      | For (_, _gs, _os, Singleton (Record fields)) -> Record fields
-      | For (_tag, _gs, _os, If (_, t, Concat [])) -> tt (For (_tag, _gs, _os, t))
-      | _ -> (* Debug.print ("v: "^string_of_t v); *) assert false
-
-(** Return the type associated with an expression *)
-(* Inferring the type of an expression is straightforward because all
-   variables are annotated with their types. *)
-let rec type_of_expression : Q.t -> Types.datatype = fun v ->
-  let te = type_of_expression in
-  let record fields : Types.datatype =
-    Types.make_record_type (StringMap.map te fields)
-  in
-    let open Q in
-    match v with
-      | Concat [] -> Types.make_list_type(Types.unit_type)
-      | Concat (v::_) -> te v
-      | For (_, _, _os, body) -> te body
-      | Singleton t -> Types.make_list_type (te t)
-      | Record fields -> record fields
-      | If (_, t, _) -> te t
-      | Table (_, _, _, row) -> `Record row
-      | Constant (Constant.Bool   _) -> Types.bool_type
-      | Constant (Constant.Int    _) -> Types.int_type
-      | Constant (Constant.Char   _) -> Types.char_type
-      | Constant (Constant.Float  _) -> Types.float_type
-      | Constant (Constant.String _) -> Types.string_type
-      | Project (Var (_, field_types), name) -> StringMap.find name field_types
-      | Apply ("Empty", _) -> Types.bool_type (* HACK *)
-      | Apply (f, _) -> TypeUtils.return_type (Env.String.lookup Lib.type_env f)
-      | e -> Debug.print("Can't deduce type for: " ^ show e); assert false
-
-let default_of_base_type =
-  function
-    | Primitive.Bool   -> Q.Constant (Constant.Bool false)
-    | Primitive.Int    -> Q.Constant (Constant.Int 42)
-    | Primitive.Char   -> Q.Constant (Constant.Char '?')
-    | Primitive.Float  -> Q.Constant (Constant.Float 0.0)
-    | Primitive.String -> Q.Constant (Constant.String "")
-    | _                -> assert false
-
-let rec value_of_expression = fun v ->
-  let ve = value_of_expression in
-  let value_of_singleton = fun s ->
-    match s with
-      | Q.Singleton v -> ve v
-      | _ -> assert false
-  in
-    let open Q in
-    match v with
-      | Constant (Constant.Bool   b) -> `Bool b
-      | Constant (Constant.Int    i) -> `Int i
-      | Constant (Constant.Char   c) -> `Char c
-      | Constant (Constant.Float  f) -> `Float f
-      | Constant (Constant.String s) -> Value.box_string s
-      | Table t -> `Table t
-      | Concat vs -> `List (List.map value_of_singleton vs)
-      | Variant (name, v) -> `Variant (name, ve v)
-      | XML xmlitem -> `XML xmlitem
-      | Record fields ->
-          `Record (List.rev (StringMap.fold (fun name v fields ->
-                                               (name, ve v)::fields)
-                               fields []))
-      | _ -> assert false
-
-let rec freshen_for_bindings : Var.var Env.Int.t -> Q.t -> Q.t =
-  fun env v ->
-    let ffb = freshen_for_bindings env in
-      let open Q in
-      match v with
-      | For (tag, gs, os, b) ->
-        let gs', env' =
-          List.fold_left
-            (fun (gs', env') (x, source) ->
-              let y = Var.fresh_raw_var () in
-                ((y, ffb source)::gs', Env.Int.bind env' (x, y)))
-            ([], env)
-            gs
-        in
-          For (tag, List.rev gs', List.map (freshen_for_bindings env') os, freshen_for_bindings env' b)
-      | If (c, t, e) -> If (ffb c, ffb t, ffb e)
-      | Table t -> Table t
-      | Singleton v -> Singleton (ffb v)
-      | Database db -> Database db
-      | Concat vs -> Concat (List.map ffb vs)
-      | Record fields -> Record (StringMap.map ffb fields)
-      | Variant (name, v) -> Variant (name, ffb v)
-      | XML xmlitem -> XML xmlitem
-      | Project (v, name) -> Project (ffb v, name)
-      | Erase (v, names) -> Erase (ffb v, names)
-      | Apply (f, vs) -> Apply (f, List.map ffb vs)
-      | Closure (a, c) ->
-        (* we don't attempt to freshen closure bindings *)
-        Closure (a, c)
-      | Primitive f -> Primitive f
-      | Var (x, ts) ->
-        begin
-          match Env.Int.find env x with
-          | None -> Var (x, ts)
-          | Some y -> Var (y, ts)
-        end
-      | Constant c -> Constant c
 
 let labels_of_field_types field_types =
   StringMap.fold
@@ -277,33 +300,6 @@ let record_field_types (t : Types.datatype) : Types.datatype StringMap.t =
   StringMap.map (function
                   | `Present t -> t
                   | _ -> assert false) field_spec_map
-
-let table_field_types (_, _, _, (fields, _, _)) =
-  StringMap.map (function
-                  | `Present t -> t
-                  | _ -> assert false) fields
-
-let rec field_types_of_list =
-  let open Q in
-  function
-    | Concat (v::_) -> field_types_of_list v
-    | Singleton (Record fields) -> StringMap.map type_of_expression fields
-    | Table table -> table_field_types table
-    | _ -> assert false
-
-      (* takes a normal form expression and returns true iff it has list type *)
-let is_list =
-  let open Q in
-  function
-    | For _
-    | Table _
-    | Singleton _
-    | Concat _
-    | If (_, _, Concat []) -> true
-    | _ -> false
-
-
-      (* TODO: Clean up and unify with Queryshredding.Eval *)
 
 module Eval =
 struct
@@ -319,21 +315,20 @@ struct
   let (++) (venv, eenv) (venv', eenv') =
     Value.Env.shadow venv ~by:venv', Env.Int.extend eenv eenv'
 
-  let lookup_fun (f, fvs) =
-    let open Q in
+  let lookup_fun (f, fvs) : Q.t option =
     match Tables.lookup Tables.fun_defs f with
     | Some (finfo, (xs, body), z, location) ->
       Some
       begin
         match Var.name_of_binder (f, finfo) with
         | "concatMap" ->
-          Primitive "ConcatMap"
+          Q.Primitive "ConcatMap"
         | "map" ->
-          Primitive "Map"
+          Q.Primitive "Map"
         | "empty" ->
-          Primitive "Empty"
+          Q.Primitive "Empty"
         | "sortByBase" ->
-          Primitive "SortBy"
+          Q.Primitive "SortBy"
         | _ ->
           begin
             match location with
@@ -343,7 +338,7 @@ struct
                   | None, None       -> Value.Env.empty
                   | Some z, Some fvs -> Value.Env.bind z (fvs, Scope.Local) Value.Env.empty
                   | _, _ -> assert false in
-                Closure ((xs, body), env_of_value_env env)
+                 Q.Closure ((xs, body), env_of_value_env env)
             | Location.Client ->
               raise (Errors.runtime_error ("Attempt to use client function: " ^
                 Js.var_name_binder (f, finfo) ^ " in query"))
@@ -362,27 +357,26 @@ struct
         string_of_int f))
 
   let rec expression_of_value : Value.t -> Q.t =
-    let open Q in
     function
-      | `Bool b   -> Constant (Constant.Bool b)
-      | `Int i    -> Constant (Constant.Int i)
-      | `Char c   -> Constant (Constant.Char c)
-      | `Float f  -> Constant (Constant.Float f)
-      | `String s -> Constant (Constant.String s)
-      | `Table t -> Table t
-      | `Database db -> Database db
+      | `Bool b   -> Q.Constant (Constant.Bool b)
+      | `Int i    -> Q.Constant (Constant.Int i)
+      | `Char c   -> Q.Constant (Constant.Char c)
+      | `Float f  -> Q.Constant (Constant.Float f)
+      | `String s -> Q.Constant (Constant.String s)
+      | `Table t -> Q.Table t
+      | `Database db -> Q.Database db
       | `List vs ->
-          Concat (List.map (fun v -> Singleton (expression_of_value v)) vs)
+          Q.Concat (List.map (fun v -> Q.Singleton (expression_of_value v)) vs)
       | `Record fields ->
-          Record
+          Q.Record
             (List.fold_left
                (fun fields (name, v) -> StringMap.add name (expression_of_value v) fields)
                StringMap.empty
                fields)
-      | `Variant (name, v) -> Variant (name, expression_of_value v)
-      | `XML xmlitem -> XML xmlitem
+      | `Variant (name, v) -> Q.Variant (name, expression_of_value v)
+      | `XML xmlitem -> Q.XML xmlitem
       | `FunctionPtr (f, fvs) -> find_fun (f, fvs)
-      | `PrimitiveFunction (f,_) -> Primitive f
+      | `PrimitiveFunction (f,_) -> Q.Primitive f
       | v ->
           raise (internal_error (Printf.sprintf
               "Cannot convert value %s to expression" (Value.string_of_value v)))
@@ -418,10 +412,10 @@ struct
 
   let eta_expand_list xs =
     let x = Var.fresh_raw_var () in
-    let field_types = field_types_of_list xs in
+    let field_types = Q.field_types_of_list xs in
       ([x, xs], [], Q.Singleton (eta_expand_var (x, field_types)))
 
-  let rec value env : Ir.value -> Q.t = let open Ir in function
+  let rec xlate env : Ir.value -> Q.t = let open Ir in function
     | Constant c -> Q.Constant c
     | Variable var ->
         begin
@@ -460,11 +454,11 @@ struct
                  be eliminated anyway.
               *)
               (* Debug.print ("env v: "^string_of_int var^" = "^string_of_t v); *)
-              freshen_for_bindings (Env.Int.empty) v
+              Q.freshen_for_bindings (Env.Int.empty) v
         end
     | Extend (ext_fields, r) ->
       begin
-        match opt_app (value env) (Q.Record StringMap.empty) r with
+        match opt_app (xlate env) (Q.Record StringMap.empty) r with
           | Q.Record fields ->
             Q.Record (StringMap.fold
                        (fun label v fields ->
@@ -473,76 +467,41 @@ struct
                              "Error adding fields: label %s already present"
                              label
                          else
-                           StringMap.add label (value env v) fields)
+                           StringMap.add label (xlate env v) fields)
                        ext_fields
                        fields)
           | _ -> eval_error "Error adding fields: non-record"
       end
-    | Project (label, r) ->
-      let rec project (r, label) =
-        match r with
-          | Q.Record fields ->
-            assert (StringMap.mem label fields);
-            StringMap.find label fields
-          | Q.If (c, t, e) ->
-            Q.If (c, project (t, label), project (e, label))
-          | Q.Var (x, field_types) ->
-            assert (StringMap.mem label field_types);
-            Q.Project (Q.Var (x, field_types), label)
-          | _ -> eval_error ("Error projecting from record: %s") (string_of_t r)
-      in
-        project (value env r, label)
-    | Erase (labels, r) ->
-      let rec erase (r, labels) =
-        match r with
-          | Q.Record fields ->
-            assert (StringSet.for_all
-                      (fun label -> StringMap.mem label fields) labels);
-            Q.Record
-              (StringMap.fold
-                 (fun label v fields ->
-                   if StringSet.mem label labels then
-                     fields
-                   else
-                     StringMap.add label v fields)
-                 fields
-                 StringMap.empty)
-          | Q.If (c, t, e) ->
-            Q.If (c, erase (t, labels), erase (e, labels))
-          | Q.Var (x, field_types) ->
-            assert (StringSet.subset labels (labels_of_field_types field_types));
-            Q.Erase (Q.Var (x, field_types), labels)
-          | _ -> eval_error "Error erasing from record"
-      in
-        erase (value env r, labels)
-    | Inject (label, v, _) -> Q.Variant (label, value env v)
-    | TAbs (_, v) -> value env v
-    | TApp (v, _) -> value env v
+    | Project (label, r) -> Q.Project (xlate env r, label)
+    | Erase (labels, r) -> Q.Erase (xlate env r, labels)
+    | Inject (label, v, _) -> Q.Variant (label, xlate env v)
+    | TAbs (_, v) -> xlate env v
+    | TApp (v, _) -> xlate env v
 
     | XmlNode (tag, attrs, children) ->
         (* TODO: deal with variables in XML *)
         let children =
           List.fold_right
             (fun v children ->
-               let v = value env v in
-                 List.map unbox_xml (unbox_list v) @ children)
+               let v = xlate env v in
+                 List.map Q.unbox_xml (Q.unbox_list v) @ children)
             children [] in
         let children =
           StringMap.fold
             (fun name v attrs ->
-               Value.Attr (name, unbox_string (value env v)) :: attrs)
+               Value.Attr (name, Q.unbox_string (xlate env v)) :: attrs)
             attrs children
         in
           Q.Singleton (Q.XML (Value.Node (tag, children)))
 
     | ApplyPure (f, ps) ->
-        apply env (value env f, List.map (value env) ps)
+        Q.Apply (xlate env f, List.map (xlate env) ps)
     | Closure (f, _, v) ->
       let (_finfo, (xs, body), z_opt, _location) = Tables.find Tables.fun_defs f in
       let z = OptionUtils.val_of z_opt in
       (* Debug.print ("Converting evalir closure: " ^ Var.show_binder (f, _finfo) ^ " to query closure"); *)
       (* yuck! *)
-      let env' = bind (Value.Env.empty, Env.Int.empty) (z, value env v) in
+      let env' = bind (Value.Env.empty, Env.Int.empty) (z, xlate env v) in
       Q.Closure ((xs, body), env')
       (* (\* Debug.print("looking up query closure: "^string_of_int f); *\) *)
       (* begin *)
@@ -555,90 +514,8 @@ struct
       (*   | _ -> *)
       (*     failwith "ill-formed closure in query compilation" *)
       (* end *)
-    | Coerce (v, _) -> value env v
+    | Coerce (v, _) -> xlate env v
 
-  and apply env : Q.t * Q.t list -> Q.t = let open Q in function
-    | Closure ((xs, body), closure_env), args ->
-      (* Debug.print ("Applying closure"); *)
-      (* Debug.print ("body: " ^ Ir.show_computation body); *)
-      (* Debug.print("Applying query closure: " ^ show_t (`Closure ((xs, body), closure_env))); *)
-      (* Debug.print("args: " ^ mapstrcat ", " show_t args); *)
-        let env = env ++ closure_env in
-        let env = List.fold_right2 (fun x arg env ->
-            bind env (x, arg)) xs args env in
-        (* Debug.print("Applied"); *)
-          computation env body
-    | Primitive "AsList", [xs] ->
-        xs
-    | Primitive "Cons", [x; xs] ->
-        reduce_concat [Singleton x; xs]
-    | Primitive "Concat", [xs; ys] ->
-        reduce_concat [xs; ys]
-    | Primitive "ConcatMap", [f; xs] ->
-        begin
-          match f with
-            | Closure (([x], body), closure_env) ->
-                let env = env ++ closure_env in
-                  reduce_for_source
-                    (xs, fun v -> computation (bind env (x, v)) body)
-            | _ -> assert false
-        end
-    | Primitive "Map", [f; xs] ->
-        begin
-          match f with
-            | Closure (([x], body), closure_env) ->
-                let env = env ++ closure_env in
-                  reduce_for_source
-                    (xs, fun v -> Singleton (computation (bind env (x, v)) body))
-            | _ -> assert false
-        end
-    | Primitive "SortBy", [f; xs] ->
-        begin
-          match xs with
-            | Concat [] -> Concat []
-            | _ ->
-                let gs, os', body =
-                  match xs with
-                    | For (_, gs, os', body) -> gs, os', body
-                    | Concat (_::_)
-                    | Singleton _
-                    | Table _ ->
-                        (* I think we can omit the `Table case as it
-                           can never occur *)
-                        (* eta-expand *)
-                        eta_expand_list xs
-                    | _ -> assert false in
-                let xs = For (None, gs, os', body) in
-                  begin
-                    match f with
-                      | Closure (([x], os), closure_env) ->
-                          let os =
-                            let env = env ++ closure_env in
-                              let o = computation (bind env (x, tail_of_t xs)) os in
-                                match o with
-                                  | Record fields ->
-                                      List.rev (StringMap.fold (fun _ o os -> o::os) fields [])
-                                  | _ -> assert false
-                          in
-                            For (None, gs, os @ os', body)
-                      | _ -> assert false
-                  end
-        end
-    | Primitive "not", [v] ->
-      reduce_not (v)
-    | Primitive "&&", [v; w] ->
-      reduce_and (v, w)
-    | Primitive "||", [v; w] ->
-      reduce_or (v, w)
-    | Primitive "==", [v; w] ->
-      reduce_eq (v, w)
-    | Primitive f, args ->
-        Apply (f, args)
-    | If (c, t, e), args ->
-        reduce_if_condition (c, apply env (t, args), apply env (e, args))
-    | Apply (f, args), args' ->
-        Apply (f, args @ args')
-    | _ -> eval_error "Application of non-function"
   and computation env (binders, tailcomp) : Q.t =
     let open Ir in
     match binders with
@@ -663,24 +540,24 @@ struct
               | Module _ -> raise (internal_error "Not implemented modules yet")
           end
   and tail_computation env : Ir.tail_computation -> Q.t = let open Ir in function
-    | Return v -> value env v
+    | Return v -> xlate env v
     | Apply (f, args) ->
-        apply env (value env f, List.map (value env) args)
+        Q.Apply (xlate env f, List.map (xlate env) args)
     | Special (Ir.Query (None, e, _)) -> computation env e
     | Special (Ir.Table (db, name, keys, (readtype, _, _))) as _s ->
        (** WR: this case is because shredding needs to access the keys of tables
            but can we avoid it (issue #432)? *)
        (* Copied almost verbatim from evalir.ml, which seems wrong, we should probably call into that. *)
        begin
-         match value env db, value env name, value env keys, (TypeUtils.concrete_type readtype) with
+         match xlate env db, xlate env name, xlate env keys, (TypeUtils.concrete_type readtype) with
          | Q.Database (db, params), name, keys, `Record row ->
         let unboxed_keys =
           List.map
         (fun key ->
-         List.map unbox_string (unbox_list key))
-        (unbox_list keys)
+         List.map Q.unbox_string (Q.unbox_list key))
+        (Q.unbox_list keys)
         in
-            Q.Table ((db, params), unbox_string name, unboxed_keys, row)
+            Q.Table ((db, params), Q.unbox_string name, unboxed_keys, row)
          | _ -> eval_error "Error evaluating table handle"
        end
     | Special _s ->
@@ -693,15 +570,71 @@ struct
          SML#.)  *)
       raise (Errors.runtime_error "special not allowed in query block")
     | Case (v, cases, default) ->
+        let v' = xlate env v in
+        let cases' = StringMap.map (fun (x,y) -> (x, computation env y)) cases in
+        let default' = opt_app (fun (x,y) -> Some (x, computation env y)) None default in
+        Q.Case (v', cases', default')
+    | If (c, t, e) ->
+      let c = xlate env c in
+      let t = computation env t in
+      let e = computation env e in
+        Q.If (c, t, e)
+
+  let rec norm env : Q.t -> Q.t =
+    function
+    | Q.Record fl -> Q.Record (StringMap.map (norm env) fl)
+    | Q.Concat xs -> reduce_concat env xs
+    | Q.Project (r, label) ->
+      let rec project (r, label) =
+        match r with
+          | Q.Record fields ->
+            assert (StringMap.mem label fields);
+            StringMap.find label fields
+          | Q.If (c, t, e) ->
+            Q.If (c, project (t, label), project (e, label))
+          | Q.Var (_x, field_types) ->
+            assert (StringMap.mem label field_types);
+            Q.Project (r, label)
+          | _ -> eval_error ("Error projecting from record: %s") (string_of_t r)
+      in
+        project (norm env r, label)
+    | Q.Erase (r, labels) ->
+	let rec erase (r, labels) =
+          match r with
+          | Q.Record fields ->
+            assert (StringSet.for_all
+                      (fun label -> StringMap.mem label fields) labels);
+            Q.Record
+              (StringMap.fold
+                 (fun label v fields ->
+                   if StringSet.mem label labels then
+                     fields
+                   else
+                     StringMap.add label v fields)
+                 fields
+                 StringMap.empty)
+          | Q.If (c, t, e) ->
+            Q.If (c, erase (t, labels), erase (e, labels))
+          | Q.Var (_x, field_types) ->
+            assert (StringSet.subset labels (labels_of_field_types field_types));
+            Q.Erase (r, labels)
+          | _ -> eval_error "Error erasing from record"
+      in
+        erase (norm env r, labels)
+    | Q.Variant (label, v) -> Q.Variant (label, norm env v)
+    | Q.Apply (f, xs) -> apply env (norm env f, List.map (norm env) xs)
+    | Q.If (c, t, e) ->
+        reduce_if_condition env (c, norm env t, norm env e)
+    | Q.Case (v, cases, default) ->
       let rec reduce_case (v, cases, default) =
-        match v with
+        match norm env v with
           | Q.Variant (label, v) as w ->
             begin
               match StringMap.lookup label cases, default with
                 | Some ((x, _), c), _ ->
-                  computation (bind env (x, v)) c
+                  norm (bind env (x, v)) c
                 | None, Some ((z, _), c) ->
-                  computation (bind env (z, w)) c
+                  norm (bind env (z, w)) c
                 | None, None -> eval_error "Pattern matching failed"
             end
           | Q.If (c, t, e) ->
@@ -711,13 +644,94 @@ struct
                reduce_case (e, cases, default))
           |  _ -> assert false
       in
-        reduce_case (value env v, cases, default)
-    | If (c, t, e) ->
-      let c = value env c in
-      let t = computation env t in
-      let e = computation env e in
-        reduce_if_condition (c, t, e)
-  and reduce_concat vs =
+        reduce_case (norm env v, cases, default)
+    | v -> v
+
+  and apply env : Q.t * Q.t list -> Q.t = function
+    | Q.Closure ((xs, body), closure_env), args ->
+      (* Debug.print ("Applying closure"); *)
+      (* Debug.print ("body: " ^ Ir.show_computation body); *)
+      (* Debug.print("Applying query closure: " ^ show_t (`Closure ((xs, body), closure_env))); *)
+      (* Debug.print("args: " ^ mapstrcat ", " show_t args); *)
+        let env = env ++ closure_env in
+        let env = List.fold_right2 (fun x arg env ->
+            bind env (x, arg)) xs args env in
+        (* Debug.print("Applied"); *)
+          norm_comp env body
+    | Q.Primitive "AsList", [xs] ->
+        xs
+    | Q.Primitive "Cons", [x; xs] ->
+        reduce_concat env [Q.Singleton x; xs]
+    | Q.Primitive "Concat", ([_xs; _ys] as l) ->
+        reduce_concat env l
+    | Q.Primitive "ConcatMap", [f; xs] ->
+        begin
+          match f with
+            | Q.Closure (([x], body), closure_env) ->
+                let env = env ++ closure_env in
+                  reduce_for_source env
+                    (xs, fun v -> let env = bind env (x, v) in norm_comp env body)
+            | _ -> assert false
+        end
+    | Q.Primitive "Map", [f; xs] ->
+        begin
+          match f with
+            | Q.Closure (([x], body), closure_env) ->
+                let env = env ++ closure_env in
+                  reduce_for_source env
+                    (xs, fun v -> let env = bind env (x, v) in Q.Singleton (norm_comp env body))
+            | _ -> assert false
+        end
+    | Q.Primitive "SortBy", [f; xs] ->
+        begin
+          match xs with
+            | Q.Concat [] -> Q.Concat []
+            | _ ->
+                let gs, os', body =
+                  match xs with
+                    | Q.For (_, gs, os', body) -> gs, os', body
+                    | Q.Concat (_::_)
+                    | Q.Singleton _
+                    | Q.Table _ ->
+                        (* I think we can omit the `Table case as it
+                           can never occur *)
+                        (* eta-expand *)
+                        eta_expand_list xs
+                    | _ -> assert false in
+                let xs = Q.For (None, gs, os', body) in
+                  begin
+                    match f with
+                      | Q.Closure (([x], os), closure_env) ->
+                          let os =
+                            let env = bind (env ++ closure_env) (x, Q.tail_of_t xs) in
+                              let o = norm_comp env os in
+                                match o with
+                                  | Q.Record fields ->
+                                      List.rev (StringMap.fold (fun _ o os -> o::os) fields [])
+                                  | _ -> assert false
+                          in
+                            Q.For (None, gs, os @ os', body)
+                      | _ -> assert false
+                  end
+        end
+    | Q.Primitive "not", [v] ->
+      reduce_not env (v)
+    | Q.Primitive "&&", [v; w] ->
+      reduce_and env (v, w)
+    | Q.Primitive "||", [v; w] ->
+      reduce_or env (v, w)
+    | Q.Primitive "==", [v; w] ->
+      reduce_eq env (v, w)
+    | Q.Primitive f, args ->
+        Q.Apply (Q.Primitive f, args)
+    | Q.If (c, t, e), args ->
+        reduce_if_condition env (c, apply env (t, args), apply env (e, args))
+    | Q.Apply (f, args), args' ->
+        apply env (f, args @ args')
+    | t, _ -> eval_error "Application of non-function: %s" (string_of_t t)
+
+  and reduce_concat env vs =
+    let vs = List.map (norm env) vs in
     let vs =
       concat_map
         (function
@@ -728,17 +742,17 @@ struct
       match vs with
         | [v] -> v
         | vs -> Q.Concat vs
-  and reduce_for_source : Q.t * (Q.t -> Q.t) -> Q.t =
+  and reduce_for_source env : Q.t * (Q.t -> Q.t) -> Q.t =
     fun (source, body) ->
-      let rs = fun source -> reduce_for_source (source, body) in
+      let rs = fun source -> reduce_for_source env (source, body) in
         let open Q in
-        match source with
+        match norm env source with
           | Singleton v -> body v
           | Concat vs ->
-            reduce_concat (List.map rs vs)
+            reduce_concat env (List.map rs vs)
           | If (c, t, Concat []) ->
-            reduce_for_source
-              (t, fun v -> reduce_where_then (c, body v))
+            reduce_for_source env
+              (t, fun v -> reduce_where_then env (c, body v))
           | For (_, gs, os, v) ->
             (* NOTE:
 
@@ -765,43 +779,49 @@ struct
     match body with
       | Q.For (_, gs', os', body') -> Q.For (None, gs @ gs', os @ os', body')
       | _                         -> Q.For (None, gs, os, body)
-  and reduce_if_condition (c, t, e) =
+  and reduce_if_condition env (c, t, e) =
     let open Q in
+    let c = norm env c in
     match c with
       | Constant (Constant.Bool true) -> t
       | Constant (Constant.Bool false) -> e
       | If (c', t', _) ->
-        reduce_if_body
-          (reduce_or (reduce_and (c', t'),
-                      reduce_and (reduce_not c', t')),
+        reduce_if_body env
+          (reduce_or env (reduce_and env (c', t'),
+                      reduce_and env (reduce_not env c', t')),
            t,
            e)
       | _ ->
         if is_list t then
           if e = nil then
-            reduce_where_then (c, t)
+            reduce_where_then env (c, t)
           else
-            reduce_concat [reduce_where_then (c, t);
-                           reduce_where_then (reduce_not c, e)]
+            reduce_concat env [reduce_where_then env (c, t);
+                           reduce_where_then env (reduce_not env c, e)]
         else
-          reduce_if_body (c, t, e)
-  and reduce_where_then (c, t) =
+          reduce_if_body env (c, t, e)
+  and reduce_where_then env (c, t) =
     let open Q in
+    let t = norm env t in
     match t with
       (* optimisation *)
       | Constant (Constant.Bool true) -> t
       | Constant (Constant.Bool false) -> Concat []
 
       | Concat vs ->
-        reduce_concat (List.map (fun v -> reduce_where_then (c, v)) vs)
+        reduce_concat env (List.map (fun v -> reduce_where_then env (c, v)) vs)
       | For (_, gs, os, body) ->
-        For (None, gs, os, reduce_where_then (c, body))
+        For (None, gs, os, reduce_where_then env (c, body))
       | If (c', t', Concat []) ->
-        reduce_where_then (reduce_and (c, c'), t')
+        reduce_where_then env (reduce_and env (c, c'), t')
       | _ ->
         If (c, t, Concat [])
-  and reduce_if_body (c, t, e) =
+  and reduce_if_body env (c, t, e) =
     let open Q in
+    (* WR: I believe t and e here are always normalized, so no reason to
+       re-normalize them?
+    let t = norm env t in
+    *)
     match t with
       | Record then_fields ->
         begin match e with
@@ -811,7 +831,7 @@ struct
               (StringMap.fold
                  (fun name t fields ->
                    let e = StringMap.find name else_fields in
-                     StringMap.add name (reduce_if_body (c, t, e)) fields)
+                     StringMap.add name (reduce_if_body env (c, t, e)) fields)
                  then_fields
                  StringMap.empty)
           (* NOTE: this relies on any record variables having
@@ -822,36 +842,36 @@ struct
         begin
           match t, e with
             | Constant (Constant.Bool true), _ ->
-              reduce_or (c, e)
+              reduce_or env (c, e)
             | _, Constant (Constant.Bool false) ->
-              reduce_and (c, t)
+              reduce_and env (c, t)
             | _ ->
               If (c, t, e)
         end
   (* simple optimisations *)
-  and reduce_and (a, b) =
+  and reduce_and env (a, b) =
     let open Q in
-    match a, b with
+    match norm env a, norm env b with
       | Constant (Constant.Bool true), x
       | x, Constant (Constant.Bool true)
       | (Constant (Constant.Bool false) as x), _
       | _, (Constant (Constant.Bool false) as x) -> x
-      | _ -> Apply ("&&", [a; b])
-  and reduce_or (a, b) =
+      | _ -> Apply  (Primitive "&&", [a; b])
+  and reduce_or env (a, b) =
     let open Q in
-    match a, b with
+    match norm env a, norm env b with
       | (Constant (Constant.Bool true) as x), _
       | _, (Constant (Constant.Bool true) as x)
       | Constant (Constant.Bool false), x
       | x, Constant (Constant.Bool false) -> x
-      | _ -> Apply ("||", [a; b])
-  and reduce_not a =
+      | _ -> Apply  (Primitive "||", [a; b])
+  and reduce_not env a =
     let open Q in
-    match a with
+    match norm env a with
       | Constant (Constant.Bool false) -> Constant (Constant.Bool true)
       | Constant (Constant.Bool true)  -> Constant (Constant.Bool false)
-      | _                       -> Apply ("not", [a])
-  and reduce_eq (a, b) =
+      | _                       -> Apply  (Primitive "not", [a])
+  and reduce_eq env (a, b) =
     let open Q in
     let bool x = Constant (Constant.Bool x) in
     let eq_constant =
@@ -861,29 +881,44 @@ struct
         | (Constant.Float a , Constant.Float b)  -> bool (a = b)
         | (Constant.Char a  , Constant.Char b)   -> bool (a = b)
         | (Constant.String a, Constant.String b) -> bool (a = b)
-        | (a, b)                 -> Apply ("==", [Constant a; Constant b])
+        | (a, b)                 -> Apply (Primitive "==", [Constant a; Constant b])
     in
-      match a, b with
+      match norm env a, norm env b with
         | (Constant a, Constant b) -> eq_constant (a, b)
         | (Variant (s1, a), Variant (s2, b)) ->
           if s1 <> s2 then
             Constant (Constant.Bool false)
           else
-            reduce_eq (a, b)
+            reduce_eq env (a, b)
         | (Record lfields, Record rfields) ->
           List.fold_right2
             (fun (_, v1) (_, v2) e ->
-              reduce_and (reduce_eq (v1, v2), e))
+              reduce_and env (reduce_eq env (v1, v2), e))
             (StringMap.to_alist lfields)
             (StringMap.to_alist rfields)
             (Constant (Constant.Bool true))
-        | (a, b) -> Apply ("==", [a; b])
+        | (a, b) -> Apply (Primitive "==", [a; b])
+  and norm_comp env c = norm env (computation env c)
+
+(*
+  let norm env t0 =
+    begin
+      Printf.printf "NORM: input %s\n" (string_of_t t0);
+      let res = norm env t0 in
+      Printf.printf "NORM: output %s\n\n" (string_of_t res);
+      res
+    end
+	*)
 
   let eval env e =
 (*    Debug.print ("e: "^Ir.show_computation e); *)
-    computation (env_of_value_env env) e
-end
+    norm_comp (env_of_value_env env) e
 
+  let reduce_where_then = reduce_where_then (Value.Env.empty, Env.Int.empty)
+
+  let reduce_and = reduce_and (Value.Env.empty, Env.Int.empty)
+
+end
 
 (* convert a regexp to a like if possible *)
 let rec likeify v =
@@ -1010,7 +1045,7 @@ and base : Sql.index -> Q.t -> Sql.base = fun index ->
   function
     | If (c, t, e) ->
       Sql.Case (base index c, base index t, base index e)
-    | Apply ("tilde", [s; r]) ->
+    | Apply (Primitive "tilde", [s; r]) ->
       begin
         match likeify r with
           | Some r ->
@@ -1025,11 +1060,11 @@ and base : Sql.index -> Q.t -> Sql.base = fun index ->
                 in
                   Sql.Apply ("RLIKE", [base index s; r])
         end
-    | Apply ("Empty", [v]) ->
+    | Apply (Primitive "Empty", [v]) ->
         Sql.Empty (unit_query v)
-    | Apply ("length", [v]) ->
+    | Apply (Primitive "length", [v]) ->
         Sql.Length (unit_query v)
-    | Apply (f, vs) ->
+    | Apply (Primitive f, vs) ->
         Sql.Apply (f, List.map (base index) vs)
     | Project (Var (x, _field_types), name) ->
         Sql.Project (x, name)
@@ -1068,7 +1103,7 @@ type let_query = let_clause list
 
 let gens_index (gs : (Var.var * Q.t) list)   =
   let all_fields t =
-    let field_types = table_field_types t in
+    let field_types = Q.table_field_types t in
     labels_of_field_types field_types
   in
  (* Use keys if available *)
@@ -1151,9 +1186,9 @@ let compile_update : Value.database -> Value.env ->
   fun db env ((x, table, field_types), where, body) ->
     let env = Eval.bind (Eval.env_of_value_env env) (x, Q.Var (x, field_types)) in
 (*      let () = opt_iter (fun where ->  Debug.print ("where: "^Ir.show_computation where)) where in*)
-    let where = opt_map (Eval.computation env) where in
+    let where = opt_map (Eval.norm_comp env) where in
 (*       Debug.print ("body: "^Ir.show_computation body); *)
-    let body = Eval.computation env body in
+    let body = Eval.norm_comp env body in
     let q = update db ((x, table), where, body) in
       Debug.print ("Generated update query: "^q);
       q
@@ -1162,7 +1197,14 @@ let compile_delete : Value.database -> Value.env ->
   ((Ir.var * string * Types.datatype StringMap.t) * Ir.computation option) -> string =
   fun db env ((x, table, field_types), where) ->
     let env = Eval.bind (Eval.env_of_value_env env) (x, Q.Var (x, field_types)) in
-    let where = opt_map (Eval.computation env) where in
+    let where = opt_map (Eval.norm_comp env) where in
     let q = delete db ((x, table), where) in
       Debug.print ("Generated update query: "^q);
       q
+
+let is_list = Q.is_list
+let table_field_types = Q.table_field_types
+let value_of_expression = Q.value_of_expression
+let default_of_base_type = Q.default_of_base_type
+let type_of_expression = Q.type_of_expression
+let unbox_xml = Q.unbox_xml

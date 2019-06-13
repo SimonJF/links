@@ -21,8 +21,9 @@ sig
       | Erase     of t * StringSet.t
       | Variant   of string * t
       | XML       of Value.xmlitem
-      | Apply     of string * t list
-      | Closure   of (Ir.var list * Ir.computation) * env
+      | Apply     of t * t list
+      | Closure   of (Var.var list * Ir.computation) * env
+      | Case      of t * (Var.binder * t) StringMap.t * (Var.binder * t) option
       | Primitive of string
       | Var       of Var.var * Types.datatype StringMap.t
       | Constant  of Constant.t

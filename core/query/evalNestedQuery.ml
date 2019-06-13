@@ -30,8 +30,10 @@ let tag_query : QL.t -> QL.t =
         | Erase (e, fields) -> Erase (tag e, fields)
         | Variant (l, e) -> Variant (l, tag e)
         | XML v -> XML v
-        | Apply (f, es) -> Apply (f, List.map tag es)
+        | Apply (u, vs) -> Apply (tag u, List.map tag vs)
+(*        | ApplyPrim (f, es) -> ApplyPrim (f, List.map tag es) *)
         | Closure ((xs, body), env) -> Closure ((xs, body), env)
+        | Case (u, cs, d) -> Case (tag u, StringMap.map (fun (x,y) -> (x, tag y)) cs, opt_app (fun (x,y) -> Some (x, tag y)) None d)
         | Primitive p -> Primitive p
         | Var (x, t) -> Var (x, t)
         | Constant c -> Constant c
@@ -162,8 +164,8 @@ struct
     let open Q.Lang in
     function
       | Project (v,l) -> Project (v,l)
-      | Apply ("Empty", [e]) -> Apply ("Empty", [shred_outer e []])
-      | Apply ("length", [e]) -> Apply ("length", [shred_outer e []])
+      | Apply (Primitive "Empty", [e]) -> Apply (Primitive "Empty", [shred_outer e []])
+      | Apply (Primitive "length", [e]) -> Apply (Primitive "length", [shred_outer e []])
       | Apply (f, vs) -> Apply (f, List.map (shinner a) vs)
       | Record fields ->
         Record (StringMap.map (shinner a) fields)
@@ -263,7 +265,7 @@ struct
         | Concat vs ->
           concat_map (query gs os cond) vs
         | If (cond', v, Concat []) ->
-          query gs os (Q.Eval.reduce_and (cond, cond')) v
+           query gs os (Q.Eval.reduce_and (cond, cond')) v
         | For (_, gs', os', body) ->
           query (gs @ gs') (os @ os') cond body
         | _ -> assert false
@@ -380,10 +382,10 @@ struct
                 (Project
                     (Project (Var (z, z_fields), "1"), string_of_int i), l)
         end
-      | Apply ("Empty", [e]) -> Apply ("Empty", [lins_inner_query (z, z_fields) ys e])
-      | Apply ("length", [e]) -> Apply ("length", [lins_inner_query (z, z_fields) ys e])
-      | Apply (f, es) ->
-        Apply (f, List.map (lins_inner (z, z_fields) ys) es)
+      | Apply (Primitive "Empty", [e]) -> Apply (Primitive "Empty", [lins_inner_query (z, z_fields) ys e])
+      | Apply (Primitive "length", [e]) -> Apply (Primitive "length", [lins_inner_query (z, z_fields) ys e])
+      | Apply (Primitive f, es) ->
+        Apply (Primitive f, List.map (lins_inner (z, z_fields) ys) es)
       | Record fields ->
         Record (StringMap.map (lins_inner (z, z_fields) ys) fields)
       | Primitive "out" ->
@@ -486,9 +488,9 @@ struct
     function
       | Constant c    -> Constant c
       | Primitive p   -> Primitive p
-      | Apply ("Empty", [e]) -> Apply ("Empty", [flatten_inner_query e])
-      | Apply ("length", [e]) -> Apply ("length", [flatten_inner_query e])
-      | Apply (f, es) -> Apply (f, List.map flatten_inner es)
+      | Apply (Primitive "Empty", [e]) -> Apply (Primitive "Empty", [flatten_inner_query e])
+      | Apply (Primitive "length", [e]) -> Apply (Primitive "length", [flatten_inner_query e])
+      | Apply (Primitive f, es) -> Apply (Primitive f, List.map flatten_inner es)
       | If (c, t, e)  ->
         If (flatten_inner c, flatten_inner t, flatten_inner e)
       | Project (Var (x, t), l) -> Project (Var (x, t), l)
