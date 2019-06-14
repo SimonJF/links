@@ -1,8 +1,8 @@
 ### VDOM STUFF ###
-open MvuAttrs;
-open MvuEvents;
-open MvuHTML;
-open MvuSubscriptions;
+open import MvuAttrs;
+open import MvuEvents;
+open import MvuHTML;
+open import MvuSubscriptions;
 
 # Needed to ensure that virtual-dom is open
 module VirtualDom {
