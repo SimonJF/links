@@ -206,6 +206,11 @@ fun onKeyUp(f) {
   eventHandler(PropertyHandler("keyup", "value", fun(val) { Just(f(val)) } ))
 }
 
+fun onChange(f) {
+  eventHandler(PropertyHandler("change", "value", fun(val) { Just(f(val)) } ))
+}
+
+
 fun onKeyDown(f) {
   eventHandler(PropertyHandler("keydown", "value", fun(val) { Just(f(val)) }))
 }
