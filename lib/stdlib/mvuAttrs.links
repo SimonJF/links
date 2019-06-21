@@ -45,6 +45,10 @@ fun placeholder(val) {
     attr ("placeholder", val)
 }
 
+fun role(val) {
+    attr("role", val)
+}
+
 fun id(val) {
     attr ("id", val)
 }
