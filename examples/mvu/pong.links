@@ -2,7 +2,7 @@ open import MvuHTML;
 open import MvuAttrs;
 open import MvuEvents;
 open import MvuSubscriptions;
-import Mvu;
+open import Mvu;
 
 typename Ball = (x : Float, y: Float, vx : Float, vy : Float);
 
@@ -151,7 +151,7 @@ fun movePaddle(player, direction, scoreUpdate) {
   }
 }
 
-sig updt : (Msg, Game) ~> Game
+sig updt : (Msg, Game) ~%e~> Game
 fun updt(msg, game) {
   var score1 =
     if (game.ball.x > width) { 1 } else { 0 };
@@ -191,7 +191,7 @@ fun updt(msg, game) {
     }
 }
 
-sig view : (Game) ~> HTML(Msg)
+sig view : (Game) ~%e~> HTML(Msg)
 fun view(game) {
   div (class ("canvas"), ch([
     drawCircle(game.ball.x,game.ball.y),
@@ -211,7 +211,8 @@ fun subscriptions(model) {
 
 
 fun mainPage(_) {
-  Mvu.run("placeholder", defaultGame, view, updt, subscriptions);
+  run("placeholder", defaultGame, view,
+    fun(msg, model) { (updt(msg, model), NoCommand) }, subscriptions);
   page
   <html>
     <head>

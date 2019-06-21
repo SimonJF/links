@@ -20,57 +20,114 @@ module VDom {
   }
 }
 
-######
+# TODO: Put into a module
+typename Command(a :: Type(Any, Any)) =
+  [| NoCommand | Spawn: (() {}~> a) | SpawnLinear: (() {}~@ a) |];
+
+sig applySpawn: forall a :: Type(Any, Any) . (() {}~> a) {}~> a
+fun applySpawn(f) { f() }
+
+sig applySpawnLinear : forall a :: Type(Any, Any) . (() {}~@ a) {}~> a
+fun applySpawnLinear(f) { f() }
+
+# TODO: Generalise to monoidal interface
+sig processCommand :
+  forall msg :: Type(Any, Any) . (Command(msg), AP(?msg.End)) ~> ()
+fun processCommand(cmd, ap) {
+  switch(cmd) {
+    case NoCommand -> ()
+    case Spawn(f) ->
+      ignore(
+        spawn {
+          close(send(applySpawn(f), request(ap)))
+        })
+    case SpawnLinear(f) ->
+      ignore(
+        spawn {
+          close(send(applySpawnLinear(f), request(ap)))
+        })
+  }
+}
 
 # Main event loop
 sig evtLoop :
- forall msg, model.
+ forall msg :: Type(Any, Any),
+        model :: Type(Any, Any),
+        unrModel :: Type(Unl, Any) .
   (AP(?msg.End),
    model,
-   (model) ~e~> HTML(msg),
-   (msg, model) ~e~> model,
-   (model) ~e~> Sub(msg),
+   (unrModel) ~e~> HTML(msg),
+   (msg, model) ~e~> (model, Command(msg)),
+   (unrModel) ~e~> Sub(msg),
+   (model) ~e~> (model, unrModel),
    Sub(msg)) ~e~> ()
-fun evtLoop(ap, model, view, updt, subscriptionsFn, prevSubscriptions) {
+fun evtLoop(ap, model, view, updt, subscriptionsFn, extract, prevSubscriptions) {
   var (message, s) = receive(accept(ap));
   close(s);
-  var model = updt(message, model);
-  # Get new subscriptions
-  var newSubscriptions = subscriptionsFn(model);
+  var (model, cmd) = updt(message, model);
+  processCommand(cmd, ap);
   # Update DOM
-  VDom.updateDom(view(model), newSubscriptions);
-  # Loop with new state
-  evtLoop(ap, model, view, updt, subscriptionsFn, newSubscriptions)
+  var (model, unrModel) = extract(model);
+  # Get new subscriptions
+  var newSubscriptions = subscriptionsFn(unrModel);
+  # Update DOM
+  VDom.updateDom(view(unrModel), newSubscriptions);
+  # Loop with new subscriptions
+  evtLoop(ap, model, view, updt, subscriptionsFn, extract, newSubscriptions)
 }
 
-# User-facing function (assuming an unrestricted model)
-sig run:
-  forall msg, model.
+sig runLinear:
+  forall
+    msg::Type(Any, Any), model::Type(Any, Any),
+    unrModel::Type(Unl, Any) .
   (String,
-    model,
-    (model) ~e~> HTML(msg),
-    (msg, model) ~e~> (model),
-    (model) ~e~> Sub(msg)) ~f~> ()
-fun run(placeholder, model, view, updt, subscriptions) {
+   model,
+   (unrModel) ~e~> HTML(msg),
+   (msg, model) ~e~> (model, Command(msg)),
+   (unrModel) ~e~> Sub(msg),
+   (model) ~e~> (model, unrModel)
+   ) ~f~> ()
+fun runLinear(placeholder, model, view, updt, subscriptions, extract) {
   var evtHandler = spawnClient {
+    var (model, unrModel) = extract(model);
     var ap = new();
-    VDom.runDom(placeholder, view(model), ap, subscriptions(model));
-    evtLoop(ap, model, view, updt, subscriptions, subscriptions(model))
+    VDom.runDom(placeholder, view(unrModel), ap, subscriptions(unrModel));
+    evtLoop(ap, model, view, updt, subscriptions, extract, subscriptions(unrModel))
   };
   ()
 }
 
-sig runSimple : forall msg, model .
+# User-facing function (assuming an unrestricted model)
+sig run:
+  forall
+    msg :: Type(Any, Any),
+    model :: Type(Unl, Any) .
+  (String,
+    model,
+    (model) ~e~> HTML(msg),
+    (msg, model) ~e~> (model, Command(msg)),
+    (model) ~e~> Sub(msg)) ~f~> ()
+fun run(placeholder, model, view, updt, subscriptions) {
+  runLinear(placeholder, model, view, updt, subscriptions, fun(x) { (x, x) })
+}
+
+sig runSimple :
+  forall
+    msg :: Type(Any, Any),
+    model :: Type(Unl, Any) .
   (String,
     model,
     (model) ~e~> HTML(msg),
     (msg, model) ~e~> model) ~f~> ()
 fun runSimple(placeholder, model, view, updt) {
-  run(placeholder, model, view, updt, fun(_) { SubEmpty } )
+  run(placeholder, model, view,
+    fun(msg, model) { (updt(msg, model), NoCommand)},
+    fun(_) { SubEmpty } )
 }
 
 sig runStatic :
-  forall model .
+  forall
+    model :: Type(Unl, Any) .
   (String, model, (model) ~e~> HTML(())) ~f~> ()
 fun runStatic(placeholder, model, view) {
   runSimple(placeholder, model, view, fun(_, model) { model })
