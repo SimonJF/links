@@ -3,6 +3,7 @@ open import MvuAttrs;
 open import MvuEvents;
 open import MvuHTML;
 open import MvuSubscriptions;
+open import MvuCommands;
 
 # Needed to ensure that virtual-dom is open
 module VirtualDom {
@@ -17,37 +18,27 @@ module VDom {
     runDom : forall a :: Type(Any, Any) .
       (String, HTML(a), AP(?a.End), Sub(a)) ~> ();
     updateDom : forall a :: Type(Any, Any) . (HTML(a), Sub(a)) ~> ();
+    transition : forall a :: Type(Any, Any) . (AP(?a.End), HTML(a), Sub(a)) ~> ();
   }
 }
 
-# TODO: Put into a module
-typename Command(a :: Type(Any, Any)) =
-  [| NoCommand | Spawn: (() {}~> a) | SpawnLinear: (() {}~@ a) |];
+typename Transition(model :: Type(Any, Any), msg :: Type(Any, Any)) =
+  forall
+    newMsg :: Type(Any, Any),
+    newModel :: Type(Any, Any),
+    newUnrModel :: Type(Unl, Any),
+    newEff :: Eff.
 
-sig applySpawn: forall a :: Type(Any, Any) . (() {}~> a) {}~> a
-fun applySpawn(f) { f() }
+    [| NoTransition:(model, Command(msg))
+     | Transition:
+         (newModel,
+         (newUnrModel) ~newEff~> HTML(newMsg),
+         (newMsg, newModel) ~newEff~> Transition(newModel, newMsg),
+         (newUnrModel) ~newEff~> Sub(newMsg),
+         (newModel) ~newEff~> (newModel, newUnrModel),
+         Command(newMsg))
+     |];
 
-sig applySpawnLinear : forall a :: Type(Any, Any) . (() {}~@ a) {}~> a
-fun applySpawnLinear(f) { f() }
-
-# TODO: Generalise to monoidal interface
-sig processCommand :
-  forall msg :: Type(Any, Any) . (Command(msg), AP(?msg.End)) ~> ()
-fun processCommand(cmd, ap) {
-  switch(cmd) {
-    case NoCommand -> ()
-    case Spawn(f) ->
-      ignore(
-        spawn {
-          close(send(applySpawn(f), request(ap)))
-        })
-    case SpawnLinear(f) ->
-      ignore(
-        spawn {
-          close(send(applySpawnLinear(f), request(ap)))
-        })
-  }
-}
 
 # Main event loop
 sig evtLoop :
@@ -57,23 +48,38 @@ sig evtLoop :
   (AP(?msg.End),
    model,
    (unrModel) ~e~> HTML(msg),
-   (msg, model) ~e~> (model, Command(msg)),
+   (msg, model) ~e~> Transition(model, msg),
    (unrModel) ~e~> Sub(msg),
    (model) ~e~> (model, unrModel),
    Sub(msg)) ~e~> ()
 fun evtLoop(ap, model, view, updt, subscriptionsFn, extract, prevSubscriptions) {
   var (message, s) = receive(accept(ap));
   close(s);
-  var (model, cmd) = updt(message, model);
-  processCommand(cmd, ap);
-  # Update DOM
-  var (model, unrModel) = extract(model);
-  # Get new subscriptions
-  var newSubscriptions = subscriptionsFn(unrModel);
-  # Update DOM
-  VDom.updateDom(view(unrModel), newSubscriptions);
-  # Loop with new subscriptions
-  evtLoop(ap, model, view, updt, subscriptionsFn, extract, newSubscriptions)
+  var updtRes = updt(message, model);
+  switch(updtRes) {
+    case NoTransition(model, cmd) ->
+      processCommand(cmd, ap);
+      # Extract unrestricted model
+      var (model, unrModel) = extract(model);
+      # Get new subscriptions
+      var newSubscriptions = subscriptionsFn(unrModel);
+      # Update DOM
+      VDom.updateDom(view(unrModel), newSubscriptions);
+      evtLoop(ap, model, view, updt, subscriptionsFn, extract, newSubscriptions)
+    case Transition(model, view, updt, sub, extract, cmd) ->
+      ignore(spawn {
+        # Create new AP used for next message type
+        var ap = new();
+        processCommand(cmd, ap);
+        # Extract unrestricted model
+        var (model, unrModel) = extract(model);
+        # Get new subscriptions
+        var newSubscriptions = subscriptionsFn(unrModel);
+        # FFI call
+        VDom.transition(ap, view(unrModel), newSubscriptions);
+        evtLoop(ap, model, view, updt, sub, extract, newSubscriptions)
+      })
+  }
 }
 
 sig runLinear:
@@ -83,7 +89,7 @@ sig runLinear:
   (String,
    model,
    (unrModel) ~e~> HTML(msg),
-   (msg, model) ~e~> (model, Command(msg)),
+   (msg, model) ~e~> Transition(model, msg),
    (unrModel) ~e~> Sub(msg),
    (model) ~e~> (model, unrModel)
    ) ~f~> ()
@@ -108,7 +114,11 @@ sig run:
     (msg, model) ~e~> (model, Command(msg)),
     (model) ~e~> Sub(msg)) ~f~> ()
 fun run(placeholder, model, view, updt, subscriptions) {
-  runLinear(placeholder, model, view, updt, subscriptions, fun(x) { (x, x) })
+  fun wrapUpdt(msg, model) {
+    var (model, cmd) = updt(msg, model);
+    NoTransition(model, cmd)
+  }
+  runLinear(placeholder, model, view, wrapUpdt, subscriptions, fun(x) { (x, x) })
 }
 
 sig runSimple :
