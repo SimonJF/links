@@ -8,44 +8,104 @@ import MvuAttrs;
 var ae = MvuAttrs.empty;
 var he = MvuHTML.empty;
 
+## Types
+
+### Waiting
+
+typename Error =
+  [| ErrInvalidName
+   | ErrNameInUse
+   | ErrBadRoom
+   | ErrKicked
+   |];
+
+typename SelectedRoom = [| NewRoom | SelectedRoom: String |];
+typename WaitingModel = ();
+typename WaitingMessage = [|
+    ConnectedAsUser : (Nickname, RoomName, Topic, [Nickname], ClientSelect, ClientReceive)
+  | ConnectedAsModerator : (Nickname, RoomName, Topic, [Nickname], ClientSelect, ModeratorSend, ClientReceive)
+  | ErrorConnecting : ([RoomName], Error, ClientSelect)
+  | RoomsDelivered : ([RoomName], ClientSelect)
+|];
+
+### NotConnected
+
+typename NotConnectedModel =
+  (nickname: String,
+   rooms: [RoomName],
+   selectedRoom: SelectedRoom,
+   newRoomText: RoomName,
+   error: Maybe(Error));
+
+typename NCModel = (ClientSelect, NotConnectedModel);
+
+typename NCMessage = [|
+     UpdateNickname: Nickname
+   | UpdateSelectedRoom: SelectedRoom
+   | UpdateNewRoom: RoomName
+   | SubmitJoinRoom
+|];
+
+typename NCUnrModel = NotConnectedModel;
+
+### Connected
+
+typename ChatMessage =
+  [| ChatMsg: (Nickname, Message) | LogMsg: Message |];
+
+typename RoomInfo =
+  (nickname: Nickname,
+   roomName: RoomName,
+   nicknames: [Nickname],
+   topic: Topic,
+   messages: [ChatMessage],
+   currentChatMessage: String);
+
+typename ConnectedModel = (RoomInfo, ClientSend, Maybe((ModeratorSend, Nickname)));
+typename ConnectedUnrModel = (RoomInfo, Maybe(Nickname));
+
+typename ConnectedMessage = [|
+   # Chat screen messages
+   UpdateChatBox: Message
+ | SubmitChat
+   # Moderator messages
+ | ModUpdateSelection: Nickname
+ | ModKick
+ | ModMute
+ | ModMakeModerator
+   # Incoming session messages from the server
+ | SessionIncomingChat: (Nickname, Message, ClientReceive)
+ | SessionNewUser: (Nickname, ClientReceive)
+ | SessionNewTopic: (Topic, ClientReceive)
+ | SessionUserLeft: (Nickname, ClientReceive)
+ | SessionUserMuted: (Nickname, ClientReceive)
+ | SessionUserUnmuted: (Nickname, ClientReceive)
+ | SessionBecomeModerator: (ModeratorSend, ClientReceive)
+ | SessionKick
+|];
+
 mutual {
-
-  ### Waiting
-
-  typename Error =
-    [| ErrInvalidName
-     | ErrNameInUse
-     | ErrBadRoom
-     | ErrKicked
-     |];
-
-  typename SelectedRoom = [| NewRoom | SelectedRoom: String |];
-
-  typename WaitingMessage = [|
-      ConnectedAsUser : (Nickname, RoomName, Topic, [Nickname], ClientSelect, ClientReceive)
-    | ConnectedAsModerator : (Nickname, RoomName, Topic, [Nickname], ClientSelect, ClientReceive, ModeratorSend)
-    | ErrorConnecting : ([RoomName], Error, ClientSelect)
-  |];
 
   fun waitingView(_) {
     open MvuHTML;
     open MvuAttrs;
+    fun role(x) { attr("role", x) }
 
     div(class("spinner-border") +@ role("status"),
       span(class("sr-only"), textNode("Loading...")))
   }
 
-  sig waitingUpdt : (WaitingMessage, ()) ~> MvuHTML.HTML(WaitingMessage)
+  sig waitingUpdt : (WaitingMessage, ()) ~> Transition((), WaitingMessage)
   fun waitingUpdt(msg, _) {
     switch(msg) {
       case ConnectedAsUser(nick, rn, topic, nicks, cs, cr) ->
-        Connected.connectedAsUser(nick, rn, topic, nicks, cs, cr)
-      case ConnectedAsModerator(nick, rn, topics, nicks, cs, cr, ms) ->
-        Connected.connectedAsModerator(nick, rn, topic, nicks, cs, cr)
+        connectedAsUser(nick, rn, topic, nicks, cs, cr)
+      case ConnectedAsModerator(nick, rn, topic, nicks, cs, ms, cr) ->
+        connectedAsModerator(nick, rn, topic, nicks, cs, ms, cr)
       case ErrorConnecting(rooms, err, cs) ->
-        NotConnected.errorConnecting(rooms, err, cs)
+        errorConnecting(cs, rooms, err)
       case RoomsDelivered(rooms, cs) ->
-        NotConnected.roomsDelivered(rooms, cs)
+        roomsDelivered(cs, rooms)
     }
   }
 
@@ -54,19 +114,30 @@ mutual {
   fun emptySubs(_) { MvuSubscriptions.empty }
 
   fun waitingTransition(cmd) {
-    Transition((), waitingView, waitingUpdt, emptySubs, waitingExtract, waitingCmd)
+    Transition((), waitingView, waitingUpdt, emptySubs, waitingExtract, cmd)
   }
 
+  fun waitForRooms() {
+    fun wait() {
+      var cs = request(wap);
+      var (rooms, cs) = receive(cs);
+      RoomsDelivered(rooms, cs)
+    }
+    waitingTransition(Spawn(wait))
+  }
+
+  sig connectToRoom : forall model :: Type(Any, Any), msg :: Type(Any, Any) .
+    (RoomName, Nickname, ClientSelect) ~%~> Transition(model, msg)
   fun connectToRoom(roomName, nickname, cs) {
     fun connect(roomName, nickname, cs) {
-      var cs = send((roomName, ncModel.nickname), cs);
+      var cs = send((roomName, nickname), cs);
       offer(cs) {
         case JoinedOK(cs) ->
           var ((topic, nicks, cr), cs) = receive(cs);
-          ConnectedAsUser(ncModel.nickname, roomName, topic, nicks, cs, cr)
+          ConnectedAsUser(nickname, roomName, topic, nicks, cs, cr)
         case JoinedOKAsModerator(cs) ->
           var ((topic, nicks, cr, ms), cs) = receive(cs);
-          ConnectedAsModerator(ncModel.nickname, roomName, topic, nicks, cs, cr, ms)
+          ConnectedAsModerator(nickname, roomName, topic, nicks, cs, ms, cr)
         case Nope(cs) ->
           # Grab error to display
           var (err, s) = receive(cs);
@@ -82,52 +153,25 @@ mutual {
           ErrorConnecting(rooms, err, cs)
       }
     }
-    waitingTransition(SpawnLinear(linfun() { connectToRoom(roomName, nickname, cs)} ))
+    waitingTransition(SpawnLinear(linfun() { connect(roomName, nickname, cs)} ))
   }
 
-  fun waitForRooms() {
-    fun wait() {
-      var cs = request(wap);
-      var (rooms, cs) = receive(cs);
-      RoomsDelivered(rooms, cs)
-    }
-    transition(Spawn(wait))
-  }
 
   #### NotConnected
-
-  typename NotConnectedModel =
-    (nickname: String,
-     rooms: [RoomName],
-     selectedRoom: SelectedRoom,
-     newRoomText: RoomName,
-     error: Maybe(Error));
-
-  typename NCModel = (ClientSelect, NotConnectedModel);
-
-  typename NCMessage = [|
-       NoOp
-       # Login screen messages
-     | UpdateNickname: Nickname
-     | UpdateSelectedRoom: SelectedRoom
-     | UpdateNewRoom: RoomName
-     | SubmitJoinRoom
-  |];
-
-  typename NCUnrModel = NotConnectedModel;
-
+  sig ncExtract : (NCModel) ~> (NCModel, NCUnrModel)
   fun ncExtract((cs, ncm)) {
     ((cs, ncm), ncm)
   }
 
 
+  sig ncMkModel : (ClientSelect, Nickname, [RoomName], Maybe(Error)) ~> NCModel
   fun ncMkModel(cs, nick, rooms, err) {
-    (nickname=nick, rooms = rooms, selectedRoom = NewRoom, newRoomText = "", error = err)
+    (cs, (nickname=nick, rooms = rooms, selectedRoom = NewRoom, newRoomText = "", error = err))
   }
 
 
-  sig ncView : (NCUnrModel) ~> HTML(NCMessage)
-  fun ncView(uModel) {
+  sig ncView : (NCUnrModel) ~> MvuHTML.HTML(NCMessage)
+  fun ncView(ncModel) {
     open MvuHTML;
     open MvuAttrs;
 
@@ -196,17 +240,17 @@ mutual {
         roomForm(ncModel)))
   }
 
-  fun ncUpdt(msg, model) {
-    fun noTransition(model) { NoTransition(model, MvuCommands.empty) }
+  sig ncUpdt : (NCMessage, NCModel) ~%~> Transition(NCModel, NCMessage)
+  fun ncUpdt(msg, (cs, ncModel)) {
+    fun noTransition(ncModel, cs) { NoTransition((cs, ncModel), MvuCommands.empty) }
 
     switch(msg) {
-      case NoOp -> noTransition(model)
       case UpdateNickname(nick) ->
-        noTransition((model with nickname = nick))
+        noTransition((ncModel with nickname = nick), cs)
       case UpdateSelectedRoom(sr) ->
-        noTransition((model with selectedRoom = sr))
+        noTransition((ncModel with selectedRoom = sr), cs)
       case UpdateNewRoom(nr) ->
-        noTransition((model with newRoomText = nr))
+        noTransition((ncModel with newRoomText = nr), cs)
       case SubmitJoinRoom ->
           var roomName = switch(ncModel.selectedRoom) {
             case NewRoom -> ncModel.newRoomText
@@ -216,52 +260,27 @@ mutual {
     }
   }
 
+  sig ncTransition : forall model :: Type(Any, Any), msg :: Type(Any, Any) .
+    (NCModel, Command(NCMessage)) ~> Transition(model, msg)
   fun ncTransition(model, cmd) {
-    Transition(model, view, updt, subs, extract, cmd)
+    Transition(model, ncView, ncUpdt, emptySubs, ncExtract, cmd)
   }
 
+  #sig ncMkModel : (ClientSelect, Nickname, [RoomName], Maybe(Error)) ~> NCModel
+  sig errorConnecting : (ClientSelect, [RoomName], Error) ~> Transition(WaitingModel, WaitingMessage)
   fun errorConnecting(cs, rooms, err) {
-    var model = NotConnected.mkModel(cs, "", rooms, err);
-    ncTransition(model, cmd)
+    var model = ncMkModel(cs, "", rooms, Just(err));
+    ncTransition(model, MvuCommands.empty)
   }
+
+  fun roomsDelivered(cs, rooms) {
+    var model = ncMkModel(cs, "", rooms, Nothing);
+    ncTransition(model, MvuCommands.empty)
+  }
+
 
 
   ### Connected
-
-  typename ConnectedModel = (RoomInfo, ClientSend, Maybe((ModeratorSend, Nickname)));
-  typename ConnectedUnrModel = (RoomInfo, Maybe(Nickname));
-
-  typename ConnectedMessage = [|
-     # Chat screen messages
-     UpdateChatBox: Message
-   | SubmitChat
-     # Moderator messages
-   | ModUpdateSelection: Nickname
-   | ModKick
-   | ModMute
-   | ModMakeModerator
-     # Incoming session messages from the server
-   | SessionIncomingChat: (Nickname, Message, ClientReceive)
-   | SessionNewUser: (Nickname, ClientReceive)
-   | SessionNewTopic: (Topic, ClientReceive)
-   | SessionUserLeft: (Nickname, ClientReceive)
-   | SessionUserMuted: (Nickname, ClientReceive)
-   | SessionUserUnmuted: (Nickname, ClientReceive)
-   | SessionBecomeModerator: (ModeratorSend, ClientReceive)
-   | SessionKick
- |];
-
-  typename ChatMessage =
-    [| ChatMsg: (Nickname, Message) | LogMsg: Message |];
-
-  typename RoomInfo =
-    (nickname: Nickname,
-     roomName: RoomName,
-     nicknames: [Nickname],
-     topic: Topic,
-     messages: [ChatMessage],
-     currentChatMessage: String);
-
   sig subscribeClient : (ClientReceive) ~> Command(ConnectedMessage)
   fun subscribeClient(cr) {
     sig clientReceive : (ClientReceive) ~> ConnectedMessage
@@ -319,7 +338,7 @@ mutual {
     (ri with topic = topic)
   }
 
-  sig mkRoomInfo : (RoomName, Topic, [Nickname]) -> RoomInfo
+  sig mkRoomInfo : (Nickname, RoomName, Topic, [Nickname]) -> RoomInfo
   fun mkRoomInfo(nickname, name, topic, nicks) {
     (nickname=nickname, roomName=name, nicknames=nicks,
      topic=topic, messages=[], currentChatMessage="")
@@ -463,7 +482,7 @@ mutual {
             cancel(ms)
           case Nothing -> ()
         };
-        Waiting.waitForRooms()
+        waitForRooms()
     }
   }
 
@@ -495,11 +514,11 @@ fun mainPage() {
     var (rooms, cs) = receive(cs);
     var model = NotConnected(mkNCModel(rooms, Nothing), cs);
     runLinear("vdom-placeholder",
-      NotConnected.mkModel(cs, rooms, Nothing),
-      NotConnected.view,
-      NotConnected.updt,
-      NotConnected.subs,
-      NotConnected.extract)
+      ncMkModel(cs, rooms, Nothing),
+      ncView,
+      ncUpdt,
+      ncSubs,
+      ncExtract)
   };
 
   page
