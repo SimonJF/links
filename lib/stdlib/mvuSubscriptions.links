@@ -16,6 +16,8 @@ fun append(s1, s2) {
   }
 }
 
+var empty = SubEmpty;
+
 op s1 +^ s2 { append(s1, s2) }
 
 fun concat(nodes) {

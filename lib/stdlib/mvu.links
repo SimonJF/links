@@ -84,7 +84,7 @@ fun evtLoop(ap, model, view, updt, subscriptionsFn, extract, prevSubscriptions) 
 
 sig runLinear:
   forall
-    msg::Type(Any, Any), model::Type(Any, Any),
+  msg::Type(Any, Any), model::Type(Any, Any),
     unrModel::Type(Unl, Any) .
   (String,
    model,
