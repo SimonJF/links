@@ -23,22 +23,22 @@ module VDom {
 }
 
 typename Transition(model :: Type(Any, Any), msg :: Type(Any, Any)) =
-  forall
-    newMsg :: Type(Any, Any),
-    newModel :: Type(Any, Any),
-    newUnrModel :: Type(Unl, Any),
-    newEff :: Eff.
-
     [| NoTransition:(model, Command(msg))
-     | Transition:
-         (newModel,
-         (newUnrModel) ~newEff~> HTML(newMsg),
-         (newMsg, newModel) ~newEff~> Transition(newModel, newMsg),
-         (newUnrModel) ~newEff~> Sub(newMsg),
-         (newModel) ~newEff~> (newModel, newUnrModel),
-         Command(newMsg))
-     |];
+     | Transition: () {}~@ () |];
 
+
+sig noTransition :
+  forall
+    model :: Type(Any, Any),
+    msg :: Type(Any, Any) .
+  (model, Command(msg)) ~> Transition(model, msg)
+fun noTransition(model, cmd) {
+  NoTransition(model, cmd)
+}
+
+
+sig applyLinearTransition : forall a :: Type(Any, Any) . (() {}~@ ()) {}~> ()
+fun applyLinearTransition(f) { f() }
 
 # Main event loop
 sig evtLoop :
@@ -47,11 +47,11 @@ sig evtLoop :
         unrModel :: Type(Unl, Any) .
   (AP(?msg.End),
    model,
-   (unrModel) ~e~> HTML(msg),
-   (msg, model) ~e~> Transition(model, msg),
-   (unrModel) ~e~> Sub(msg),
-   (model) ~e~> (model, unrModel),
-   Sub(msg)) ~e~> ()
+   (unrModel) {}~> HTML(msg),
+   (msg, model) {}~> Transition(model, msg),
+   (unrModel) {}~> Sub(msg),
+   (model) {}~> (model, unrModel),
+   Sub(msg)) {}~> ()
 fun evtLoop(ap, model, view, updt, subscriptionsFn, extract, prevSubscriptions) {
   var (message, s) = receive(accept(ap));
   close(s);
@@ -66,20 +66,36 @@ fun evtLoop(ap, model, view, updt, subscriptionsFn, extract, prevSubscriptions) 
       # Update DOM
       VDom.updateDom(view(unrModel), newSubscriptions);
       evtLoop(ap, model, view, updt, subscriptionsFn, extract, newSubscriptions)
-    case Transition(model, view, updt, sub, extract, cmd) ->
-      ignore(spawn {
-        # Create new AP used for next message type
-        var ap = new();
-        processCommand(cmd, ap);
-        # Extract unrestricted model
-        var (model, unrModel) = extract(model);
-        # Get new subscriptions
-        var newSubscriptions = subscriptionsFn(unrModel);
-        # FFI call
-        VDom.transition(ap, view(unrModel), newSubscriptions);
-        evtLoop(ap, model, view, updt, sub, extract, newSubscriptions)
-      })
+    case Transition(fn) -> applyLinearTransition(fn)
   }
+}
+
+sig transition :
+ forall a :: Type(Any, Any),
+        b :: Type(Any, Any),
+        msg :: Type(Any, Any),
+        model :: Type(Any, Any),
+        unrModel :: Type(Unl, Any) .
+   (model,
+   (unrModel) {}~> HTML(msg),
+   (msg, model) {}~> Transition(model, msg),
+   (unrModel) {}~> Sub(msg),
+   (model) {}~> (model, unrModel),
+   Command(msg)) {}~> Transition(a, b)
+fun transition(model, view, updt, sub, extract, cmd) {
+  Transition(linfun() {
+    ignore(spawn {
+       # Create new AP used for next message type
+       var ap = new();
+       processCommand(cmd, ap);
+       # Extract unrestricted model
+       var (model, unrModel) = extract(model);
+       # Get new subscriptions
+       var newSubscriptions = sub(unrModel);
+       # FFI call
+       VDom.transition(ap, view(unrModel), newSubscriptions);
+       evtLoop(ap, model, view, updt, sub, extract, newSubscriptions)
+    })})
 }
 
 sig runLinear:
@@ -88,11 +104,11 @@ sig runLinear:
     unrModel::Type(Unl, Any) .
   (String,
    model,
-   (unrModel) ~e~> HTML(msg),
-   (msg, model) ~e~> Transition(model, msg),
-   (unrModel) ~e~> Sub(msg),
-   (model) ~e~> (model, unrModel)
-   ) ~f~> ()
+   (unrModel) {}~> HTML(msg),
+   (msg, model) {}~> Transition(model, msg),
+   (unrModel) {}~> Sub(msg),
+   (model) {}~> (model, unrModel)
+   ) {}~> ()
 fun runLinear(placeholder, model, view, updt, subscriptions, extract) {
   var evtHandler = spawnClient {
     var (model, unrModel) = extract(model);
@@ -110,9 +126,9 @@ sig run:
     model :: Type(Unl, Any) .
   (String,
     model,
-    (model) ~e~> HTML(msg),
-    (msg, model) ~e~> (model, Command(msg)),
-    (model) ~e~> Sub(msg)) ~f~> ()
+    (model) {}~> HTML(msg),
+    (msg, model) {}~> (model, Command(msg)),
+    (model) {}~> Sub(msg)) {}~> ()
 fun run(placeholder, model, view, updt, subscriptions) {
   fun wrapUpdt(msg, model) {
     var (model, cmd) = updt(msg, model);
@@ -127,8 +143,8 @@ sig runSimple :
     model :: Type(Unl, Any) .
   (String,
     model,
-    (model) ~e~> HTML(msg),
-    (msg, model) ~e~> model) ~f~> ()
+    (model) {}~> HTML(msg),
+    (msg, model) {}~> model) {}~> ()
 fun runSimple(placeholder, model, view, updt) {
   run(placeholder, model, view,
     fun(msg, model) { (updt(msg, model), NoCommand)},
@@ -138,7 +154,7 @@ fun runSimple(placeholder, model, view, updt) {
 sig runStatic :
   forall
     model :: Type(Unl, Any) .
-  (String, model, (model) ~e~> HTML(())) ~f~> ()
+  (String, model, (model) {}~> HTML(())) {}~> ()
 fun runStatic(placeholder, model, view) {
   runSimple(placeholder, model, view, fun(_, model) { model })
 }
