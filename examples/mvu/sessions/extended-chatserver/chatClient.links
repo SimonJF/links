@@ -207,8 +207,8 @@ mutual {
               textNode("New Room") +*
               input(
                 type("text") +@
-                value(ncModel.newRoomText) +@
                 onInput(fun(str) { UpdateNewRoom(str) }) +@
+                value(ncModel.newRoomText) +@
                 onEnter(fun() { SubmitJoinRoom }), he)
             )
         );
@@ -264,10 +264,12 @@ mutual {
 
     switch(msg) {
       case UpdateNickname(nick) ->
+        debug("nickname: " ^^ nick);
         ncNoTrans((ncModel with nickname = nick), cs)
       case UpdateSelectedRoom(sr) ->
         ncNoTrans((ncModel with selectedRoom = sr), cs)
       case UpdateNewRoom(nr) ->
+        debug("newRoomText: " ^^ nr);
         ncNoTrans((ncModel with newRoomText = nr), cs)
       case SubmitJoinRoom ->
           var roomName = switch(ncModel.selectedRoom) {

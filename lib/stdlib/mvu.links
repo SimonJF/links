@@ -18,7 +18,7 @@ module VDom {
     runDom : forall a :: Type(Any, Any) .
       (String, HTML(a), AP(?a.End), Sub(a)) ~> ();
     updateDom : forall a :: Type(Any, Any) . (HTML(a), Sub(a)) ~> ();
-    transition : forall a :: Type(Any, Any) . (AP(?a.End), HTML(a), Sub(a)) ~> ();
+    transitionDom : forall a :: Type(Any, Any) . (AP(?a.End), HTML(a), Sub(a)) ~> ();
   }
 }
 
@@ -93,7 +93,7 @@ fun transition(model, view, updt, sub, extract, cmd) {
        # Get new subscriptions
        var newSubscriptions = sub(unrModel);
        # FFI call
-       VDom.transition(ap, view(unrModel), newSubscriptions);
+       VDom.transitionDom(ap, view(unrModel), newSubscriptions);
        evtLoop(ap, model, view, updt, sub, extract, newSubscriptions)
     })})
 }
