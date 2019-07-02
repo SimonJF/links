@@ -10,6 +10,16 @@ let jslibdir : string Settings.setting = Basicsettings.Js.lib_dir
 let host_name = Basicsettings.Appserver.hostname
 let port = Basicsettings.Appserver.port
 
+
+module AnonymousPath = struct
+  let path_count = ref 0
+
+  let make () =
+    let id = !path_count in
+    incr path_count;
+    "/" ^ (string_of_int id)
+end
+
 module Trie =
 struct
   type ('a, 'b) t =
@@ -173,9 +183,11 @@ struct
       (* Precondition: valenv has been initialised with the correct request data *)
       let run_page (valenv, v) (error_valenv, error_v) () =
         let cid = RequestData.get_client_id (Value.Env.request_data valenv) in
+        let v1 = v in
         let applier env vp =
           Eval.apply (render_cont ()) env vp >>= fun (valenv, v) ->
           let open Page in
+          Debug.print ("v1: " ^ (Value.string_of_value v1));
           let page =
             RealPage.page
               ~wsconn_url:(if !accepting_websocket_requests then Some ws_url else None)
@@ -191,9 +203,16 @@ struct
           applier valenv (v, [`String path; `SpawnLocation (`ClientSpawnLoc cid)])
         with
         | Evalir.Exceptions.Wrong ->
-           applier error_valenv (error_v, [`String path; `String "Error in string matching (perhaps you have an over-specific route function)."; `SpawnLocation (`ClientSpawnLoc cid)])
+           applier error_valenv
+            (error_v,
+             [`String path;
+              `String "Error in string matching (perhaps you have an over-specific route function).";
+              `SpawnLocation (`ClientSpawnLoc cid)])
         | Evalir.Exceptions.EvaluationError s ->
-           applier error_valenv (error_v, [`String path; `String s; `SpawnLocation (`ClientSpawnLoc cid)]) in
+           applier error_valenv
+            (error_v,
+             [`String path; `String s;
+              `SpawnLocation (`ClientSpawnLoc cid)]) in
 
       let render_servercont_cont valenv v =
         let open Page in
@@ -316,4 +335,43 @@ struct
     Settings.set_value Basicsettings.web_mode true;
     Settings.set_value webs_running true;
     start_server (Settings.get_value host_name) (Settings.get_value port) rt
+
+  (* Adds a dynamic route, given an evaluation environment and a page. *)
+  let add_dynamic_route (venv, nenv, _) v =
+    let open CommonTypes in
+    (* First, create an anonymous path *)
+    let fresh_path = AnonymousPath.make () in
+    (* Next, create a default error handler. *)
+    let default_error_handler =
+      Env.String.lookup nenv "defaultErrorPage"
+      |> (flip Value.Env.find) venv in
+    (* Note that the value is a page. We need a function which takes
+     * a path and location, and produces a page. To do this, we dynamically
+     * construct an IR function which ignores the path and location variables,
+     * returning the page value. We add this to to the global tables. We then
+     * return a function pointer. *)
+    (* TODO: This is a memory leak, of course -- we should clean up all of the
+     * freshly-generated function names per client on disconnection. *)
+    let req_handler =
+      let fresh_binder =
+        DesugarDatatypes.read
+          ~aliases:DefaultAliases.alias_env
+          "(String, Location) {}~> Page"
+        |> Var.fresh_binder_of_type in
+      let comp = ([], Ir.Return v) in
+      let bndrs =
+        List.map (Var.fresh_binder_of_type)
+          [`Primitive Primitive.String;
+           `Application ((Types.spawn_location), [])] in
+      let loc = CommonTypes.Location.Server in
+      let fn_def =
+        (fresh_binder, ([], bndrs, comp), None, loc) in
+      BuildTables.FunDefs.add (Tables.fun_defs) fn_def;
+      let var = var_of_binder fresh_binder in
+      `FunctionPtr (var, None) in
+
+    add_route false fresh_path
+      (Right {request_handler = (venv, req_handler);
+              error_handler = (venv, default_error_handler) } );
+    fresh_path
 end

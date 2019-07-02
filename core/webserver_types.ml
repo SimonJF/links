@@ -12,6 +12,9 @@ sig
   val add_route : bool -> string -> (string * (string * string) list, request_handler_fn) either -> unit
   val start : Value.env -> unit Lwt.t
 
+  (* Used for dynamically adding anonymous routes (for notebook integration) *)
+  (* val add_dynamic_route : Value.env -> Value.t -> string *)
+
   (* Returns whether the server is accepting websocket requests. *)
   val is_accepting_websocket_requests : unit -> bool
   (* Sets whether the server is accepting websocket requests. *)
