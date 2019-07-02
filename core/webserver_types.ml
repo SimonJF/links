@@ -10,10 +10,12 @@ sig
   val init : (Value.env * Ir.var Env.String.t * Types.typing_environment) -> Ir.binding list -> Loader.ext_dep list -> unit
   val set_prelude : Ir.binding list -> unit
   val add_route : bool -> string -> (string * (string * string) list, request_handler_fn) either -> unit
-  val start : Value.env -> unit Lwt.t
 
   (* Used for dynamically adding anonymous routes (for notebook integration) *)
-  (* val add_dynamic_route : Value.env -> Value.t -> string *)
+  val add_dynamic_route : (Value.env * Ir.var Env.String.t * Types.typing_environment) -> Value.t ->
+    (string * (Value.env * Ir.var Env.String.t * Types.typing_environment))
+
+  val start : Value.env -> unit Lwt.t
 
   (* Returns whether the server is accepting websocket requests. *)
   val is_accepting_websocket_requests : unit -> bool
