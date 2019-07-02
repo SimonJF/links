@@ -336,7 +336,7 @@ struct
     start_server (Settings.get_value host_name) (Settings.get_value port) rt
 
   (* Adds a dynamic route, given an evaluation environment and a page. *)
-  let add_dynamic_route (venv, nenv, _) v =
+  let add_dynamic_route (venv, nenv, ({Types.tycon_env = tycon_env; _} as tyenv)) v =
     let open CommonTypes in
     (* First, create an anonymous path *)
     let fresh_path = AnonymousPath.make () in
@@ -351,13 +351,21 @@ struct
      * return a function pointer. *)
     (* TODO: This is a memory leak, of course -- we should clean up all of the
      * freshly-generated function names per client on disconnection. *)
+    (* We also need to do some gymnastics to tie the knot between IR values
+     * and Value.t. *)
+
+    (* First, bind the Page Value.t to a fresh global variable *)
+    let _, pg_var =
+      Var.fresh_global_var_of_type (Instantiate.alias "Page" [] tycon_env) in
+    let venv = Value.Env.bind pg_var (v, Var.Scope.Global) venv in
+
     let req_handler =
       let fresh_binder =
         DesugarDatatypes.read
           ~aliases:DefaultAliases.alias_env
           "(String, Location) {}~> Page"
         |> Var.fresh_binder_of_type in
-      let comp = ([], Ir.Return v) in
+      let comp = ([], Ir.Return (Ir.Variable pg_var)) in
       let bndrs =
         List.map (Var.fresh_binder_of_type)
           [`Primitive Primitive.String;
@@ -372,5 +380,5 @@ struct
     add_route false fresh_path
       (Right {request_handler = (venv, req_handler);
               error_handler = (venv, default_error_handler) } );
-    fresh_path
+    (fresh_path, (venv, nenv, tyenv))
 end

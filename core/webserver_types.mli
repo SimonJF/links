@@ -12,6 +12,9 @@ sig
   val init : (Value.env * Ir.var Env.String.t * Types.typing_environment) -> Ir.binding list -> Loader.ext_dep list -> unit
   val set_prelude : Ir.binding list -> unit
   val add_route : bool -> string -> (string * (string * string) list, request_handler_fn) either -> unit
+  (* Used for dynamically adding anonymous routes (for notebook integration) *)
+  val add_dynamic_route : (Value.env * Ir.var Env.String.t * Types.typing_environment) -> Value.t ->
+    (string * (Value.env * Ir.var Env.String.t * Types.typing_environment))
 
   val start : Value.env -> unit Lwt.t
 
