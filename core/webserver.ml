@@ -340,9 +340,14 @@ struct
     let open CommonTypes in
     (* First, create an anonymous path *)
     let fresh_path = AnonymousPath.make () in
+    Debug.print "Value env:";
+    let _ =
+      Value.Env.fold (fun var (value, _) _acc ->
+        Printf.printf "Var: %d, val: %s %!\n" var
+          (Value.string_of_value value)) venv () in
     (* Next, create a default error handler. *)
     let default_error_handler =
-      Env.String.lookup nenv "defaultErrorPage"
+      Env.String.lookup nenv "defaultError"
       |> (flip Value.Env.find) venv in
     (* Note that the value is a page. We need a function which takes
      * a path and location, and produces a page. To do this, we dynamically
@@ -362,7 +367,7 @@ struct
     let req_handler =
       let fresh_binder =
         DesugarDatatypes.read
-          ~aliases:DefaultAliases.alias_env
+          ~aliases:tycon_env
           "(String, Location) {}~> Page"
         |> Var.fresh_binder_of_type in
       let comp = ([], Ir.Return (Ir.Variable pg_var)) in

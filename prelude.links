@@ -1397,6 +1397,8 @@ fun defaultErrorPage(_, error_string, _) {
         </html>)
 }
 
+var defaultError = defaultErrorPage;
+
 sig addLocatedRouteWithErrors : (String, (String, Location) {hear{_}}~> Page, (String, String, Location) {hear{_}}~> Page) ~> ()
 fun addLocatedRouteWithErrors(path, f, error_handler) { unsafeAddRoute(path, f, error_handler) }
 
