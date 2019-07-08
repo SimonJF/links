@@ -28,6 +28,7 @@ module type EVALUATOR = sig
   val apply : Value.continuation -> Value.env -> v * v list -> result
   val apply_cont : Value.continuation -> Value.env -> v -> result
   val run_program : Value.env -> Ir.program -> (Value.env * v)
+  val run_program_as_thread : Value.env -> Ir.program -> (Value.env * v) Lwt.t
   val run_defs : Value.env -> Ir.binding list -> Value.env
 end
 
@@ -913,6 +914,10 @@ struct
             raise (internal_error ("NotFound " ^ s ^
               " while interpreting."))
         | Not_found  -> raise (internal_error ("Not_found while interpreting."))
+
+  let run_program_as_thread : Value.env -> Ir.program -> (Value.env * Value.t) Lwt.t =
+    fun env program ->
+        Proc.run_as_thread (fun () -> eval env program)
 
   let run_defs : Value.env -> Ir.binding list -> Value.env =
     fun env bs ->
