@@ -39,6 +39,8 @@ sig
   val singlethreaded : unit -> bool (* Exposed to prevent client calls from killing server-side threads... *)
 
   val run : (unit -> 'a Lwt.t) -> 'a
+
+  val run_as_thread : (unit -> 'a Lwt.t) -> 'a Lwt.t
 end
 
 (* Operations on websockets used to send and receive messages remotely. *)

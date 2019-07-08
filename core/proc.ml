@@ -276,13 +276,16 @@ struct
       end;
     Lwt.fail (Aborted v)
 
+  let run_as_thread pfun =
+    (Lwt.with_value current_pid_key (Some main_process_pid) pfun >>= fun r ->
+       (if not !atomic then
+          Lwt.join (Hashtbl.fold (fun _ t ts -> t :: ts) state.angels [])
+        else
+          Lwt.return ()) >>= fun _ ->
+       Lwt.return r)
+
   let run' pfun =
-   Lwt_main.run (Lwt.with_value current_pid_key (Some main_process_pid) pfun >>= fun r ->
-                 (if not !atomic then
-                    Lwt.join (Hashtbl.fold (fun _ t ts -> t :: ts) state.angels [])
-                  else
-                    Lwt.return ()) >>= fun _ ->
-                 Lwt.return r)
+   Lwt_main.run (run_as_thread pfun)
 
   let run pfun =
     reset_step_counter ();
