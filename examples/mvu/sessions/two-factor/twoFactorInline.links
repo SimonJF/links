@@ -85,7 +85,7 @@ module Server {
   }
 
   # "Plain" 2FA server, without exception handling
-  sig twoFactorServer : (TwoFactorServer) ~%~> ()
+  sig twoFactorServer : (TwoFactorServer) ~> ()
   fun twoFactorServer(s) {
     var ((username, password), s) = receive(s);
     if (checkDetails(username, password)) {
@@ -216,7 +216,7 @@ module Client {
           onInput(fun(str) { UpdateUsername(str) }) +@
           onEnter(fun() { Submit }) +@
           placeholder("Username") +@ autofocus(true), h0) +*
-        input(type("text") +@ id("password") +@ class("form-control") +@
+        input(type("password") +@ id("password") +@ class("form-control") +@
           value(uModel.password) +@
           onInput(fun(str) { UpdatePassword(str) }) +@
           onEnter(fun() { Submit }) +@
