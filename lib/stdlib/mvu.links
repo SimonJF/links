@@ -98,7 +98,7 @@ fun transition(model, view, updt, sub, extract, cmd) {
     })})
 }
 
-sig runLinear:
+sig runTransition:
   forall
   msg::Type(Any, Any), model::Type(Any, Any),
     unrModel::Type(Unl, Any) .
@@ -109,12 +109,34 @@ sig runLinear:
    (unrModel) {}~> Sub(msg),
    (model) {}~> (model, unrModel)
    ) {}~> ()
-fun runLinear(placeholder, model, view, updt, subscriptions, extract) {
+fun runTransition(placeholder, model, view, updt, subscriptions, extract) {
   var evtHandler = spawnClient {
     var (model, unrModel) = extract(model);
     var ap = new();
     VDom.runDom(placeholder, view(unrModel), ap, subscriptions(unrModel));
     evtLoop(ap, model, view, updt, subscriptions, extract, subscriptions(unrModel))
+  };
+  ()
+}
+
+sig runLinear:
+  forall
+  msg::Type(Any, Any), model::Type(Any, Any),
+    unrModel::Type(Unl, Any) .
+  (String,
+   model,
+   (unrModel) {}~> HTML(msg),
+   (msg, model) {}~> (model, Command(msg)),
+   (unrModel) {}~> Sub(msg),
+   (model) {}~> (model, unrModel)
+   ) {}~> ()
+fun runLinear(placeholder, model, view, updt, subscriptions, extract) {
+  var evtHandler = spawnClient {
+    fun updtNT(msg, model) {
+      var (model, cmd) = updt(msg, model);
+      noTransition(model, cmd)
+    }
+    runTransition(placeholder, model, view, updtNT, subscriptions, extract)
   };
   ()
 }
@@ -134,7 +156,7 @@ fun run(placeholder, model, view, updt, subscriptions) {
     var (model, cmd) = updt(msg, model);
     NoTransition(model, cmd)
   }
-  runLinear(placeholder, model, view, wrapUpdt, subscriptions, fun(x) { (x, x) })
+  runTransition(placeholder, model, view, wrapUpdt, subscriptions, fun(x) { (x, x) })
 }
 
 sig runSimple :

@@ -311,7 +311,7 @@ module Client {
   }
 
   fun mainPage(_) {
-    Mvu.runLinear("placeholder",
+    Mvu.runTransition("placeholder",
         emptyCredentialsModel(""), credentialsView, credentialsUpdt,
         noSubs, credentialsExtract);
 
