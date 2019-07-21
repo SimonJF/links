@@ -143,7 +143,7 @@ module Client {
   typename CredentialsMessage =
     [| UpdateUsername:String | UpdatePassword:String | Submit |];
 
-  typename ChallengeUModel = (challengeKey: Int, challengeResponse: String, error:String);
+  typename ChallengeUModel = (challengeKey: Int, challengeResponse: String);
   typename ChallengeModel = (ClientChallenge, ChallengeUModel);
   typename ChallengeMessage =
     [| UpdateResponse: String | Submit |];
@@ -186,7 +186,7 @@ module Client {
                   noSubs, bankExtract, MvuCommands.empty)
             case Challenge(c) ->
               var (challengeKey, c) = receive(c);
-              transition((c, (challengeKey = challengeKey, challengeResponse = "", error="")),
+              transition((c, (challengeKey = challengeKey, challengeResponse = "")),
                   challengeView, challengeUpdt, noSubs, challengeExtract, MvuCommands.empty)
             case AccessDenied(c) ->
               close(c);
@@ -259,14 +259,6 @@ module Client {
     fun challengeView(uModel) {
       open MvuHTML;
       open MvuAttrs;
-      var alertBox =
-        if (uModel.error == "") {
-          MvuHTML.empty
-        } else {
-          div(class("alert alert-danger"),
-              textNode(uModel.error))
-        };
-      alertBox +*
       form(class("form-signin"),
         div(a0,
           p(a0, textNode("It seems you are logging on from a new device.")) +*
