@@ -359,7 +359,6 @@ struct
      * freshly-generated function names per client on disconnection. *)
     (* We also need to do some gymnastics to tie the knot between IR values
      * and Value.t. *)
-
     let req_handler =
       let fresh_binder =
         DesugarDatatypes.read
