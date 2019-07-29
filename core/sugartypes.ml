@@ -297,6 +297,7 @@ and phrasenode =
   | TryInOtherwise   of phrase * Pattern.with_pos * phrase * phrase *
                           Types.datatype option
   | Raise
+  | VDom             of phrase
 and phrase = phrasenode WithPos.t
 and bindingnode =
   | Val     of Pattern.with_pos * (tyvar list * phrase) * Location.t *
@@ -438,6 +439,7 @@ struct
     | FormBinding (p, _)
     | Projection (p, _)
     | Page p
+    | VDom p
     | PagePlacement p
     | Upcast (p, _, _)
     | Instantiate p

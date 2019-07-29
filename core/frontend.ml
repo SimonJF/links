@@ -24,6 +24,7 @@ struct
     sentence
 
   let session_exceptions = Settings.get_value Basicsettings.Sessions.exceptions_enabled
+  let desugar_vdom = Settings.get_value Basicsettings.MVU.desugar_vdom
 
   let type_check_transformer transformer =
     Settings.get_value Basicsettings.TypeSugar.check_frontend_transformations &&
@@ -76,6 +77,8 @@ struct
       DesugarModules.desugar_program;
       only_if session_exceptions
         DesugarSessionExceptions.wrap_linear_handlers#program;
+      only_if desugar_vdom
+        DesugarVDom.desugar#program;
       DesugarLAttributes.desugar_lattributes#program;
       LiftRecursive.lift_funs#program;
       DesugarDatatypes.program prev_tyenv;
@@ -164,6 +167,8 @@ let program prev_tyenv pos_context program =
       (ResolvePositions.resolve_positions pos_context)#sentence;
       for_side_effects
         CheckXmlQuasiquotes.checker#sentence;
+      only_if desugar_vdom
+        DesugarVDom.desugar#sentence;
       DesugarModules.desugar_sentence;
       only_if session_exceptions
         DesugarSessionExceptions.wrap_linear_handlers#sentence;
