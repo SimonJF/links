@@ -51,3 +51,7 @@ end
 module MVU = struct
   let desugar_vdom = Settings.add_bool ("desugar_vdom", false, `User)
 end
+
+module MVU = struct
+  let desugar_vdom = Settings.add_bool ("desugar_vdom", false, `User)
+end

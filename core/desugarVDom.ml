@@ -17,10 +17,9 @@ open Utility
  *               HTMLTag(tagName="button", attrs=onClick(fun() { Submit }), children=HTMLRaw("Submit")))))
  *)
 
-(* Generates MvuHTML.concat. Precondition: hs are all desugared. *)
-let html_concat pos hs =
-  let wp x = make ~pos x in
-  wp (FnAppl(wp (QualifiedVar ["MvuHTML"; "concat"]), [hs]))
+(* Inside a VDom node, rewrite all XML to the appropriate MVU constructors *)
+let html_empty pos =
+  make ~pos (ConstructorLit("HTMLEmpty", None, None))
 
 (* Generates MvuAttr.concat. Precondition: attrs are all desugared. *)
 let attrs_concat pos attrs =
@@ -72,32 +71,29 @@ let desugar_vdom pos =
 
     method! phrase =
       function
-        | {node=TextNode str; _} ->
+        | { node=TextNode str; pos } ->
             let wp x = make ~pos x in
             wp (ConstructorLit("HTMLRaw", Some(wp (Constant (String str))), None))
-        | {node=Xml (name, attrs, _, children); _} ->
+        | { node=Xml (name, _attrs, _, children); pos } ->
             let wp x = make ~pos x in
-            (* Desugar children *)
             let children =
-              let xs = self#list (fun o -> o#phrase) children in
-              html_concat pos (wp (ListLit (xs, None))) in
+              begin
+              match children with
+                | [] -> html_empty pos
+                | xs ->
+                    let xs = self#list (fun o -> o#phrase) xs in
+                    html_concat pos (wp (ListLit (xs, None)))
+              end in
 
-            (* Desugar attributes *)
-            let attrs =
-              attrs_concat
-                pos (wp (ListLit (List.map (desugar_attribute pos) attrs, None))) in
-            (*
-            let attrs = attr_concat (
-              wp (ConstructorLit("AttrEmpty", None, None)) in
-            *)
-
+            (* Temporary -- need to desugar attributes properly *)
+            let attrs = wp (ConstructorLit("AttrEmpty", None, None)) in
             let record_fields =
               [("tagName", wp (Constant (String name)));
                ("attrs", attrs);
                ("children", children)] in
             let record_lit = wp (RecordLit(record_fields, None)) in
             wp (ConstructorLit("HTMLTag", Some(record_lit), None))
-        | {node=VDom p; _} -> super#phrase p
+        | {node = VDom p; _} -> super#phrase p
         | p -> super#phrase p
 
  end
