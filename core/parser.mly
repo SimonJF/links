@@ -278,7 +278,7 @@ let parse_foreign_language pos lang =
 %token LBRACKETPLUSBAR BARPLUSRBRACKET
 %token LBRACKETAMPBAR BARAMPRBRACKET
 %token LEFTTRIANGLE RIGHTTRIANGLE NU
-%token FOR LARROW LLARROW WHERE FORMLET PAGE
+%token FOR LARROW LLARROW WHERE FORMLET PAGE VDOM
 %token LRARROW
 %token COMMA VBAR DOT DOTDOT COLON COLONCOLON
 %token TABLE TABLEHANDLE TABLEKEYS FROM DATABASE QUERY WITH YIELDS ORDERBY
@@ -742,6 +742,7 @@ escape_expression:
 formlet_expression:
 | FORMLET xml YIELDS exp                                       { with_pos $loc (Formlet ($2, $4)) }
 | PAGE xml                                                     { with_pos $loc (Page $2)          }
+| VDOM xml                                                     { with_pos $loc (VDom $2)          }
 
 table_expression:
 | TABLE exp WITH datatype perhaps_table_constraints FROM exp   { with_pos $loc (TableLit ($2, datatype $4, $5,

@@ -47,3 +47,7 @@ module Sessions = struct
                 |> CLI.(add (long "session-exceptions"))
                 |> sync)
 end
+
+module MVU = struct
+  let desugar_vdom = Settings.add_bool ("desugar_vdom", false, `User)
+end

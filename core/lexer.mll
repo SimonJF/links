@@ -132,6 +132,7 @@ let keywords = [
  "unsafe"   , UNSAFE;
  "values"   , VALUES;
  "var"      , VAR;
+ "vdom"     , VDOM;
  "where"    , WHERE;
  "with"     , WITH;
 (* SAND *)

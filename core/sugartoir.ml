@@ -1083,6 +1083,7 @@ struct
           | Regex _
           | Formlet _
           | Page _
+          | VDom _
           | FormletPlacement _
           | PagePlacement _
           | FormBinding _

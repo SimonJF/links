@@ -454,6 +454,7 @@ class map =
           let _x = o#phrase _x in
           let _x_i1 = o#phrase _x_i1 in Formlet ((_x, _x_i1))
       | Page _x -> let _x = o#phrase _x in Page _x
+      | VDom _x -> let _x = o#phrase _x in VDom _x
       | FormletPlacement ((_x, _x_i1, _x_i2)) ->
           let _x = o#phrase _x in
           let _x_i1 = o#phrase _x_i1 in
@@ -1192,7 +1193,7 @@ class fold =
       | TextNode _x -> let o = o#string _x in o
       | Formlet ((_x, _x_i1)) ->
           let o = o#phrase _x in let o = o#phrase _x_i1 in o
-      | Page _x -> let o = o#phrase _x in o
+      | Page _x | VDom _x -> let o = o#phrase _x in o
       | FormletPlacement ((_x, _x_i1, _x_i2)) ->
           let o = o#phrase _x in
           let o = o#phrase _x_i1 in let o = o#phrase _x_i2 in o
@@ -1976,6 +1977,7 @@ class fold_map =
           let (o, _x) = o#phrase _x in
           let (o, _x_i1) = o#phrase _x_i1 in (o, (Formlet ((_x, _x_i1))))
       | Page _x -> let (o, _x) = o#phrase _x in (o, (Page _x))
+      | VDom _x -> let (o, _x) = o#phrase _x in (o, (VDom _x))
       | FormletPlacement ((_x, _x_i1, _x_i2)) ->
           let (o, _x) = o#phrase _x in
           let (o, _x_i1) = o#phrase _x_i1 in

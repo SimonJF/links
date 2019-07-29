@@ -143,7 +143,8 @@ struct
     | DBInsert _
     | TryInOtherwise _
     | Raise
-    | DBUpdate _ -> false
+    | DBUpdate _
+    | VDom _ -> false
   and is_pure_binding ({node ; _ }: binding) = match node with
       (* need to check that pattern matching cannot fail *)
     | Import _
@@ -4116,6 +4117,7 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * Usage.t =
               (erase try_phrase, erase_pat pat, erase in_phrase,
                 erase unless_phrase, Some return_type), return_type, usages_res
         | QualifiedVar _ -> assert false
+        | VDom _ -> assert false
         | Raise ->
             let effects = Types.make_singleton_open_row
                             (Value.session_exception_operation, `Present (Types.make_pure_function_type [] Types.empty_type))
