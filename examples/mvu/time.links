@@ -74,19 +74,33 @@ fun view(model) {
     } else {
       "Pause"
     };
-    div (id ("swatch") +@ class ("swatch"), ch([
-      h1 (ae, textNode(pad(model.minutes)) +* textNode(":" ^^ pad(model.seconds))),
-      button (id ("togglepause") +@ togglePauseHandler, textNode(toggleText)),
-      button (id ("reset") +@ resetHandler, textNode("Reset")),
-      button (id ("stop") +@ stopHandler, textNode("Stop")),
-      div (class ("footer"), ch([
-        b (ae, textNode("Keyboard shortcuts")),
-        br (ae, he),
-        textNode("| p : start/pause | "),
-        textNode("r : reset | "),
-        textNode("s : stop |")
-      ]))
-    ]))
+    vdom
+      <div id="swatch" class="swatch">
+        <h1>{pad(model.minutes)}</h1>
+        <button id="togglepause" onClick="{fun() { TogglePause }}">{toggleText}</button>
+        <button id="reset" onClick="{fun() { Reset }}">Reset</button>
+        <button id="stop" onClick="{fun() { Stop }}">Stop</button>
+        <div class="footer">
+          <b>Keyboard shortcuts</b>
+          <br />
+          | p : start/pause | r : reset | s : stop |
+        </div>
+      </div>
+
+
+   #div (id ("swatch") +@ class ("swatch"), ch([
+   #  h1 (ae, textNode(pad(model.minutes)) +* textNode(":" ^^ pad(model.seconds))),
+   #  button (id ("togglepause") +@ togglePauseHandler, textNode(toggleText)),
+   #  button (id ("reset") +@ resetHandler, textNode("Reset")),
+   #  button (id ("stop") +@ stopHandler, textNode("Stop")),
+   #  div (class ("footer"), ch([
+   #    b (ae, textNode("Keyboard shortcuts")),
+   #    br (ae, he),
+   #    textNode("| p : start/pause | "),
+   #    textNode("r : reset | "),
+   #    textNode("s : stop |")
+   #  ]))
+   #]))
 }
 
 sig subscriptions : (Model) ~> MvuSubscriptions.Sub(Msg)

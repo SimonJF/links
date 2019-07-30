@@ -14,7 +14,7 @@ type sugar_error_stage =
   | CheckXML
   | DesugarInners
   | DesugarModules
-
+  | DesugarVDom
 
 exception RuntimeError of string
 exception UndefinedVariable of string
