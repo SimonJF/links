@@ -1,4 +1,6 @@
-# 0.9 (Burghmuirhead)
+# 0.9-DryRun
+
+This is a dry-run for the 0.9 release.
 
 Version 0.9 (Burghmuirhead) presents multiple major new features, bugfixes, as
 well as significant changes and improvements to the Links internals.
