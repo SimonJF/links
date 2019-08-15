@@ -74,11 +74,11 @@ struct
         CheckXmlQuasiquotes.checker#program;
       for_side_effects
         (DesugarSessionExceptions.settings_check);
+      only_if desugar_vdom
+        DesugarVDom.desugar#program;
       DesugarModules.desugar_program;
       only_if session_exceptions
         DesugarSessionExceptions.wrap_linear_handlers#program;
-      only_if desugar_vdom
-        DesugarVDom.desugar#program;
       DesugarLAttributes.desugar_lattributes#program;
       LiftRecursive.lift_funs#program;
       DesugarDatatypes.program prev_tyenv;
