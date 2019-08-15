@@ -278,23 +278,97 @@ module Typeability_preserving = struct
            trace_type_error T.Typeable.name Sugartypes.pp_sentence program payload.program stacktrace exn);
       result
     in
-    let (Transform.Typeable.Result { state; program }) =
-      let initial_state = Transform.Typeable.{ datatype; context = context' } in
-      Array.fold_left apply Transform.Typeable.(return initial_state program) transformers
-    in
-    { datatype = state.Transform.Typeable.datatype;
-      context  = state.Transform.Typeable.context;
-      program }
-end
+    Debug.if_set Basicsettings.TypeSugar.check_frontend_transformations_dump
+      (fun () -> Printf.sprintf "Before %s:\n%s\n\n" name (print pre));
+    Debug.if_set Basicsettings.TypeSugar.check_frontend_transformations_dump
+      (fun () -> Printf.sprintf "After %s:\n%s\n\n" name (print post));
+    Printexc.raise_with_backtrace e trace
 
-(* Parametric transformation runner. *)
-let transform show untyped_run typeable_run typechecker_run context program =
-  (* Dump the undecorated AST. *)
-  Debug.if_set show_pre_frontend_ast
-    (fun () -> Printf.sprintf "AST before frontend transformations:\n%s\n\n" (show program));
-  (* Untyped transformations. *)
-  let { program; context; _ } =
-    untyped_run context program
+  let for_side_effects ignored_transformer program  =
+    let _ = ignored_transformer program in
+    program
+
+  type pre_typing_program_transformer =
+    Sugartypes.program -> Sugartypes.program
+
+  type post_typing_program_transformer =
+    string * (Types.typing_environment -> Sugartypes.program -> Sugartypes.program)
+
+
+  (* Program transformations before type-checking on programs (i.e., non-REPL mode *)
+  let program_pre_typing_transformers
+    (pos_context : SourceCode.source_code)
+    (prev_tyenv : Types.typing_environment) (* type env before checking current program *)
+      : pre_typing_program_transformer list =
+    let only_if enabled f x =
+      if enabled then f x else x in
+    [
+      (ResolvePositions.resolve_positions pos_context)#program;
+      for_side_effects
+        CheckXmlQuasiquotes.checker#program;
+      for_side_effects
+        (DesugarSessionExceptions.settings_check);
+      only_if desugar_vdom
+        DesugarVDom.desugar#program;
+      DesugarModules.desugar_program;
+      only_if session_exceptions
+        DesugarSessionExceptions.wrap_linear_handlers#program;
+      DesugarLAttributes.desugar_lattributes#program;
+      LiftRecursive.lift_funs#program;
+      DesugarDatatypes.program prev_tyenv;
+    ]
+
+
+  (* Program transformations after type-checking programs (i.e., non-REPL mode *)
+  let program_post_typing_transformers
+      : post_typing_program_transformer list =
+    let only_if enabled f x y =
+      if enabled then f x y else y in
+    [
+      "cp", DesugarCP.desugar_program;
+      "inners", DesugarInners.desugar_program;
+      (*only_if session_exceptions
+        DesugarSessionExceptions.insert_toplevel_handlers; TODO*)
+      "session_exceptions",
+      only_if session_exceptions
+        DesugarSessionExceptions.desugar_program;
+      "processes", DesugarProcesses.desugar_program;
+      "fors", DesugarFors.desugar_program;
+      "regexes", DesugarRegexes.desugar_program;
+      "formlets", DesugarFormlets.desugar_program;
+      "pages", DesugarPages.desugar_program;
+      "funs", DesugarFuns.desugar_program;
+    ]
+
+
+let program prev_tyenv pos_context program =
+  if Settings.get_value Basicsettings.show_pre_frontend_ast then
+    Debug.print ("Pre-Frontend AST:\n" ^ Sugartypes.show_program program);
+
+
+  let pre_transformers =
+    program_pre_typing_transformers pos_context prev_tyenv in
+  let apply_pre_tc_transformer program transformer =
+    transformer program in
+  let pre_tc_program =
+    List.fold_left
+      apply_pre_tc_transformer
+      program
+      pre_transformers in
+
+  let post_tc_program, t, cur_tyenv =
+    TypeSugar.Check.program prev_tyenv pre_tc_program in
+
+
+  let apply_post_tc_transformer program (name, transformer) =
+    let post = transformer prev_tyenv program in
+    if type_check_transformer name then
+      let _ =
+        try TypeSugar.Check.program { prev_tyenv with Types.desugared = true } post
+        with e -> trace_type_check_error name Sugartypes.pp_program program post e
+      in post
+    else
+      post
   in
   (* Typechecking. *)
   let (program, datatype, tenv) =

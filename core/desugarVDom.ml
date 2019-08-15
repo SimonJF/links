@@ -3,7 +3,7 @@ open SourceCode.WithPos
 open Sugartypes
 open Utility
 
-(* This pass desugars VDom notation to the appropriate MVU constructors.
+(* This (hacky, non-final) pass desugars VDom notation to the appropriate MVU constructors.
  * vdom
  *  <html>
  *    <span class="header">Hello, world!</b>
@@ -17,20 +17,32 @@ open Utility
  *               HTMLTag(tagName="button", attrs=onClick(fun() { Submit }), children=HTMLRaw("Submit")))))
  *)
 
-(* Inside a VDom node, rewrite all XML to the appropriate MVU constructors *)
-let html_empty pos =
-  make ~pos (ConstructorLit("HTMLEmpty", None, None))
+let (attrs_module, html_module) =
+  if (Settings.get_value Basicsettings.Sessions.exceptions_enabled) then
+    ("LinearMvuAttrs", "LinearMvuHTML")
+  else
+    ("MvuAttrs", "MvuHTML")
 
 (* Generates MvuHTML.concat. Precondition: hs are all desugared. *)
 let html_concat pos hs =
   let wp x = make ~pos x in
-  wp (FnAppl(wp (QualifiedVar ["MvuHTML"; "concat"]), [attrs]))
+  wp (FnAppl(wp (QualifiedVar [html_module; "concat"]), [hs]))
 
-(* Generates MvuAttr.concat. Precondition: attrs are all desugared. *)
+(* Generates MvuAttrs.concat. Precondition: attrs are all desugared. *)
 let attrs_concat pos attrs =
   let wp x = make ~pos x in
-  wp (FnAppl(wp (QualifiedVar ["MvuAttr"; "concat"]), [attrs]))
+  wp (FnAppl(wp (QualifiedVar [attrs_module; "concat"]), [attrs]))
 
+(* Some attribute names do not correspond to property names, so this
+ * function just does a substitution. *)
+let substitute_attr_names attr =
+  let subs =
+    [("colspan", "colSpan");
+     ("rowspan", "rowSpan");
+     ("class", "className")] in
+  match List.assoc_opt attr subs with
+    | Some replacement -> replacement
+    | None -> attr
 
 let desugaring_error pos message =
   let open Errors in
@@ -58,7 +70,7 @@ let desugar_attribute pos (k, v) =
       if is_supported name then
         (* No guarantees that the value isn't garbage, of course, but that will
          * cause a type error later. *)
-        wp (FnAppl (wp (QualifiedVar ["MvuAttrs"; name]), [attr_val]))
+        wp (FnAppl (wp (QualifiedVar [attrs_module; name]), [attr_val]))
       else
         let supported_str = String.concat ", " supported_event_handlers in
         let message =
@@ -67,8 +79,8 @@ let desugar_attribute pos (k, v) =
         raise (desugaring_error pos message)
     end
   else
-    wp (FnAppl(wp (QualifiedVar ["MvuAttr"; "attr"]),
-      [wp (Constant (String k)); attr_val]))
+    wp (FnAppl(wp (QualifiedVar [attrs_module; "attr"]),
+      [wp (Constant (String (substitute_attr_names k))); attr_val]))
 
 let desugar_vdom pos =
   object(self)
@@ -78,7 +90,7 @@ let desugar_vdom pos =
       function
         | {node=TextNode str; _} ->
             let wp x = make ~pos x in
-            wp (ConstructorLit("HTMLRaw", Some(wp (Constant (String str))), None))
+            wp (ConstructorLit("HTMLText", Some(wp (Constant (String str))), None))
         | {node=Xml (name, attrs, _, children); _} ->
             let wp x = make ~pos x in
             (* Desugar children *)
@@ -88,12 +100,10 @@ let desugar_vdom pos =
 
             (* Desugar attributes *)
             let attrs =
+              self#list (fun o (n, ps) -> (n, o#list (fun o -> o#phrase) ps)) attrs in
+            let attrs =
               attrs_concat
                 pos (wp (ListLit (List.map (desugar_attribute pos) attrs, None))) in
-            (*
-            let attrs = attr_concat (
-              wp (ConstructorLit("AttrEmpty", None, None)) in
-            *)
 
             let record_fields =
               [("tagName", wp (Constant (String name)));
