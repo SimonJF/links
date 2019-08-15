@@ -168,7 +168,8 @@ module Client {
     }
 
 
-    sig credentialsUpdt : (CredentialsMessage, CredentialsModel) ~%~> Transition(CredentialsModel, CredentialsMessage, { |%})
+    sig credentialsUpdt : (CredentialsMessage, CredentialsModel) ~%~>
+        Transition(CredentialsModel, CredentialsMessage)
     fun credentialsUpdt(msg, model) {
       var (c, uModel) = model;
       switch (msg) {
@@ -222,7 +223,8 @@ module Client {
           onEnter(fun() { Submit }) +@
           placeholder("Password"), h0) +*
         button(type("button") +@ class("btn btn-lg btn-primary btn-block")
-          +@ onClick(fun() { Submit }),
+          +@ onClick(fun() { Submit })
+          +@ onEnter(fun() { Submit }),
           textNode("Sign in")))
     }
 
@@ -231,7 +233,8 @@ module Client {
     }
 
     ## Challenge
-    sig challengeUpdt : (ChallengeMessage, ChallengeModel) ~%~> Transition(ChallengeModel, ChallengeMessage, { |%})
+    sig challengeUpdt : (ChallengeMessage, ChallengeModel) ~%~>
+      Transition(ChallengeModel, ChallengeMessage)
     fun challengeUpdt(msg, model) {
       var (c, uModel) = model;
       switch(msg) {

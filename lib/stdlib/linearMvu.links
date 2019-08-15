@@ -22,16 +22,16 @@ module VDom {
   }
 }
 
-typename Transition(model :: Type(Any, Any), msg :: Type(Any, Any), e :: Row) =
+typename Transition(model :: Type(Any, Any), msg :: Type(Any, Any)) =
     [| NoTransition:(model, Command(msg))
-     | Transition: () {SessionFail:() {}-> [||] | e}~@ () |];
+     | Transition: () {SessionFail:() {}-> [||]}~@ () |];
 
 
 sig noTransition :
   forall
     model :: Type(Any, Any),
     msg :: Type(Any, Any), e :: Row .
-  (model, Command(msg)) ~e~> Transition(model, msg, { |e})
+  (model, Command(msg)) ~e~> Transition(model, msg)
 fun noTransition(model, cmd) {
   NoTransition(model, cmd)
 }
@@ -44,14 +44,14 @@ fun applyLinearTransition(f) { f() }
 sig evtLoop :
  forall msg :: Type(Any, Any),
         model :: Type(Any, Any),
-        unrModel :: Type(Unl, Any), e :: Row .
+        unrModel :: Type(Unl, Any) .
   (AP(?msg.End),
    model,
-   (unrModel) {SessionFail:() {}-> [||] | e}~> HTML(msg),
-   (msg, model) {SessionFail:() {}-> [||] | e}~> Transition(model, msg, { |e}),
-   (unrModel) {SessionFail:() {}-> [||] | e}~> Sub(msg),
-   (model) {SessionFail:() {}-> [||] | e}~> (model, unrModel),
-   Sub(msg)) {SessionFail:() {}-> [||] | e}~> ()
+   (unrModel) {SessionFail:() {}-> [||]}~> HTML(msg),
+   (msg, model) {SessionFail:() {}-> [||]}~> Transition(model, msg),
+   (unrModel) {SessionFail:() {}-> [||]}~> Sub(msg),
+   (model) {SessionFail:() {}-> [||]}~> (model, unrModel),
+   Sub(msg)) {SessionFail:() {}-> [||]}~> ()
 fun evtLoop(ap, model, view, updt, subscriptionsFn, extract, prevSubscriptions) {
   var (message, s) = receive(accept(ap));
   close(s);
@@ -75,14 +75,13 @@ sig transition :
         b :: Type(Any, Any),
         msg :: Type(Any, Any),
         model :: Type(Any, Any),
-        unrModel :: Type(Unl, Any),
-        e :: Row, f :: Row .
+        unrModel :: Type(Unl, Any) .
    (model,
-   (unrModel) {SessionFail:() {}-> [||] | e}~> HTML(msg),
-   (msg, model) {SessionFail:() {}-> [||] | e}~> Transition(model, msg, { |e} ),
-   (unrModel) {SessionFail:() {}-> [||] | e}~> Sub(msg),
-   (model) {SessionFail:() {}-> [||] | e}~> (model, unrModel),
-   Command(msg)) {SessionFail:() {}-> [||] | e}~> Transition(a, b, { |f})
+   (unrModel) {SessionFail:() {}-> [||]}~> HTML(msg),
+   (msg, model) {SessionFail:() {}-> [||]}~> Transition(model, msg),
+   (unrModel) {SessionFail:() {}-> [||]}~> Sub(msg),
+   (model) {SessionFail:() {}-> [||]}~> (model, unrModel),
+   Command(msg)) {SessionFail:() {}-> [||]}~> Transition(a, b)
 fun transition(model, view, updt, sub, extract, cmd) {
   Transition(linfun() {
     ignore(spawn {
@@ -102,14 +101,14 @@ fun transition(model, view, updt, sub, extract, cmd) {
 sig runTransition:
   forall
   msg::Type(Any, Any), model::Type(Any, Any),
-    unrModel::Type(Unl, Any), e :: Row, f :: Row .
+    unrModel::Type(Unl, Any) .
   (String,
    model,
-   (unrModel) {SessionFail:() {}-> [||] | e}~> HTML(msg),
-   (msg, model) {SessionFail:() {}-> [||] | e}~> Transition(model, msg, { |e}),
-   (unrModel) {SessionFail:() {}-> [||] | e}~> Sub(msg),
-   (model) {SessionFail:() {}-> [||] | e}~> (model, unrModel)
-   ) { | f}~> ()
+   (unrModel) {SessionFail:() {}-> [||]}~> HTML(msg),
+   (msg, model) {SessionFail:() {}-> [||]}~> Transition(model, msg),
+   (unrModel) {SessionFail:() {}-> [||]}~> Sub(msg),
+   (model) {SessionFail:() {}-> [||]}~> (model, unrModel)
+   ) {}~> ()
 fun runTransition(placeholder, model, view, updt, subscriptions, extract) {
   var evtHandler = spawnClient {
     var (model, unrModel) = extract(model);
@@ -123,13 +122,13 @@ fun runTransition(placeholder, model, view, updt, subscriptions, extract) {
 sig runLinear:
   forall
   msg::Type(Any, Any), model::Type(Any, Any),
-    unrModel::Type(Unl, Any), e :: Row, f :: Row .
+    unrModel::Type(Unl, Any) .
   (String,
    model,
-   (unrModel) {SessionFail:() {}-> [||] | e}~> HTML(msg),
-   (msg, model) {SessionFail:() {}-> [||] | e}~> (model, Command(msg)),
-   (unrModel) {SessionFail:() {}-> [||] | e}~> Sub(msg),
-   (model) {SessionFail:() {}-> [||] | e}~> (model, unrModel)
+   (unrModel) {SessionFail:() {}-> [||]}~> HTML(msg),
+   (msg, model) {SessionFail:() {}-> [||]}~> (model, Command(msg)),
+   (unrModel) {SessionFail:() {}-> [||]}~> Sub(msg),
+   (model) {SessionFail:() {}-> [||]}~> (model, unrModel)
    ) {}~> ()
 fun runLinear(placeholder, model, view, updt, subscriptions, extract) {
   fun updtNT(msg, model) {
@@ -143,13 +142,12 @@ fun runLinear(placeholder, model, view, updt, subscriptions, extract) {
 sig run:
   forall
     msg :: Type(Any, Any),
-    model :: Type(Unl, Any),
-    e :: Row, f :: Row .
+    model :: Type(Unl, Any) .
   (String,
     model,
-    (model) {SessionFail:() {}-> [||] | e}~> HTML(msg),
-    (msg, model) {SessionFail:() {}-> [||] | e}~> (model, Command(msg)),
-    (model) {SessionFail:() {}-> [||] | e}~> Sub(msg)) {}~> ()
+    (model) {SessionFail:() {}-> [||]}~> HTML(msg),
+    (msg, model) {SessionFail:() {}-> [||]}~> (model, Command(msg)),
+    (model) {SessionFail:() {}-> [||]}~> Sub(msg)) {}~> ()
 fun run(placeholder, model, view, updt, subscriptions) {
   fun wrapUpdt(msg, model) {
     var (model, cmd) = updt(msg, model);
@@ -161,12 +159,11 @@ fun run(placeholder, model, view, updt, subscriptions) {
 sig runSimple :
   forall
     msg :: Type(Any, Any),
-    model :: Type(Unl, Any),
-    e :: Row, f :: Row.
+    model :: Type(Unl, Any) .
   (String,
     model,
-    (model) {SessionFail:() {}-> [||] | e}~> HTML(msg),
-    (msg, model) {SessionFail:() {}-> [||] | e}~> model) {}~> ()
+    (model) {SessionFail:() {}-> [||]}~> HTML(msg),
+    (msg, model) {SessionFail:() {}-> [||]}~> model) {}~> ()
 fun runSimple(placeholder, model, view, updt) {
   run(placeholder, model, view,
     fun(msg, model) { (updt(msg, model), NoCommand)},
@@ -175,8 +172,8 @@ fun runSimple(placeholder, model, view, updt) {
 
 sig runStatic :
   forall
-    model :: Type(Unl, Any), e :: Row, f :: Row .
-  (String, model, (model) {SessionFail:() {}-> [||] | e}~> HTML(())) {}~> ()
+    model :: Type(Unl, Any) .
+  (String, model, (model) {SessionFail:() {}-> [||]}~> HTML(())) {}~> ()
 fun runStatic(placeholder, model, view) {
   runSimple(placeholder, model, view, fun(_, model) { model })
 }
