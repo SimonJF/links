@@ -97,7 +97,7 @@ module DatabaseDrivers = struct
 end
 
 (** The banner *)
-let version = "0.9 (Burghmuirhead)"
+let version = "0.9.1 (Burghmuirhead)"
 let welcome_note = Settings.add_string ("welcome_note",
 " _     _ __   _ _  __  ___\n\
  / |   | |  \\ | | |/ / / ._\\\n\
@@ -263,7 +263,6 @@ module Ir = struct
   let typecheck_ir = Settings.add_bool("typecheck_ir", false, `User)
   (* Abort compilation on IR typing error *)
   let fail_on_ir_type_error = Settings.add_bool("fail_on_ir_type_error", false, `User)
-  let simplify_types = Settings.add_bool("simplify_types", false, `User)
 end
 
 (* Generalise stuff *)
@@ -341,4 +340,8 @@ end
 module Database = struct
   let coerce_null_integers = Settings.add_bool("coerce_null_integers", false, `User)
   let null_integer = Settings.add_int ("null_integer", (-1), `User)
+end
+
+module MVU = struct
+  let desugar_vdom = Settings.add_bool ("desugar_vdom", false, `User)
 end
