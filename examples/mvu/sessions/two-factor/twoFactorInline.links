@@ -161,7 +161,7 @@ module Client {
 
   mutual {
     ### Credentials
-    sig emptyCredentialsModel : (String) {SessionFail{_}}~> CredentialsModel
+    sig emptyCredentialsModel : (String) ~> CredentialsModel
     fun emptyCredentialsModel(error) {
       var c = request(ap);
       (c, (username="", password="", error=error))
