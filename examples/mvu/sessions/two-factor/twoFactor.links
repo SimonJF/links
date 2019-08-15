@@ -1,0 +1,388 @@
+# Two-factor bank logon example.
+
+# Type definitions
+typename Username = String;
+typename Password = String;
+typename ChallengeKey = Int;
+typename Response = Int;
+typename Secret = String;
+
+typename ServerMain = !Secret.End;
+
+# Server session type
+typename TwoFactorServer =
+  ?(Username, Password).[+|
+    Authenticated: ServerMain,
+    Challenge: !ChallengeKey.?Response.
+      [+| Authenticated: ServerMain, AccessDenied: End  |+],
+    AccessDenied: End |+];
+
+# Client session type
+typename TwoFactorClient = ~TwoFactorServer;
+typename ClientMain = ~ServerMain;
+
+
+# Server implementation
+module Server {
+
+  # needs2FA flag: set to true in order to require 2FA
+  var needs2FA = true;
+
+  # raiseExn flag: set to true in order to raise an exception in
+  # checkDetails
+  var raiseExn = false;
+
+
+  # Correct functioning of checkDetails
+  sig checkDetails : (Username, Password) ~> Bool
+  fun checkDetails(username, password) {
+    if (not(raiseExn)) {
+        (username == "User") && (password == "hunter2")
+    } else {
+        raise
+    }
+  }
+
+  sig serverMain : (ServerMain) ~> ()
+  fun serverMain(s) {
+    close(send("Money!", s))
+  }
+
+  fun generateKey() {
+    floatToInt(random() *. 100000.0)
+  }
+
+  fun check2FAResponse(challenge, response) {
+    debug("Response: " ^^ intToString(challenge));
+    response == (challenge + 1)
+  }
+
+
+  # Checks the 2-factor response
+  fun twoFactorChallenge(s) {
+    var challengeKey = generateKey();
+    var s = select Challenge s;
+    var s = send(challengeKey, s);
+    var (response, s) = receive(s);
+    if (check2FAResponse(challengeKey, response)) {
+      var s = select Authenticated s;
+      serverMain(s)
+    } else {
+      close(select AccessDenied s)
+    }
+  }
+
+  # "Plain" 2FA server, without exception handling
+  sig twoFactorServer : (TwoFactorServer) ~%~> ()
+  fun twoFactorServer(s) {
+    var ((username, password), s) = receive(s);
+    if (checkDetails(username, password)) {
+      if (needs2FA) {
+        twoFactorChallenge(s)
+      } else {
+        var s = select Authenticated s;
+        serverMain(s);
+      }
+    } else {
+      close(select AccessDenied s)
+    }
+  }
+
+  # 2FA server, *with* exception handling for checkDetails.
+  sig twoFactorServerExn : (TwoFactorServer) ~> ()
+  fun twoFactorServerExn(s) {
+    var ((username, password), s) = receive(s);
+    try checkDetails(username, password) as isAuthenticated in {
+      if (isAuthenticated) {
+        if (needs2FA) {
+          twoFactorChallenge(s)
+        } else {
+          var s = select Authenticated s;
+          serverMain(s);
+        }
+      } else {
+        close(select AccessDenied s)
+      }
+    } otherwise {
+      cancel(s);
+      print("An exception occurred!")
+    }
+  }
+
+
+  # Thread which listens for connections, spawns a process
+  # for each accepted thread.
+  fun acceptor(ap) {
+    # Accept from AP
+    var s = accept(ap);
+    # Spawn fresh 2FA handler process
+    var _ = spawn { twoFactorServerExn(s) };
+    # Accept more clients
+    acceptor(ap)
+  }
+
+}
+
+module Client {
+
+  typename CredentialsUModel = (username: String, password: String, error: String);
+  typename CredentialsModel = (TwoFactorServer, CredentialsUModel);
+
+  typename CredentialsMessage =
+    [| UpdateUsername:String, UpdatePassword:String, Submit |];
+
+  fun updt(msg, model) {
+    var (c, uModel) = model;
+    switch (msg) {
+      case UpdateUsername(user) ->
+        noTransition(c, (uModel with username = user))
+      case UpdatePassword(pass) ->
+        noTransition(c, (uModel with password = pass))
+      case Submit ->
+        linfun connectToServer() {
+          var c = send((uModel.username, uModel.password), c);
+          offer(c) {
+            case Authenticated(c) ->
+              ServerAuthenticated
+            case Challenge(c) ->
+            case AccessDenied(c) ->
+              close(c);
+
+          }
+        }
+
+        transition(waitingModel, waitingView, waitingUpdt,
+            noSubs, waitingExtract, SpawnLinear(connectToServer))
+    }
+  }
+
+  typename ChallengeModel = (challengeKey: String, challengeResponse: String);
+  typename ChallengeMessage =
+    [| UpdateResponse: String, Submit |];
+
+  typename BankModel = (money: Int);
+  typename BankMessage = [| Logout |];
+
+
+#   fun getInput(dom_id) {
+#     var textNode = getNodeById(dom_id);
+#     domGetPropertyFromRef(textNode, "value")
+#   }
+#
+#   ## Client stuff
+#   sig alert: (Bool, String) ~> ()
+#   fun alert(isError, txt) {
+#     var alertNode =
+#       if (isError) {
+#         <#>
+#           <div class="alert alert-danger" role="alert">
+#             { stringToXml(txt) }
+#           </div>
+#         </#>
+#       } else {
+#         <#>
+#           <div class="alert alert-info" role="alert">
+#             { stringToXml(txt) }
+#           </div>
+#         </#>
+#       };
+#
+#     domReplaceChildren(alertNode, getNodeById("alertBox"))
+#   }
+#
+#   fun hideAlert() {
+#     domReplaceChildren(<#></#>, getNodeById("alertBox"))
+#   }
+#
+#   sig showInfo : (String) ~> ()
+#   fun showInfo(txt) {
+#     alert(false, txt)
+#   }
+#
+#   sig showError : (String) ~> ()
+#   fun showError(txt) {
+#     alert(true, txt)
+#   }
+#
+#   sig loginFailed : () ~> ()
+#   fun loginFailed() {
+#     showError("Login failed!")
+#   }
+#
+#   fun hide(id) {
+#     domReplaceChildren(<#></#>, getNodeById(id))
+#   }
+#
+#   fun hideForm() {
+#     hide("formContainer")
+#   }
+#
+#   fun hideMain() {
+#     hide("mainContainer")
+#   }
+#
+#   fun replaceForm(xml) {
+#     domReplaceChildren(xml, getNodeById("formContainer"))
+#   }
+#
+#   sig onSubmit : (() ~%~@ ()) ~%~> ()
+#   fun onSubmit(f) {
+#     receive {
+#       case _ -> f()
+#     }
+#   }
+#
+#   sig makePage : (AP(TwoFactorServer)) ~> Page
+#   fun makePage(ap) {
+#
+#     mutual {
+#
+#       # Display balance, after log-on
+#       sig clientMain : (ClientMain) ~> ()
+#       fun clientMain(s) {
+#         hideAlert();
+#         var (balance, s) = receive(s);
+#         close(s);
+#
+#         var xml =
+#           <#>
+#             <h3>Balance: { stringToXml(balance) }</h3>
+#             <p>
+#               <a href="#" l:onclick="{ hideMain(); showLoginForm() }">Log out</a>
+#             </p>
+#           </#>;
+#
+#         hideForm();
+#         domReplaceChildren(xml, getNodeById("mainContainer"))
+#       }
+#
+#
+#       # Thread which handles communication with the server.
+#       sig twoFactorClient : (Username, Password, TwoFactorClient) ~%~> ()
+#       fun twoFactorClient(username, password, s) {
+#         hideAlert();
+#         var s = send((username, password), s);
+#         offer(s) {
+#           case Authenticated(s) -> clientMain(s)
+#           case Challenge(s) ->
+#             var (challengeKey, s) = receive(s);
+#             showChallengeForm(challengeKey, s)
+#           case AccessDenied(s) ->
+#             close(s);
+#             loginFailed();
+#             showLoginForm()
+#         }
+#       }
+#
+#       # Requests a new connection with the server, retrieves username and
+#       # password from the form, and then tries to authenticate.
+#       # Shows an error message if one occurs (i.e., the server not being able
+#       # to successfully evaluate checkDetails)
+#       fun showLoginForm() {
+#         var hndlr = spawnClient {
+#           receive { case _ ->
+#             var username = getInput("username");
+#             var password = getInput("password");
+#             var s = request(ap);
+#             try (twoFactorClient(username, password, s)) as _ in { () } otherwise {
+#               showError("Server error, please try again!");
+#               showLoginForm()
+#             }
+#           }
+#         };
+#
+#         var form =
+#           <#>
+#               <form l:onsubmit="{ hndlr ! () }" class="form-signin">
+#                 <label for="username" class="sr-only">Username</label>
+#                 <input type="text" id="username" class="form-control"
+#                   placeholder="Username" required="true" autofocus="true"></input>
+#                 <label for="inputpassword" class="sr-only">Password</label>
+#                 <input type="Password" id="password" class="form-control"
+#                   placeholder="password" required="true"></input>
+#                 <button class="btn btn-lg btn-primary btn-block" type="submit">Sign in</button>
+#               </form>
+#           </#>;
+#         replaceForm(form)
+#       }
+#
+#       fun showChallengeForm(challengeKey, s) {
+#
+#         fun form(hndlr) {
+#           <#>
+#               <form l:onsubmit="{ hndlr ! () }" class="form-signin">
+#                 <div>
+#                   <p>It seems you are logging on from a new device.</p>
+#                   <p>To ensure security of your account, please enter the following
+#                      key into your hardware token, and enter the digits shown on the screen.</p>
+#                    <p>Key: { stringToXml(intToString(challengeKey)) }</p>
+#                 </div>
+#                 <label for="challengeResponse" class="sr-only">challengeResponse</label>
+#                 <input type="text" id="challengeResponse" class="form-control"
+#                   placeholder="Response Code" required="true" autofocus="true"></input>
+#                 <button class="btn btn-lg btn-primary btn-block" type="submit">Submit</button>
+#               </form>
+#           </#>
+#         }
+#
+#         replaceForm(form(self()));
+#
+#         onSubmit(linfun() {
+#           var response = getInput("challengeResponse");
+#           if (response =~ /[0-9]+/ ) {
+#             var s = send(stringToInt(response), s);
+#             offer(s) {
+#               case Authenticated(s) -> clientMain(s)
+#               case AccessDenied(s) ->
+#                 close(s);
+#                 loginFailed();
+#                 showLoginForm()
+#             }
+#           } else {
+#             showError("Invalid response!");
+#             showChallengeForm(challengeKey, s);
+#           }
+#         })
+#       }
+#     }
+#
+#     var _ = spawnClient {
+#       showLoginForm();
+#       showInfo("Please sign in.")
+#     };
+#
+#     page
+#       <html>
+#         <head>
+#           <title>Bank of Sessions</title>
+#           <link href="css/bootstrap.min.css" rel="stylesheet"></link>
+#           <link href="css/signin.css" rel="stylesheet"></link>
+#           <script src="css/fontawesome-all.js"></script>
+#         </head>
+#
+#         <body>
+#           <div id="pageBody" class="text-center wider">
+#             <i class="fas fa-university fa-7x"></i>
+#             <h1 class="h2 mb-2 font-weight-normal">Bank of Sessions</h1>
+#             <div id="alertBox"></div>
+#             <div id="formContainer"></div>
+#             <div id="mainContainer"></div>
+#           </div>
+#         </body>
+#       </html>
+#   }
+}
+
+# Main: creates an access points, spawns an acceptor, and sets up
+# the webserver to listen for incoming connections.
+fun main() {
+  # Create AP
+  var (ap : AP(TwoFactorServer)) = new();
+  var _ = spawn { Server.acceptor(ap) };
+  addRoute("/", fun(_) { Client.makePage(ap) });
+  addStaticRoute("/css", "css", [("css", "text/css")]);
+  serveWebsockets();
+  servePages()
+}
+
+main()
