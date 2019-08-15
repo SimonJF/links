@@ -141,20 +141,32 @@ var noChildren = MvuHTML.empty;
 
 sig viewInput : (String) ~> HTML(Msg)
 fun viewInput(task) {
-  header (class("header"),
-    ch([
-      h1 (noAttrs, textNode("todos")),
-      input (
-        ca([type ("text"),
-            class ("new-todo"),
-            placeholder ("What needs to be done?"),
-            name ("newTodo"),
-            id("newTodo"),
-            value(task),
-            updateFieldHandler(),
-            enterHandler()]),
-        noChildren)
-    ]))
+  vdom
+    <header class="header">
+      <h1>todos</h1>
+      <input type="text"
+        class="new-todo"
+        placeholder="What needs to be done?"
+        name="newTodo"
+        id="newTodo"
+        value="{task}" # uhh
+        {updateFieldHandler() +@ enterHandler()} />
+    </header>
+#
+# header (class("header"),
+#   ch([
+#     h1 (noAttrs, textNode("todos")),
+#     input (
+#       ca([type ("text"),
+#           class ("new-todo"),
+#           placeholder ("What needs to be done?"),
+#           name ("newTodo"),
+#           id("newTodo"),
+#           value(task),
+#           updateFieldHandler(),
+#           enterHandler()]),
+#       noChildren)
+#   ]))
 }
 
 sig viewEntry : (Entry) ~> HTML(Msg)
@@ -162,35 +174,53 @@ fun viewEntry(todo) {
   var classes =
     classList([("completed", todo.completed), ("editing",todo.editing)]);
 
-  li (class(classes),
-    ch([
-      div (class ("view"), ch([
+  vdom
+    <#>
+      <li class="{classes}">
+        <div class="view">
+          <input
+            type="checkbox" name="toggle" class="toggle"
+            { checked(todo.completed) +@ checkEntryHandler(todo.id, not(todo.completed)) } />
+          <label {editingHandler(todo.id, true)}>{textNode(todo.description)}</label>
+          <span class="destroy" { deleteHandler(todo.id) } />
+        </div>
+        <input class="edit" value="{todo.description}" name="title"
+          id="{"todo-" ^^ intToString(todo.id)}"
+          { updateEntryHandler(todo.id) +@
+            blurHandler(todo.id, false) +@
+            editingEnterHandler(todo.id, false) } />
+      </li>
+    </#>
 
-        input(
-          ca([
-            type ("checkbox"),
-            name ("toggle"),
-            class ("toggle"),
-            checked (todo.completed),
-            checkEntryHandler(todo.id, not(todo.completed))
-          ]), noChildren),
+  # li (class(classes),
+  #   ch([
+  #     div (class ("view"), ch([
 
-        MvuHTML.label(editingHandler(todo.id, true), textNode(todo.description)),
+  #       input(
+  #         ca([
+  #           type ("checkbox"),
+  #           name ("toggle"),
+  #           class ("toggle"),
+  #           checked (todo.completed),
+  #           checkEntryHandler(todo.id, not(todo.completed))
+  #         ]), noChildren),
 
-        span (ca([class ("destroy"), deleteHandler(todo.id)]), noChildren)
-      ])),
+  #       MvuHTML.label(editingHandler(todo.id, true), textNode(todo.description)),
 
-      input(
-        ca([
-          class("edit"),
-          value(todo.description),
-          name("title"),
-          id("todo-" ^^ intToString(todo.id)),
-          updateEntryHandler(todo.id),
-          blurHandler(todo.id, false),
-          editingEnterHandler(todo.id, false)]),
-        noChildren)
-    ]))
+  #       span (ca([class ("destroy"), deleteHandler(todo.id)]), noChildren)
+  #     ])),
+
+  #     input(
+  #       ca([
+  #         class("edit"),
+  #         value(todo.description),
+  #         name("title"),
+  #         id("todo-" ^^ intToString(todo.id)),
+  #         updateEntryHandler(todo.id),
+  #         blurHandler(todo.id, false),
+  #         editingEnterHandler(todo.id, false)]),
+  #       noChildren)
+  #   ]))
 }
 
 sig viewEntries : (String, [Entry]) ~> HTML(Msg)

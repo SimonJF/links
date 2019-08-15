@@ -91,7 +91,7 @@ let desugar_vdom pos =
         | {node=TextNode str; _} ->
             let wp x = make ~pos x in
             wp (ConstructorLit("HTMLText", Some(wp (Constant (String str))), None))
-        | {node=Xml (name, attrs, _, children); _} ->
+        | {node=Xml (name, attrs, block_opt, children); _} ->
             let wp x = make ~pos x in
             (* Desugar children *)
             let children =
@@ -101,16 +101,30 @@ let desugar_vdom pos =
             (* Desugar attributes *)
             let attrs =
               self#list (fun o (n, ps) -> (n, o#list (fun o -> o#phrase) ps)) attrs in
+            let block_attrs =
+              begin
+                match block_opt with
+                  | Some attr -> [self#phrase attr]
+                  | None -> []
+              end in
+
+            let desugared_attrs =
+              (List.map (desugar_attribute pos) attrs) @ block_attrs in
+
             let attrs =
               attrs_concat
-                pos (wp (ListLit (List.map (desugar_attribute pos) attrs, None))) in
+                pos (wp (ListLit (desugared_attrs, None))) in
 
             let record_fields =
               [("tagName", wp (Constant (String name)));
                ("attrs", attrs);
                ("children", children)] in
             let record_lit = wp (RecordLit(record_fields, None)) in
-            wp (ConstructorLit("HTMLTag", Some(record_lit), None))
+            (* Forests don't have a top-level node *)
+            if name = "#" then
+              children
+            else
+              wp (ConstructorLit("HTMLTag", Some(record_lit), None))
         | {node=VDom p; _} -> super#phrase p
         | p -> super#phrase p
 
