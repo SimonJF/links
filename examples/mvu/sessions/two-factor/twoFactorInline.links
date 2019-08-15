@@ -1,0 +1,342 @@
+# Two-factor bank logon example.
+open import LinearMvuCommands;
+import LinearMvuSubscriptions;
+open import LinearMvu;
+import LinearMvuHTML;
+import LinearMvuAttrs;
+
+# Type definitions
+typename Username = String;
+typename Password = String;
+typename ChallengeKey = Int;
+typename Response = Int;
+typename Secret = String;
+
+typename ServerMain = !Secret.End;
+
+typename ServerChallenge =
+  ?Response.
+    [+| Authenticated: ServerMain, AccessDenied: End |+];
+
+# Server session type
+typename TwoFactorServer =
+  ?(Username, Password).[+|
+    Authenticated: ServerMain,
+    Challenge: !ChallengeKey.ServerChallenge,
+    AccessDenied: End |+];
+
+sig ap : AP(TwoFactorServer)
+var ap = new();
+
+# Client session type
+typename TwoFactorClient = ~TwoFactorServer;
+typename ClientMain = ~ServerMain;
+typename ClientChallenge = ~ServerChallenge;
+
+
+# Server implementation
+module Server {
+
+  # needs2FA flag: set to true in order to require 2FA
+  var needs2FA = true;
+
+  # raiseExn flag: set to true in order to raise an exception in
+  # checkDetails
+  var raiseExn = false;
+
+
+  # Correct functioning of checkDetails
+  sig checkDetails : (Username, Password) ~%~> Bool
+  fun checkDetails(username, password) {
+    if (not(raiseExn)) {
+        (username == "User") && (password == "hunter2")
+    } else {
+        raise
+    }
+  }
+
+  sig serverMain : (ServerMain) ~%~> ()
+  fun serverMain(s) {
+    close(send("Money!", s))
+  }
+
+  fun generateKey() {
+    floatToInt(random() *. 100000.0)
+  }
+
+  fun check2FAResponse(challenge, response) {
+    debug("Response: " ^^ intToString(challenge));
+    response == (challenge + 1)
+  }
+
+
+  # Checks the 2-factor response
+  fun twoFactorChallenge(s) {
+    var challengeKey = generateKey();
+    var s = select Challenge s;
+    var s = send(challengeKey, s);
+    var (response, s) = receive(s);
+    if (check2FAResponse(challengeKey, response)) {
+      var s = select Authenticated s;
+      serverMain(s)
+    } else {
+      close(select AccessDenied s)
+    }
+  }
+
+  # "Plain" 2FA server, without exception handling
+  sig twoFactorServer : (TwoFactorServer) ~%~> ()
+  fun twoFactorServer(s) {
+    var ((username, password), s) = receive(s);
+    if (checkDetails(username, password)) {
+      if (needs2FA) {
+        twoFactorChallenge(s)
+      } else {
+        var s = select Authenticated s;
+        serverMain(s);
+      }
+    } else {
+      close(select AccessDenied s)
+    }
+  }
+
+  # 2FA server, *with* exception handling for checkDetails.
+  sig twoFactorServerExn : (TwoFactorServer) ~%~> ()
+  fun twoFactorServerExn(s) {
+    var ((username, password), s) = receive(s);
+    try checkDetails(username, password) as isAuthenticated in {
+      if (isAuthenticated) {
+        if (needs2FA) {
+          twoFactorChallenge(s)
+        } else {
+          var s = select Authenticated s;
+          serverMain(s);
+        }
+      } else {
+        close(select AccessDenied s)
+      }
+    } otherwise {
+      cancel(s);
+      print("An exception occurred!")
+    }
+  }
+
+
+  # Thread which listens for connections, spawns a process
+  # for each accepted thread.
+  fun acceptor(ap) {
+    # Accept from AP
+    var s = accept(ap);
+    # Spawn fresh 2FA handler process
+    var _ = spawn { twoFactorServerExn(s) };
+    # Accept more clients
+    acceptor(ap)
+  }
+
+}
+
+module Client {
+
+  typename CredentialsUModel = (username: String, password: String, error: String);
+  typename CredentialsModel = (TwoFactorClient, CredentialsUModel);
+
+  typename CredentialsMessage =
+    [| UpdateUsername:String | UpdatePassword:String | Submit |];
+
+  typename ChallengeUModel = (challengeKey: Int, challengeResponse: String);
+  typename ChallengeModel = (ClientChallenge, ChallengeUModel);
+  typename ChallengeMessage =
+    [| UpdateResponse: String | Submit |];
+
+  typename BankModel = (money: String);
+  typename BankMessage = [| Logout |];
+
+  # sig noSubs : forall model :: Type(Unl, Any), msg :: Type(Any, Any) . (model) ~%~> LinearMvuSubscriptions.Sub(msg)
+  fun noSubs(_) {
+    LinearMvuSubscriptions.empty
+  }
+
+  var a0 = LinearMvuAttrs.empty;
+  var h0 = LinearMvuHTML.empty;
+
+  mutual {
+    ### Credentials
+    sig emptyCredentialsModel : (String) {SessionFail{_}}~> CredentialsModel
+    fun emptyCredentialsModel(error) {
+      var c = request(ap);
+      (c, (username="", password="", error=error))
+    }
+
+
+    sig credentialsUpdt : (CredentialsMessage, CredentialsModel) ~%~> Transition(CredentialsModel, CredentialsMessage, { |%})
+    fun credentialsUpdt(msg, model) {
+      var (c, uModel) = model;
+      switch (msg) {
+        case UpdateUsername(user) ->
+          noTransition((c, (uModel with username = user)), LinearMvuCommands.empty)
+        case UpdatePassword(pass) ->
+          noTransition((c, (uModel with password = pass)), LinearMvuCommands.empty)
+        case Submit ->
+          var c = send((uModel.username, uModel.password), c);
+          offer(c) {
+            case Authenticated(c) ->
+              var (secret, c) = receive(c);
+              close(c);
+              transition((money = secret), bankView, bankUpdt,
+                  noSubs, bankExtract, LinearMvuCommands.empty)
+            case Challenge(c) ->
+              var (challengeKey, c) = receive(c);
+              transition((c, (challengeKey = challengeKey, challengeResponse = "")),
+                  challengeView, challengeUpdt, noSubs, challengeExtract, LinearMvuCommands.empty)
+            case AccessDenied(c) ->
+              close(c);
+              noTransition(emptyCredentialsModel("Invalid username or password."), LinearMvuCommands.empty)
+          }
+      }
+    }
+
+    sig credentialsView : (CredentialsUModel) ~%~> LinearMvuHTML.HTML(CredentialsMessage)
+    fun credentialsView(uModel) {
+      open LinearMvuHTML;
+      open LinearMvuAttrs;
+      var alertBox =
+        if (uModel.error == "") {
+          LinearMvuHTML.empty
+        } else {
+          div(class("alert alert-info") +@ attr("role", "alert"),
+              textNode(uModel.error))
+        };
+
+      alertBox +*
+      form(class("form-signin"),
+        label(for_("username") +@ class("sr-only"),
+          textNode("Username")) +*
+        input(type("text") +@ id("username") +@ class("form-control") +@
+          value(uModel.username) +@
+          onInput(fun(str) { UpdateUsername(str) }) +@
+          onEnter(fun() { Submit }) +@
+          placeholder("Username") +@ autofocus(true), h0) +*
+        input(type("password") +@ id("password") +@ class("form-control") +@
+          value(uModel.password) +@
+          onInput(fun(str) { UpdatePassword(str) }) +@
+          onEnter(fun() { Submit }) +@
+          placeholder("Password"), h0) +*
+        button(type("button") +@ class("btn btn-lg btn-primary btn-block")
+          +@ onClick(fun() { Submit }),
+          textNode("Sign in")))
+    }
+
+    fun credentialsExtract((c, uModel)) {
+      ((c, uModel), uModel)
+    }
+
+    ## Challenge
+    sig challengeUpdt : (ChallengeMessage, ChallengeModel) ~%~> Transition(ChallengeModel, ChallengeMessage, { |%})
+    fun challengeUpdt(msg, model) {
+      var (c, uModel) = model;
+      switch(msg) {
+        case UpdateResponse(resp) ->
+          noTransition((c, (uModel with challengeResponse = resp)), LinearMvuCommands.empty)
+        case Submit ->
+        # FIXME: INPUT VALIDATION HERE
+          var c = send(stringToInt(uModel.challengeResponse), c);
+          offer(c) {
+            case Authenticated(c) ->
+              var (secret, c) = receive(c);
+              close(c);
+              transition((money = secret), bankView, bankUpdt,
+                  noSubs, bankExtract, LinearMvuCommands.empty)
+            case AccessDenied(c) ->
+              close(c);
+              transition(emptyCredentialsModel("Invalid challenge response."),
+                  credentialsView, credentialsUpdt, noSubs, credentialsExtract,
+                  LinearMvuCommands.empty)
+          }
+      }
+    }
+
+    sig challengeView : (ChallengeUModel) ~%~> LinearMvuHTML.HTML(ChallengeMessage)
+    fun challengeView(uModel) {
+      open LinearMvuHTML;
+      open LinearMvuAttrs;
+      form(class("form-signin"),
+        div(a0,
+          p(a0, textNode("It seems you are logging on from a new device.")) +*
+          p(a0, textNode("To ensure security of your account, please enter " ^^
+              "the following key into your hardware token, and enter the " ^^
+              "digits shown on the screen.")) +*
+          p(a0, textNode("Key: " ^^ intToString(uModel.challengeKey)))) +*
+        input(type("text") +@ id("response") +@ class("form-control") +@
+          value(uModel.challengeResponse) +@
+          onInput(fun(str) { UpdateResponse(str) }) +@
+          onEnter(fun() { Submit }) +@
+          autofocus(true), h0) +*
+        button(type("button") +@ class("btn btn-lg btn-primary btn-block") +@
+          onClick(fun() { Submit }), textNode("Submit")))
+    }
+
+    fun challengeExtract((c, uModel)) {
+      ((c, uModel), uModel)
+    }
+
+    ## Bank page
+    fun bankUpdt(msg, model) {
+      switch(msg) {
+        case Logout ->
+          transition(emptyCredentialsModel(""),
+              credentialsView, credentialsUpdt, noSubs,
+              credentialsExtract, LinearMvuCommands.empty)
+      }
+    }
+
+    fun bankView(uModel) {
+      open LinearMvuHTML;
+      open LinearMvuAttrs;
+      h3(a0, textNode("Balance: " ^^ uModel.money)) +*
+      p(a0,
+        a(href("#") +@ onClick(fun() { Logout }), textNode("Log out")))
+    }
+
+    fun bankExtract(model) {
+      (model, model)
+    }
+  }
+
+  sig mainPage : (String) {}~> Page
+  fun mainPage(_) {
+    LinearMvu.runTransition("placeholder",
+        emptyCredentialsModel(""), credentialsView, credentialsUpdt,
+        noSubs, credentialsExtract);
+
+     page
+       <html>
+         <head>
+           <title>Bank of Sessions</title>
+           <link href="css/bootstrap.min.css" rel="stylesheet"></link>
+           <link href="css/signin.css" rel="stylesheet"></link>
+           <script src="css/fontawesome-all.js"></script>
+         </head>
+
+         <body>
+           <div id="pageBody" class="text-center wider">
+             <i class="fas fa-university fa-7x"></i>
+             <h1 class="h2 mb-2 font-weight-normal">Bank of Sessions</h1>
+             <div id="placeholder"></div>
+           </div>
+         </body>
+       </html>
+  }
+}
+
+# Main: creates an access points, spawns an acceptor, and sets up
+# the webserver to listen for incoming connections.
+fun main() {
+  # Create AP
+  var _ = spawn { Server.acceptor(ap) };
+  addRoute("/", Client.mainPage );
+  addStaticRoute("/css", "css", [("css", "text/css")]);
+  serveWebsockets();
+  servePages()
+}
+
+main()

@@ -1,0 +1,549 @@
+open import ChatSessions;
+open import Mvu;
+open import MvuSubscriptions;
+open import MvuCommands;
+import MvuHTML;
+import MvuAttrs;
+
+var ae = MvuAttrs.empty;
+var he = MvuHTML.empty;
+
+## Types
+
+### Waiting
+
+typename Error =
+  [| ErrInvalidName
+   | ErrNameInUse
+   | ErrBadRoom
+   | ErrKicked
+   |];
+
+typename SelectedRoom = [| NewRoom | SelectedRoom: String |];
+typename WaitingModel = ();
+typename WaitingMessage = [|
+    ConnectedAsUser : (Nickname, RoomName, Topic, [Nickname], ClientSend, ClientReceive)
+  | ConnectedAsModerator : (Nickname, RoomName, Topic, [Nickname], ClientSend, ModeratorSend, ClientReceive)
+  | ErrorConnecting : ([RoomName], Error, ClientSelect)
+  | RoomsDelivered : ([RoomName], ClientSelect)
+|];
+
+### NotConnected
+
+typename NotConnectedModel =
+  (nickname: String,
+   rooms: [RoomName],
+   selectedRoom: SelectedRoom,
+   newRoomText: RoomName,
+   error: Maybe(Error));
+
+typename NCModel = (ClientSelect, NotConnectedModel);
+
+typename NCMessage = [|
+     UpdateNickname: Nickname
+   | UpdateSelectedRoom: SelectedRoom
+   | UpdateNewRoom: RoomName
+   | SubmitJoinRoom
+|];
+
+typename NCUnrModel = NotConnectedModel;
+
+### Connected
+
+typename ChatMessage =
+  [| ChatMsg: (Nickname, Message) | LogMsg: Message |];
+
+typename RoomInfo =
+  (nickname: Nickname,
+   roomName: RoomName,
+   nicknames: [Nickname],
+   topic: Topic,
+   messages: [ChatMessage],
+   currentChatMessage: String);
+
+typename ConnectedModel = (RoomInfo, ClientSend, Maybe((ModeratorSend, Nickname)));
+typename ConnectedUnrModel = (RoomInfo, Maybe(Nickname));
+
+typename ConnectedMessage = [|
+   # Chat screen messages
+   UpdateChatBox: Message
+ | SubmitChat
+   # Moderator messages
+ | ModUpdateSelection: Nickname
+ | ModKick
+ | ModMute
+ | ModMakeModerator
+   # Incoming session messages from the server
+ | SessionIncomingChat: (Nickname, Message, ClientReceive)
+ | SessionNewUser: (Nickname, ClientReceive)
+ | SessionNewTopic: (Topic, ClientReceive)
+ | SessionUserLeft: (Nickname, ClientReceive)
+ | SessionUserMuted: (Nickname, ClientReceive)
+ | SessionUserUnmuted: (Nickname, ClientReceive)
+ | SessionBecomeModerator: (ModeratorSend, ClientReceive)
+ | SessionKick
+|];
+
+mutual {
+
+  fun waitingView(_) {
+    open MvuHTML;
+    open MvuAttrs;
+    fun role(x) { attr("role", x) }
+
+    div(class("spinner-border") +@ role("status"),
+      span(class("sr-only"), textNode("Loading...")))
+  }
+
+  sig waitingUpdt : (WaitingMessage, ()) {}~> Transition(WaitingModel, WaitingMessage)
+  fun waitingUpdt(msg, _) {
+    switch(msg) {
+      case ConnectedAsUser(nick, rn, topic, nicks, cs, cr) ->
+        transition(
+          mkConnectedModel(nick, rn, topic, nicks, cs, Nothing),
+          connectedView, connectedUpdt, emptySubs, connectedExtract, subscribeClient(cr))
+      case ConnectedAsModerator(nick, rn, topic, nicks, cs, ms, cr) ->
+        transition(
+          mkConnectedModel(nick, rn, topic, nicks, cs, Just((ms, ""))),
+          connectedView, connectedUpdt, emptySubs, connectedExtract, subscribeClient(cr))
+      case ErrorConnecting(rooms, err, cs) ->
+        var model = ncMkModel(cs, "", rooms, Just(err));
+        transition(model, ncView, ncUpdt, emptySubs, ncExtract, MvuCommands.empty)
+      case RoomsDelivered(rooms, cs) ->
+        var model = ncMkModel(cs, "", rooms, Nothing);
+        transition(model, ncView, ncUpdt, emptySubs, ncExtract, MvuCommands.empty)
+    }
+  }
+
+  fun waitingExtract(_) { ((), ()) }
+
+  sig emptySubs : forall
+      model :: Type(Unl, Any),
+      message :: Type(Any, Any) . (model) ~%~> MvuSubscriptions.Sub(message)
+  fun emptySubs(_) { MvuSubscriptions.empty }
+
+# sig waitingTransition : forall model :: Type(Any, Any), msg :: Type(Any, Any) .
+#   (Command(msg)) ~%~> Transition(model, msg)
+# fun waitingTransition(cmd) {
+#   transition((), waitingView, waitingUpdt, emptySubs, waitingExtract, cmd)
+# }
+
+  sig waitForRooms :
+    forall model :: Type(Any, Any), msg :: Type(Any, Any).
+    () ~%~> Transition(model, msg)
+  fun waitForRooms() {
+    fun wait() {
+      var cs = request(wap);
+      var (rooms, cs) = receive(cs);
+      RoomsDelivered(rooms, cs)
+    }
+    transition((), waitingView, waitingUpdt, emptySubs, waitingExtract, Spawn(wait))
+  }
+
+ sig connectToRoom : forall model :: Type(Any, Any), msg :: Type(Any, Any) .
+   (RoomName, Nickname, ClientSelect) ~%~> Transition(model, msg)
+  fun connectToRoom(roomName, nickname, cs) {
+    sig connect : (RoomName, Nickname, ClientSelect) ~%~> WaitingMessage
+    fun connect(roomName, nickname, cs) {
+      var cs = send((roomName, nickname), cs);
+      offer(cs) {
+        case JoinedOK(cs) ->
+          var ((topic, nicks, cr), cs) = receive(cs);
+          ConnectedAsUser(nickname, roomName, topic, nicks, cs, cr)
+        case JoinedOKAsModerator(cs) ->
+          var ((topic, nicks, cr, ms), cs) = receive(cs);
+          ConnectedAsModerator(nickname, roomName, topic, nicks, cs, ms, cr)
+        case Nope(cs) ->
+          # Grab error to display
+          var (err, s) = receive(cs);
+          close(s);
+          var displayErr =
+            switch(err) {
+              case NameInUse -> ErrNameInUse
+              case BadRoom -> ErrBadRoom
+            };
+          # Reconnect to get new session and rooms
+          var cs = request(wap);
+          var (rooms, cs) = receive(cs);
+          ErrorConnecting(rooms, displayErr, cs)
+      }
+    }
+    var cmd = SpawnLinear(linfun() { connect(roomName, nickname, cs)} );
+    transition((), waitingView, waitingUpdt, emptySubs, waitingExtract, cmd)
+  }
+
+
+  #### NotConnected
+  sig ncExtract : (NCModel) ~%~> (NCModel, NCUnrModel)
+  fun ncExtract((cs, ncm)) {
+    ((cs, ncm), ncm)
+  }
+
+
+  sig ncMkModel : (ClientSelect, Nickname, [RoomName], Maybe(Error)) ~> NCModel
+  fun ncMkModel(cs, nick, rooms, err) {
+    (cs, (nickname=nick, rooms = rooms, selectedRoom = NewRoom, newRoomText = "", error = err))
+  }
+
+
+  sig ncView : (NCUnrModel) ~%~> MvuHTML.HTML(NCMessage)
+  fun ncView(ncModel) {
+    open MvuHTML;
+    open MvuAttrs;
+
+    sig roomForm : (NCUnrModel) ~%~> HTML(NCMessage)
+    fun roomForm(ncModel) {
+      var newRoomChecked =
+        switch(ncModel.selectedRoom) {
+          case NewRoom -> true
+          case SelectedRoom(_) -> false
+        };
+
+      var newRoomRadio : HTML(NCMessage) =
+        div(class("radio"),
+            label(ae,
+              input(type("radio") +@ name("room") +@ checked(newRoomChecked) +@
+                onInput(fun(_) { UpdateSelectedRoom(NewRoom) }), he) +*
+              textNode("New Room") +*
+              input(
+                type("text") +@
+                onInput(fun(str) { UpdateNewRoom(str) }) +@
+                value(ncModel.newRoomText) +@
+                onEnter(fun() { SubmitJoinRoom }), he)
+            )
+        );
+
+      fun roomRadio(roomName) {
+        var isChecked =
+          switch(ncModel.selectedRoom) {
+            case NewRoom -> false
+            case SelectedRoom(room) -> roomName == room
+          };
+
+        div(class("radio"),
+            label(ae,
+              input(
+                type("radio") +@
+                name("roomName") +@
+                checked(isChecked) +@
+                onInput(fun(_) { UpdateSelectedRoom(SelectedRoom(roomName))}), he) +*
+              textNode(roomName)
+            )
+        )
+      }
+
+      var radioForm : HTML(NCMessage) =
+        newRoomRadio +*
+        MvuHTML.concat(map(fun(roomName) { roomRadio(roomName) }, ncModel.rooms));
+
+      form(ae,
+        div(ae,
+          label(for_("nickname"), textNode("Nickname")) +*
+          input(
+            type("text") +@
+            id("nickname") +@
+            autofocus(true) +@
+            onInput(fun(nick) { UpdateNickname(nick) }), he)) +*
+        radioForm +*
+        div(ae,
+          input(type("button") +@ value("Join") +@ onClick(fun() { SubmitJoinRoom }), he)))
+    }
+
+    # TODO: Render error message
+    div(ae,
+      p(ae,
+        textNode("Choose one of the existing rooms or create a new one.") +*
+        roomForm(ncModel)))
+  }
+
+  sig ncUpdt : (NCMessage, NCModel) ~%~> Transition(NCModel, NCMessage)
+  fun ncUpdt(msg, (cs, ncModel)) {
+
+    sig ncNoTrans: (NotConnectedModel, ClientSelect) ~%~> Transition(NCModel, NCMessage)
+    fun ncNoTrans(ncModel, cs) { noTransition((cs, ncModel), MvuCommands.empty) }
+
+    switch(msg) {
+      case UpdateNickname(nick) ->
+        debug("nickname: " ^^ nick);
+        ncNoTrans((ncModel with nickname = nick), cs)
+      case UpdateSelectedRoom(sr) ->
+        ncNoTrans((ncModel with selectedRoom = sr), cs)
+      case UpdateNewRoom(nr) ->
+        debug("newRoomText: " ^^ nr);
+        ncNoTrans((ncModel with newRoomText = nr), cs)
+      case SubmitJoinRoom ->
+          var roomName = switch(ncModel.selectedRoom) {
+            case NewRoom -> ncModel.newRoomText
+            case SelectedRoom(name) -> name
+          };
+        connectToRoom(roomName, ncModel.nickname, cs)
+    }
+  }
+
+
+  ### Connected
+  sig subscribeClient : (ClientReceive) ~> Command(ConnectedMessage)
+  fun subscribeClient(cr) {
+    sig clientReceive : (ClientReceive) ~> ConnectedMessage
+    fun clientReceive(cr) {
+      offer(cr) {
+        case IncomingChatMessage(cr) ->
+          var ((nick, msg), cr) = receive(cr);
+          SessionIncomingChat(nick, msg, cr)
+        case NewUser(cr) ->
+          var (nick, cr) = receive(cr);
+          SessionNewUser(nick, cr)
+        case NewTopic(cr) ->
+          var (topic, cr) = receive(cr);
+          SessionNewTopic(topic, cr)
+        case UserLeft(cr) ->
+          var (nick, cr) = receive(cr);
+          SessionUserLeft(nick, cr)
+        case UserMuted(cr) ->
+          var (nick, cr) = receive(cr);
+          SessionUserMuted(nick, cr)
+        case UserUnmuted(cr) ->
+          var (nick, cr) = receive(cr);
+          SessionUserUnmuted(nick, cr)
+        case BecomeModerator(cr) ->
+          var (ms, cr) = receive(cr);
+          SessionBecomeModerator(ms, cr)
+        case Kick(s) ->
+          close(s);
+          SessionKick
+      }
+    }
+    SpawnLinear(linfun() { clientReceive(cr) })
+  }
+
+  fun addChatMessage(nick, msg, ri) {
+    (ri with messages = ri.messages ++ [ChatMsg(nick, msg)])
+  }
+
+  fun addSystemMessage(msg, ri) {
+    (ri with messages = ri.messages ++ [LogMsg(msg)])
+  }
+
+  fun userJoined(nick, ri) {
+    addSystemMessage(nick ^^ " joined.", ri)
+  }
+
+  fun userLeft(nick, ri) {
+    var newNicks = filter(fun(x) { x <> nick }, ri.nicknames);
+    var ri = addSystemMessage(nick ^^ " left.", ri);
+    (ri with nicknames = newNicks)
+  }
+
+  fun changeTopic(topic, ri) {
+    var ri = addSystemMessage("New topic: " ^^ topic, ri);
+    (ri with topic = topic)
+  }
+
+  sig mkRoomInfo : (Nickname, RoomName, Topic, [Nickname]) ~%~> RoomInfo
+  fun mkRoomInfo(nickname, name, topic, nicks) {
+    (nickname=nickname, roomName=name, nicknames=nicks,
+     topic=topic, messages=[], currentChatMessage="")
+  }
+
+  fun mkConnectedModel(nickname, roomName, topic, nicks, clientSend, modInfo) {
+    (mkRoomInfo(nickname, roomName, topic, nicks), clientSend, modInfo)
+  }
+
+  fun connectedView((roomInfo, modInfo)) {
+    open MvuHTML;
+    open MvuAttrs;
+
+    var adminBox = div(ae, he);
+
+    fun renderMessage(msg) {
+      switch(msg) {
+        case ChatMsg(nick, msg) ->
+          p(ae,
+            b(ae, textNode(nick ^^ ": ")) +* textNode(msg))
+        case LogMsg(msg) ->
+          p(ae, b(ae, textNode(msg)))
+      }
+    }
+
+    fun infoHeader(description, content) {
+      div(ae,
+        p(ae,
+          span(class("lead"),
+            b(ae, textNode(description ^^ ": ")) +*
+            textNode(content))))
+    }
+    var topic = infoHeader("Topic", roomInfo.topic);
+    var room = infoHeader("Room", roomInfo.roomName);
+    var msgs = MvuHTML.concat(map(renderMessage, roomInfo.messages));
+
+    var chatBox =
+      div(MvuAttrs.style("overflow-y:scroll; width:100%; height:400px;"), msgs);
+
+    var chatInputBox =
+      input(MvuAttrs.style("width:100%;") +@
+           value(roomInfo.currentChatMessage) +@
+           onEnter(fun() { SubmitChat }) +@
+           onInput(fun(msg) { UpdateChatBox(msg) }), he);
+
+    div(ae,
+      adminBox +*
+      room +*
+      topic +*
+      chatBox +*
+      chatInputBox)
+  }
+
+  fun connectedUpdt(msg, model) {
+    fun modifyModel(ri, cs, mi) {
+      noTransition((ri, cs, mi), MvuCommands.empty)
+    }
+
+    fun modifyAndSubscribe(ri, cs, mi, cr) {
+      noTransition((ri, cs, mi), subscribeClient(cr))
+    }
+
+    var (ri, cs, mi) = model;
+
+    switch(msg) {
+      case UpdateChatBox(newMessage) ->
+        modifyModel((ri with currentChatMessage = newMessage), cs, mi)
+
+      case SubmitChat ->
+        var cs = select ChatMessage cs;
+        var cs = send(ri.currentChatMessage, cs);
+        modifyModel((ri with currentChatMessage=""), cs, mi)
+
+      case ModUpdateSelection(newSelected) ->
+        switch(mi) {
+          case Just((ms, sel)) ->
+            modifyModel(ri, cs, Just((ms, newSelected)))
+          case Nothing -> modifyModel(ri, cs, Nothing)
+        }
+
+      case ModKick ->
+        switch(mi) {
+          case Just((ms, selected)) ->
+            var ms = select KickUser ms;
+            var ms = send(selected, ms);
+            var newSelected =
+              switch(ri.nicknames) { case [] -> "" case x::xs -> x };
+            modifyModel(ri, cs, Just((ms, newSelected)))
+          case Nothing -> modifyModel(ri, cs, Nothing)
+        }
+
+      case ModMute ->
+        switch(mi) {
+          case Just((ms, selected)) ->
+            var ms = select MuteUser ms;
+            var ms = send(selected, ms);
+            var newSelected =
+              switch(ri.nicknames) { case [] -> "" case x::xs -> x };
+            modifyModel(ri, cs, Just((ms, newSelected)))
+          case Nothing -> modifyModel(ri, cs, Nothing)
+        }
+
+      case ModMakeModerator ->
+        switch(mi) {
+          case Just((ms, selected)) ->
+            var ms = select MakeModerator ms;
+            var ms = send(selected, ms);
+            modifyModel(ri, cs, Just((ms, selected)))
+          case Nothing -> modifyModel(ri, cs, Nothing)
+        }
+
+      case SessionIncomingChat(sender, msg, cr) ->
+        modifyAndSubscribe(addChatMessage(sender, msg, ri), cs, mi, cr)
+
+      case SessionUserMuted(nick, cr) ->
+        modifyAndSubscribe(addSystemMessage(nick ^^ " was muted :(", ri), cs, mi, cr)
+
+      case SessionUserUnmuted(nick, cr) ->
+        modifyAndSubscribe(addSystemMessage(nick ^^ " was unmuted! :)", ri), cs, mi, cr)
+
+      case SessionNewUser(newUser, cr) ->
+        modifyAndSubscribe(userJoined(newUser, ri), cs, mi, cr)
+
+      case SessionNewTopic(topic, cr) ->
+        modifyAndSubscribe(changeTopic(topic, ri), cs, mi, cr)
+
+      case SessionUserLeft(leaver, cr) ->
+        modifyAndSubscribe(userLeft(leaver, ri), cs, mi, cr)
+
+      case SessionBecomeModerator(newMs, cr) ->
+        switch(mi) {
+          case Just((ms, sel)) ->
+            cancel(ms);
+            modifyAndSubscribe(ri, cs, Just((newMs, sel)), cr)
+          case Nothing ->
+            # TODO: "" is a hack, we should have "Select Name" or something,
+            # or better still, the first nickname
+            modifyAndSubscribe(ri, cs, Just((newMs, "")), cr)
+        }
+      case SessionKick ->
+        cancel(cs);
+        var _ = switch(mi) {
+          case Just((ms, _)) ->
+            cancel(ms)
+          case Nothing -> ()
+        };
+        waitForRooms()
+    }
+  }
+
+  fun connectedExtract(model) {
+    switch(model) {
+      case (ri, cs, Just((ms, nick))) ->
+        ((ri, cs, Just(ms, nick)), (ri, Just(nick)))
+      case (ri, cs, Nothing) ->
+        ((ri, cs, Nothing), (ri, Nothing))
+    }
+  }
+}
+
+fun mainPage() {
+  var _ = spawnClient {
+    var cs = request(wap);
+    var (rooms, cs) = receive(cs);
+    runLinear("vdom-placeholder",
+      ncMkModel(cs, "", rooms, Nothing),
+      ncView,
+      ncUpdt,
+      emptySubs,
+      ncExtract)
+  };
+
+  page
+    <html>
+      <head>
+        <title>Extended Links Chat Application</title>
+        <link href="http://fonts.googleapis.com/css?family=Merriweather:400,300italic,300" rel="stylesheet" type="text/css"></link>
+        <link href="http://fonts.googleapis.com/css?family=Kotta+One" rel="stylesheet" type="text/css"></link>
+        <link href="http://fonts.googleapis.com/css?family=Lora" rel="stylesheet" type="text/css"></link>
+        <link href="css/bootstrap.min.css" rel="stylesheet"></link>
+        <link href="css/abcd.css" rel="stylesheet"></link>
+      </head>
+
+      <div class="navbar-wrapper">
+        <div class="container">
+          <div id="navbar" class="navbar navbar-inverse navbar-fixed-top" role="navigation">
+          </div>
+        </div>
+      </div>
+
+      <div class ="jumbotron">
+        <div class="container">
+          <h1>Links Session-Typed Chat</h1>
+          <hr>...complete with totally original stylesheet</hr>
+          <div id="placeholder"></div>
+        </div>
+      </div>
+
+
+      <div id="main" class="container marketing">
+        <div class="row featurette">
+          <div id="vdom-placeholder"></div>
+        </div>
+      </div>
+    </html>
+}
+start()

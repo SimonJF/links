@@ -1,0 +1,182 @@
+### VDOM STUFF ###
+open import LinearMvuAttrs;
+open import LinearMvuEvents;
+open import LinearMvuHTML;
+open import LinearMvuSubscriptions;
+open import LinearMvuCommands;
+
+# Needed to ensure that virtual-dom is open
+module VirtualDom {
+  alien javascript "/lib/virtual-dom.js" {
+    dummy : ();
+  }
+}
+
+# Loads the "vdom.js" file, exposes runDom and updateDom.
+module VDom {
+  alien javascript "/lib/vdom.js" {
+    runDom : forall a :: Type(Any, Any), e :: Row .
+      (String, HTML(a), AP(?a.End), Sub(a)) ~e~> ();
+    updateDom : forall a :: Type(Any, Any), e :: Row . (HTML(a), Sub(a)) ~e~> ();
+    transitionDom : forall a :: Type(Any, Any), e :: Row . (AP(?a.End), HTML(a), Sub(a)) ~e~> ();
+  }
+}
+
+typename Transition(model :: Type(Any, Any), msg :: Type(Any, Any), e :: Row) =
+    [| NoTransition:(model, Command(msg))
+     | Transition: () {SessionFail:() {}-> [||] | e}~@ () |];
+
+
+sig noTransition :
+  forall
+    model :: Type(Any, Any),
+    msg :: Type(Any, Any), e :: Row .
+  (model, Command(msg)) ~e~> Transition(model, msg, { |e})
+fun noTransition(model, cmd) {
+  NoTransition(model, cmd)
+}
+
+
+sig applyLinearTransition : forall a :: Type(Any, Any), e :: Row . (() ~e~@ ()) ~e~> ()
+fun applyLinearTransition(f) { f() }
+
+# Main event loop
+sig evtLoop :
+ forall msg :: Type(Any, Any),
+        model :: Type(Any, Any),
+        unrModel :: Type(Unl, Any), e :: Row .
+  (AP(?msg.End),
+   model,
+   (unrModel) {SessionFail:() {}-> [||] | e}~> HTML(msg),
+   (msg, model) {SessionFail:() {}-> [||] | e}~> Transition(model, msg, { |e}),
+   (unrModel) {SessionFail:() {}-> [||] | e}~> Sub(msg),
+   (model) {SessionFail:() {}-> [||] | e}~> (model, unrModel),
+   Sub(msg)) {SessionFail:() {}-> [||] | e}~> ()
+fun evtLoop(ap, model, view, updt, subscriptionsFn, extract, prevSubscriptions) {
+  var (message, s) = receive(accept(ap));
+  close(s);
+  var updtRes = updt(message, model);
+  switch(updtRes) {
+    case NoTransition(model, cmd) ->
+      processCommand(cmd, ap);
+      # Extract unrestricted model
+      var (model, unrModel) = extract(model);
+      # Get new subscriptions
+      var newSubscriptions = subscriptionsFn(unrModel);
+      # Update DOM
+      VDom.updateDom(view(unrModel), newSubscriptions);
+      evtLoop(ap, model, view, updt, subscriptionsFn, extract, newSubscriptions)
+    case Transition(fn) -> applyLinearTransition(fn)
+  }
+}
+
+sig transition :
+ forall a :: Type(Any, Any),
+        b :: Type(Any, Any),
+        msg :: Type(Any, Any),
+        model :: Type(Any, Any),
+        unrModel :: Type(Unl, Any),
+        e :: Row, f :: Row .
+   (model,
+   (unrModel) {SessionFail:() {}-> [||] | e}~> HTML(msg),
+   (msg, model) {SessionFail:() {}-> [||] | e}~> Transition(model, msg, { |e} ),
+   (unrModel) {SessionFail:() {}-> [||] | e}~> Sub(msg),
+   (model) {SessionFail:() {}-> [||] | e}~> (model, unrModel),
+   Command(msg)) {SessionFail:() {}-> [||] | e}~> Transition(a, b, { |f})
+fun transition(model, view, updt, sub, extract, cmd) {
+  Transition(linfun() {
+    ignore(spawn {
+       # Create new AP used for next message type
+       var ap = new();
+       processCommand(cmd, ap);
+       # Extract unrestricted model
+       var (model, unrModel) = extract(model);
+       # Get new subscriptions
+       var newSubscriptions = sub(unrModel);
+       # FFI call
+       VDom.transitionDom(ap, view(unrModel), newSubscriptions);
+       evtLoop(ap, model, view, updt, sub, extract, newSubscriptions)
+    })})
+}
+
+sig runTransition:
+  forall
+  msg::Type(Any, Any), model::Type(Any, Any),
+    unrModel::Type(Unl, Any), e :: Row, f :: Row .
+  (String,
+   model,
+   (unrModel) {SessionFail:() {}-> [||] | e}~> HTML(msg),
+   (msg, model) {SessionFail:() {}-> [||] | e}~> Transition(model, msg, { |e}),
+   (unrModel) {SessionFail:() {}-> [||] | e}~> Sub(msg),
+   (model) {SessionFail:() {}-> [||] | e}~> (model, unrModel)
+   ) { | f}~> ()
+fun runTransition(placeholder, model, view, updt, subscriptions, extract) {
+  var evtHandler = spawnClient {
+    var (model, unrModel) = extract(model);
+    var ap = new();
+    VDom.runDom(placeholder, view(unrModel), ap, subscriptions(unrModel));
+    evtLoop(ap, model, view, updt, subscriptions, extract, subscriptions(unrModel))
+  };
+  ()
+}
+
+sig runLinear:
+  forall
+  msg::Type(Any, Any), model::Type(Any, Any),
+    unrModel::Type(Unl, Any), e :: Row, f :: Row .
+  (String,
+   model,
+   (unrModel) {SessionFail:() {}-> [||] | e}~> HTML(msg),
+   (msg, model) {SessionFail:() {}-> [||] | e}~> (model, Command(msg)),
+   (unrModel) {SessionFail:() {}-> [||] | e}~> Sub(msg),
+   (model) {SessionFail:() {}-> [||] | e}~> (model, unrModel)
+   ) {}~> ()
+fun runLinear(placeholder, model, view, updt, subscriptions, extract) {
+  fun updtNT(msg, model) {
+    var (model, cmd) = updt(msg, model);
+    noTransition(model, cmd)
+  }
+  runTransition(placeholder, model, view, updtNT, subscriptions, extract)
+}
+
+# User-facing function (assuming an unrestricted model)
+sig run:
+  forall
+    msg :: Type(Any, Any),
+    model :: Type(Unl, Any),
+    e :: Row, f :: Row .
+  (String,
+    model,
+    (model) {SessionFail:() {}-> [||] | e}~> HTML(msg),
+    (msg, model) {SessionFail:() {}-> [||] | e}~> (model, Command(msg)),
+    (model) {SessionFail:() {}-> [||] | e}~> Sub(msg)) {}~> ()
+fun run(placeholder, model, view, updt, subscriptions) {
+  fun wrapUpdt(msg, model) {
+    var (model, cmd) = updt(msg, model);
+    NoTransition(model, cmd)
+  }
+  runTransition(placeholder, model, view, wrapUpdt, subscriptions, fun(x) { (x, x) })
+}
+
+sig runSimple :
+  forall
+    msg :: Type(Any, Any),
+    model :: Type(Unl, Any),
+    e :: Row, f :: Row.
+  (String,
+    model,
+    (model) {SessionFail:() {}-> [||] | e}~> HTML(msg),
+    (msg, model) {SessionFail:() {}-> [||] | e}~> model) {}~> ()
+fun runSimple(placeholder, model, view, updt) {
+  run(placeholder, model, view,
+    fun(msg, model) { (updt(msg, model), NoCommand)},
+    fun(_) { SubEmpty } )
+}
+
+sig runStatic :
+  forall
+    model :: Type(Unl, Any), e :: Row, f :: Row .
+  (String, model, (model) {SessionFail:() {}-> [||] | e}~> HTML(())) {}~> ()
+fun runStatic(placeholder, model, view) {
+  runSimple(placeholder, model, view, fun(_, model) { model })
+}
