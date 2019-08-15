@@ -91,3 +91,33 @@ sig runStatic :
 fun runStatic(placeholder, model, view) {
   runSimple(placeholder, model, view, fun(_, model) { model })
 }
+
+
+var mvuPagePlaceholder = "___mvuPlaceholder";
+
+var mvuPg = page <div id="{mvuPagePlaceholder}" />;
+
+sig mvuStaticPage :
+  forall model, e :: Row, f :: Row .
+  (model, (model) ~e~> HTML(())) ~f~> Page
+fun mvuStaticPage(model, view) {
+  runStatic(mvuPagePlaceholder, model, view); mvuPg
+}
+
+sig mvuPage :
+  forall model, msg, e :: Row, f :: Row .
+  (model, (model) ~e~> HTML(msg), (msg, model) ~e~> model) ~f~> Page
+fun mvuPage(model, view, updt) {
+  runSimple(mvuPagePlaceholder, model, view, updt); mvuPg
+}
+
+sig mvuSubPage :
+  forall msg, model, e :: Row, f :: Row.
+  ( model,
+    (model) ~e~> HTML(msg),
+    (msg, model) ~e~> (model),
+    (model) ~e~> Sub(msg)) ~f~> Page
+fun mvuSubPage(model, view, updt, sub) {
+  run(mvuPagePlaceholder, model, view, updt, sub); mvuPg
+}
+
