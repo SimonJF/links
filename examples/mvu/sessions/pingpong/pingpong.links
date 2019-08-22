@@ -1,6 +1,6 @@
 import LinearMvuHTML;
 import LinearMvuAttrs;
-import LinearMvu;
+open import LinearMvu;
 import LinearMvuEvents;
 import LinearMvuCommands;
 
@@ -54,43 +54,70 @@ module ClientCommon {
 }
 
 module Pinger {
-  typename Message = [| ButtonPressed | Ponged:PingPong |];
-  typename Model = [| Pinging:PingPong | Waiting |];
-  typename UnrModel = (waiting: Bool);
+  typename WaitingModel = ();
+  typename WaitingMsg = [| Ponged:PingPong |];
+
+  typename PingingModel = [| Pinging: PingPong |];
+  typename PingingMsg = [| ButtonPressed |];
 
   var emptyCmd = LinearMvuCommands.empty;
 
-  sig view : (UnrModel) {SessionFail:() {}-> [||]}~> LinearMvuHTML.HTML(Message)
-  fun view(uModel) {
-    ClientCommon.makePage(true, uModel.waiting)
-  }
 
-  sig updt : (Message, Model) {SessionFail:() {}-> [||]}~> (Model, LinearMvuCommands.Command(Message))
-  fun updt(msg, model) {
-    switch(msg) {
-      case ButtonPressed ->
-        switch(model) {
-          case Pinging(c) ->
-            var c = send(Ping, c);
-            (Waiting,
-               LinearMvuCommands.spawnLinear(linfun() { var (_, c) = receive(c); Ponged(c) }))
-          case Waiting -> (Waiting, emptyCmd)
-        }
-      case Ponged(c) ->
-        switch(model) {
-          case Pinging(mC) ->
-            # This should never arise.
-            cancel(mC); (Pinging(c), emptyCmd)
-          case Waiting -> (Pinging(c), emptyCmd)
-        }
+  sig noSubs : forall a :: Type(Unl, Any), b :: Type(Any, Any), e :: Row . (a) ~e~> LinearMvuSubscriptions.Sub(b)
+  fun noSubs(_) { LinearMvuSubscriptions.empty }
+
+  mutual {
+    ## Waiting
+    fun waitingView(_) {
+      vdom
+        <div id="main" class="container marketing">
+          <div class="row featurette pagination-centered">
+            <button type="button" class="btn btn-lg" id="pingButton" disabled="disabled">
+              Send Ping!
+            </button>
+          </div>
+        </div>
     }
-  }
 
-  sig extract : (Model) {SessionFail:() {}-> [||]}~> (Model, UnrModel)
-  fun extract(model) {
-    switch(model) {
-      case Pinging(c) -> (Pinging(c), (waiting=false))
-      case Waiting -> (Waiting, (waiting=true))
+    fun waitingUpdt(msg, _) {
+      switch(msg) {
+        case Ponged(c) ->
+          transition(Pinging(c), pingingView, pingingUpdt, noSubs,
+            pingingExtract, LinearMvuCommands.empty)
+      }
+    }
+
+    fun waitingExtract(_) { ((), ()) }
+
+    ## Pinging
+    fun pingingView(_) {
+      vdom
+        <div id="main" class="container marketing">
+          <div class="row featurette pagination-centered">
+            <button type="button" class="btn btn-lg" id="pingButton"
+              e:onClick="{fun() { ButtonPressed }}" >
+              Send Ping!
+            </button>
+          </div>
+        </div>
+    }
+
+    sig pingingUpdt : (PingingMsg, PingingModel) ~%~> Transition(PingingModel, PingingMsg)
+    fun pingingUpdt(msg, model) {
+      var Pinging(c) = model;
+      switch(msg) {
+        case ButtonPressed ->
+          var c = send(Ping, c);
+          var cmd =
+            LinearMvuCommands.spawnLinear(linfun() {
+              var (_, c) = receive(c); Ponged(c)
+            });
+          transition((), waitingView, waitingUpdt, noSubs, waitingExtract, cmd)
+      }
+    }
+
+    fun pingingExtract(model) {
+      (model, ())
     }
   }
 
@@ -100,9 +127,8 @@ module Pinger {
     # srvAP, and handle communication.
     var clPid = spawnClient {
       var c = accept(srvAP);
-      LinearMvu.runLinear("placeholder", Pinging(c), view, updt,
-        fun(_) { LinearMvuSubscriptions.empty }, extract,
-        LinearMvuCommands.empty);
+      LinearMvu.runTransition("placeholder", Pinging(c), pingingView, pingingUpdt,
+        noSubs, pingingExtract, LinearMvuCommands.empty);
     };
     ClientCommon.template
   }
@@ -111,53 +137,84 @@ module Pinger {
 
 module Ponger {
   typename Ponger = !Pong.?Ping.Ponger;
-  typename Message = [| ButtonPressed | Pinged:Ponger |];
-  typename Model = [| Ponging:Ponger | Waiting |];
-  typename UnrModel = (waiting: Bool);
+
+  typename WaitingModel = ();
+  typename WaitingMsg = [| Pinged:Ponger |];
+
+  typename PongingModel = [| Ponging: Ponger |];
+  typename PongingMsg = [| ButtonPressed |];
 
   var emptyCmd = LinearMvuCommands.empty;
 
-  sig view : (UnrModel) {SessionFail:() {}-> [||]}~> LinearMvuHTML.HTML(Message)
-  fun view(uModel) {
-    ClientCommon.makePage(false, uModel.waiting)
-  }
+  sig noSubs : forall a :: Type(Unl, Any), b :: Type(Any, Any), e :: Row . (a) ~e~> LinearMvuSubscriptions.Sub(b)
+  fun noSubs(_) { LinearMvuSubscriptions.empty }
 
-  sig updt : (Message, Model) {SessionFail:() {}-> [||]}~> (Model, LinearMvuCommands.Command(Message))
-  fun updt(msg, model) {
-    switch(msg) {
-      case ButtonPressed ->
-        switch(model) {
-          case Ponging(c) ->
-            var c = send(Pong, c);
-            (Waiting,
-               LinearMvuCommands.spawnLinear(linfun() { var (_, c) = receive(c); Pinged(c) }))
-          case Waiting -> (Waiting, emptyCmd)
-        }
-      case Pinged(c) ->
-        switch(model) {
-          case Ponging(mC) ->
-            # This should never arise.
-            cancel(mC); (Ponging(c), emptyCmd)
-          case Waiting -> (Ponging(c), emptyCmd)
-        }
+  mutual {
+    ## Waiting
+    fun waitingView(_) {
+      vdom
+        <div id="main" class="container marketing">
+          <div class="row featurette pagination-centered">
+            <button type="button" class="btn btn-lg" id="pingButton" disabled="disabled">
+              Send Pong!
+            </button>
+          </div>
+        </div>
+    }
+
+    fun waitingUpdt(msg, _) {
+      switch(msg) {
+        case Pinged(c) ->
+          transition(Ponging(c), pongingView, pongingUpdt, noSubs,
+            pongingExtract, LinearMvuCommands.empty)
+      }
+    }
+
+    fun waitingExtract(_) { ((), ()) }
+
+    ## Ponging
+    fun pongingView(_) {
+      vdom
+        <div id="main" class="container marketing">
+          <div class="row featurette pagination-centered">
+            <button type="button" class="btn btn-lg" id="pingButton"
+              e:onClick="{fun() { ButtonPressed }}" >
+              Send Pong!
+            </button>
+          </div>
+        </div>
+    }
+
+    sig pongingUpdt : (PongingMsg, PongingModel) ~%~> Transition(PongingModel, PongingMsg)
+    fun pongingUpdt(msg, model) {
+      var Ponging(c) = model;
+      switch(msg) {
+        case ButtonPressed ->
+          var c = send(Pong, c);
+          var cmd =
+            LinearMvuCommands.spawnLinear(linfun() {
+              var (_, c) = receive(c); Pinged(c)
+            });
+          transition((), waitingView, waitingUpdt, noSubs, waitingExtract, cmd)
+      }
+    }
+
+    fun pongingExtract(model) {
+      (model, ())
     }
   }
 
-  fun extract(model) {
-    switch(model) {
-      case Ponging(c) -> (Ponging(c), (waiting=false))
-      case Waiting -> (Waiting, (waiting=true))
-    }
-  }
-
+  sig setup : (AP(PingPong)) {}~> Page
   fun setup(srvAP) {
     # Spawn a thread on the client to request a channel from
     # srvAP, and handle communication.
     var clPid = spawnClient {
       var c = request(srvAP);
-      LinearMvu.runLinear("placeholder", Waiting, view, updt,
-        fun(_) { LinearMvuSubscriptions.empty }, extract,
-        LinearMvuCommands.spawnLinear(linfun() { var (_, c) = receive(c); Pinged(c) }))
+      var cmd =
+        LinearMvuCommands.spawnLinear(linfun() { var (_, c) = receive(c); Pinged(c) });
+
+      LinearMvu.runTransition("placeholder", (), waitingView, waitingUpdt,
+        noSubs, waitingExtract, cmd);
     };
     ClientCommon.template
   }
