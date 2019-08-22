@@ -9,6 +9,18 @@ typename Command(a :: Type(Any, Any)) =
 
 var empty = NoCommand;
 
+sig spawnUnr :
+  forall a :: Type(Any, Any) .
+    (() {SessionFail:() {}-> [||]}~> a) {SessionFail:() {}-> [||]}~> Command(a)
+fun spawnUnr(f) { Spawn(f) }
+
+sig spawnLinear :
+  forall a :: Type(Any, Any) .
+    (() {SessionFail:() {}-> [||]}~@ a) {SessionFail:() {}-> [||]}~> Command(a)
+fun spawnLinear(f) { SpawnLinear(f) }
+
+
+
 sig append : forall a :: Type(Any, Any), e :: Row .
   (Command(a), Command(a)) -e-> Command(a)
 fun append(a1, a2) {
@@ -32,7 +44,7 @@ sig applySpawnLinear : forall a :: Type(Any, Any) .
 fun applySpawnLinear(f) { f() }
 
 sig processCommand :
-  forall msg :: Type(Any, Any), e :: Row . (Command(msg), AP(?msg.End)) ~e~> ()
+  forall msg :: Type(Any, Any), e :: Row . (Command(msg), AP(?msg.End)) {SessionFail:() {}-> [||]}~> ()
 fun processCommand(cmd, ap) {
   switch(cmd) {
     case NoCommand -> ()
