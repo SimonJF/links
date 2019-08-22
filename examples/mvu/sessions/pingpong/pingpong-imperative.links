@@ -1,0 +1,162 @@
+
+typename Ping = [| Ping |];
+typename Pong = [| Pong |];
+
+typename PingPong = !Ping.?Pong.PingPong;
+
+module ClientCommon {
+  var msgAp = new();
+
+  fun disableButton() {
+    var buttonRef = getNodeById("pingButton");
+    var _ = domSetAttributeFromRef(buttonRef, "disabled", "disabled");
+    ()
+  }
+
+  fun enableButton() {
+    var buttonRef = getNodeById("pingButton");
+    domRemoveAttributeFromRef(buttonRef, "disabled");
+  }
+
+  fun logMessage(msg) {
+    appendChildren(<#><p>{stringToXml(msg)}</p></#>, getNodeById("msgs"));
+  }
+
+  fun sendButtonPress() {
+    ignore(request(msgAp))
+  }
+
+
+  fun awaitButtonPress() {
+    ignore(accept(msgAp))
+  }
+
+  fun makePage(msgAp, isPinger) {
+    var caption = if (isPinger) { "Send Ping!" } else { "Send Pong!" };
+    page
+      <html>
+        <head>
+          <title>Links Ping Pong example</title>
+          <link href="http://fonts.googleapis.com/css?family=Merriweather:400,300italic,300" rel="stylesheet" type="text/css"></link>
+          <link href="http://fonts.googleapis.com/css?family=Kotta+One" rel="stylesheet" type="text/css"></link>
+          <link href="http://fonts.googleapis.com/css?family=Lora" rel="stylesheet" type="text/css"></link>
+          <link href="css/bootstrap.min.css" rel="stylesheet"></link>
+          <link href="css/abcd.css" rel="stylesheet"></link>
+        </head>
+
+        <div class ="jumbotron">
+          <div class="container">
+            <h1>PingPong Example</h1>
+          </div>
+        </div>
+
+        <div id="main" class="container marketing">
+          <div class="row featurette pagination-centered">
+            <button type="button" class="btn btn-lg" id="pingButton"
+              l:onclick="{ sendButtonPress() }" disabled="disabled" >
+              { stringToXml(caption) }
+            </button>
+          </div>
+          <div class="row featurette">
+            <h2>Messages:</h2>
+            <div id="msgs"></div>
+          </div>
+        </div>
+      </html>
+  }
+}
+
+module Pinger {
+  open ClientCommon;
+
+  mutual {
+    sig commThread : (AP(PingPong)) ~%e~> ()
+    fun commThread(ap) {
+      # Request a channel from the access point
+      var ch = accept(ap);
+      logMessage("Established session connection with ponger!");
+      enableButton();
+      commLoop(ap, ch)
+    }
+
+    sig commLoop : (AP(PingPong), PingPong) ~%e~>()
+    fun commLoop(ap, ch) {
+      awaitButtonPress();
+      var ch = send(Ping, ch);
+      logMessage("Sent Ping!");
+      disableButton();
+      try {
+        var (_, ch) = receive(ch);
+        ch
+      } as (ch) in {
+        logMessage("Received Pong!");
+        enableButton();
+        commLoop(ap, ch)
+      } otherwise {
+        logMessage("Lost connection!");
+        commThread(ap)
+      }
+    }
+  }
+
+  fun setup(srvAP) {
+    # Spawn a thread on the client to request a channel from
+    # srvAP, and handle communication.
+    var clPid = spawnClient { commThread(srvAP) };
+    makePage(clPid, true)
+  }
+
+}
+
+module Ponger {
+  open ClientCommon;
+
+  mutual {
+    sig commThread : (AP(PingPong)) ~%e~> ()
+    fun commThread(ap) {
+      # Accept a channel from the access point
+      var ch = request(ap);
+      logMessage("Established session connection with pinger!");
+      commLoop(ap, ch)
+    }
+
+    sig commLoop : (AP(PingPong), ~PingPong) ~%e~>()
+    fun commLoop(ap, ch) {
+      try {
+        var (_, ch) = receive(ch);
+        ch
+      } as (ch) in {
+        logMessage("Received Ping!");
+        enableButton();
+        awaitButtonPress();
+        var ch = send(Pong, ch);
+        logMessage("Sent Pong!");
+        disableButton();
+        commLoop(ap, ch)
+      } otherwise {
+        logMessage("Lost connection!");
+        commThread(ap)
+      }
+    }
+  }
+
+  fun setup(srvAP) {
+    # Spawn a thread on the client to request a channel from
+    # srvAP, and handle communication.
+    var clPid = spawnClient { commThread(srvAP) };
+    makePage(clPid, false)
+  }
+}
+
+
+fun main() {
+  var srvAP = new();
+  addRoute("/pinger", fun(_) { Pinger.setup(srvAP) });
+  addRoute("/ponger", fun(_) { Ponger.setup(srvAP) });
+  addStaticRoute("/css", "css", [("css", "text/css")]);
+  serveWebsockets();
+  servePages();
+}
+
+main()
+
