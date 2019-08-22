@@ -101,18 +101,20 @@ fun transition(model, view, updt, sub, extract, cmd) {
 sig runTransition:
   forall
   msg::Type(Any, Any), model::Type(Any, Any),
-    unrModel::Type(Unl, Any) .
+    unrModel::Type(Unl, Any), e :: Row .
   (String,
    model,
    (unrModel) {SessionFail:() {}-> [||]}~> HTML(msg),
    (msg, model) {SessionFail:() {}-> [||]}~> Transition(model, msg),
    (unrModel) {SessionFail:() {}-> [||]}~> Sub(msg),
-   (model) {SessionFail:() {}-> [||]}~> (model, unrModel)
-   ) {}~> ()
-fun runTransition(placeholder, model, view, updt, subscriptions, extract) {
+   (model) {SessionFail:() {}-> [||]}~> (model, unrModel),
+   Command(msg)
+   ) ~e~> ()
+fun runTransition(placeholder, model, view, updt, subscriptions, extract, cmd) {
   var evtHandler = spawnClient {
     var (model, unrModel) = extract(model);
     var ap = new();
+    processCommand(cmd, ap);
     VDom.runDom(placeholder, view(unrModel), ap, subscriptions(unrModel));
     evtLoop(ap, model, view, updt, subscriptions, extract, subscriptions(unrModel))
   };
@@ -122,20 +124,21 @@ fun runTransition(placeholder, model, view, updt, subscriptions, extract) {
 sig runLinear:
   forall
   msg::Type(Any, Any), model::Type(Any, Any),
-    unrModel::Type(Unl, Any) .
+    unrModel::Type(Unl, Any), e :: Row .
   (String,
    model,
    (unrModel) {SessionFail:() {}-> [||]}~> HTML(msg),
    (msg, model) {SessionFail:() {}-> [||]}~> (model, Command(msg)),
    (unrModel) {SessionFail:() {}-> [||]}~> Sub(msg),
-   (model) {SessionFail:() {}-> [||]}~> (model, unrModel)
-   ) {}~> ()
-fun runLinear(placeholder, model, view, updt, subscriptions, extract) {
+   (model) {SessionFail:() {}-> [||]}~> (model, unrModel),
+   Command(msg)
+   ) ~e~> ()
+fun runLinear(placeholder, model, view, updt, subscriptions, extract, cmd) {
   fun updtNT(msg, model) {
     var (model, cmd) = updt(msg, model);
     noTransition(model, cmd)
   }
-  runTransition(placeholder, model, view, updtNT, subscriptions, extract)
+  runTransition(placeholder, model, view, updtNT, subscriptions, extract, cmd)
 }
 
 # User-facing function (assuming an unrestricted model)
@@ -153,7 +156,7 @@ fun run(placeholder, model, view, updt, subscriptions) {
     var (model, cmd) = updt(msg, model);
     NoTransition(model, cmd)
   }
-  runTransition(placeholder, model, view, wrapUpdt, subscriptions, fun(x) { (x, x) })
+  runTransition(placeholder, model, view, wrapUpdt, subscriptions, fun(x) { (x, x) }, LinearMvuCommands.empty)
 }
 
 sig runSimple :
@@ -166,7 +169,7 @@ sig runSimple :
     (msg, model) {SessionFail:() {}-> [||]}~> model) {}~> ()
 fun runSimple(placeholder, model, view, updt) {
   run(placeholder, model, view,
-    fun(msg, model) { (updt(msg, model), NoCommand)},
+    fun(msg, model) { (updt(msg, model), LinearMvuCommands.empty)},
     fun(_) { SubEmpty } )
 }
 
@@ -177,3 +180,93 @@ sig runStatic :
 fun runStatic(placeholder, model, view) {
   runSimple(placeholder, model, view, fun(_, model) { model })
 }
+
+
+###
+
+var mvuPagePlaceholder = "___mvuPlaceholder";
+
+var mvuPg = page <div id="{mvuPagePlaceholder}" />;
+
+sig mvuStaticPage :
+  forall model, e :: Row, f :: Row .
+  (model, (model) {SessionFail:() {}-> [||]}~> HTML(())) {}~> Page
+fun mvuStaticPage(model, view) {
+  runStatic(mvuPagePlaceholder, model, view); mvuPg
+}
+
+sig mvuPage :
+  forall model, msg, e :: Row, f :: Row .
+  (model, (model) {SessionFail:() {}-> [||]}~> HTML(msg),
+   (msg, model) {SessionFail:() {}-> [||]}~> model) {}~> Page
+fun mvuPage(model, view, updt) {
+  runSimple(mvuPagePlaceholder, model, view, updt); mvuPg
+}
+
+sig mvuSubPage :
+  forall msg, model .
+  ( model,
+    (model) {SessionFail:() {}-> [||]}~> HTML(msg),
+    (msg, model) {SessionFail:() {}-> [||]}~> (model),
+    (model) {SessionFail:() {}-> [||]}~> Sub(msg)) {}~> Page
+fun mvuSubPage(model, view, updt, sub) {
+  run(mvuPagePlaceholder, model, view,
+      fun(msg, model) { (updt(msg, model), LinearMvuCommands.empty) }, sub); mvuPg
+}
+
+sig mvuSubCmdPage :
+  forall msg, model .
+  ( model,
+    (model) {SessionFail:() {}-> [||]}~> HTML(msg),
+    (msg, model) {SessionFail:() {}-> [||]}~> (model, Command(msg)),
+    (model) {SessionFail:() {}-> [||]}~> Sub(msg)) {}~> Page
+fun mvuSubCmdPage(model, view, updt, sub) {
+  run(mvuPagePlaceholder, model, view, updt, sub); mvuPg
+}
+
+sig mvuLinearPage :
+  forall
+  msg::Type(Any, Any), model::Type(Any, Any),
+    unrModel::Type(Unl, Any) .
+  (model,
+   (unrModel) {SessionFail:() {}-> [||]}~> HTML(msg),
+   (msg, model) {SessionFail:() {}-> [||]}~> (model, Command(msg)),
+   (model) {SessionFail:() {}-> [||]}~> (model, unrModel),
+   Command(msg)
+   ) {}~> Page
+fun mvuLinearPage(model, view, updt, extract, cmd) {
+  runLinear(mvuPagePlaceholder, model, view,
+      updt, fun(_) { LinearMvuSubscriptions.empty }, extract, cmd); mvuPg
+}
+
+sig mvuLinearSubPage:
+  forall
+  msg::Type(Any, Any), model::Type(Any, Any),
+    unrModel::Type(Unl, Any) .
+  (model,
+   (unrModel) {SessionFail:() {}-> [||]}~> HTML(msg),
+   (msg, model) {SessionFail:() {}-> [||]}~> (model, Command(msg)),
+   (unrModel) {SessionFail:() {}-> [||]}~> Sub(msg),
+   (model) {SessionFail:() {}-> [||]}~> (model, unrModel),
+   Command(msg)
+   ) {}~> Page
+fun mvuLinearSubPage(model, view, updt, subscriptions, extract, cmd) {
+  runLinear(mvuPagePlaceholder, model, view,
+      updt, subscriptions, extract, cmd); mvuPg
+}
+sig mvuTransitionPage:
+  forall a :: Type(Any, Any),
+        b :: Type(Any, Any),
+        msg :: Type(Any, Any),
+        model :: Type(Any, Any),
+        unrModel :: Type(Unl, Any) .
+   (model,
+   (unrModel) {SessionFail:() {}-> [||]}~> HTML(msg),
+   (msg, model) {SessionFail:() {}-> [||]}~> Transition(model, msg),
+   (model) {SessionFail:() {}-> [||]}~> (model, unrModel),
+   Command(msg)) {}~> Page
+fun mvuTransitionPage(model, view, updt, extract, cmd) {
+  runTransition(mvuPagePlaceholder, model, view,
+      updt, fun(_) { LinearMvuSubscriptions.empty }, extract, cmd); mvuPg
+}
+
