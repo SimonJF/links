@@ -3,8 +3,8 @@
 /* Padding below the footer and lighter body text */
 
 body {
-  padding-top: 50px;
-  padding-bottom: 40px;
+/*   padding-top: 50px; */
+  padding-bottom: 10px;
   color: #5a5a5a;
   background-color: #FFFFF0;
   font-size: 12pt;
@@ -35,6 +35,8 @@ h2[id] {
 -------------------------------------------------- */
 
 /* Special class on .container surrounding .navbar, used for positioning it into place. */
+/* Flip around the padding for proper display in narrow viewports */
+/*
 .navbar-wrapper {
   position: absolute;
   top: 0;
@@ -43,7 +45,6 @@ h2[id] {
   z-index: 20;
 }
 
-/* Flip around the padding for proper display in narrow viewports */
 .navbar-wrapper .container {
   padding-left: 0;
   padding-right: 0;
@@ -52,6 +53,7 @@ h2[id] {
   padding-left: 15px;
   padding-right: 15px;
 }
+*/
 
 
 /* CUSTOMIZE THE JUMBOTRON
@@ -70,6 +72,8 @@ h2[id] {
   font-family: 'Lora', serif;
   font-weight: 400;
   font-size: 21px;
+  padding-top:10px;
+  padding-bottom:10px;
 }
 
 /* CUSTOMIZE THE CAROUSEL
@@ -134,6 +138,10 @@ h2[id] {
   letter-spacing: -1px;
 }
 
+.featurette {
+  padding-left:  15px;
+  padding-right: 15px;
+}
 
 
 /* RESPONSIVE CSS
@@ -142,14 +150,9 @@ h2[id] {
 @media (min-width: 768px) {
 
   /* Remove the edge padding needed for mobile */
-  .marketing {
-    padding-left: 0;
-    padding-right: 0;
-  }
-
-  /* Navbar positioning foo */
+    /* Navbar positioning foo */
   .navbar-wrapper {
-    margin-top: 20px;
+  /* margin-top: 20px; */
   }
   .navbar-wrapper .container {
     padding-left:  15px;

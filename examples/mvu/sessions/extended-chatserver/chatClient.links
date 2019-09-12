@@ -191,6 +191,9 @@ mutual {
     open LinearMvuHTML;
     open LinearMvuAttrs;
 
+    fun fieldset(attrs, children) { tag("fieldset", attrs, children) }
+    fun legend(attrs, children) { tag("legend", attrs, children) }
+
     sig roomForm : (NCUnrModel) ~%~> HTML(NCMessage)
     fun roomForm(ncModel) {
       var newRoomChecked =
@@ -200,60 +203,86 @@ mutual {
         };
 
       var newRoomRadio : HTML(NCMessage) =
-        div(class("radio"),
-            label(ae,
-              input(type("radio") +@ name("room") +@ checked(newRoomChecked) +@
-                onInput(fun(_) { UpdateSelectedRoom(NewRoom) }), he) +*
-              textNode("New Room") +*
+        div(class("form-inline"),
+          div(class("form-group"),
+              div(class("col-sm-8"),
+              input(class("form-check-input") +@ type("radio") +@ id("newRoomRadio") +@
+                checked(newRoomChecked) +@
+                  onInput(fun(_) { UpdateSelectedRoom(NewRoom) }) +@
+                  onClick(fun() { UpdateSelectedRoom(NewRoom) })
+                , he) +*
+              label(class("form-check-label") +@ for_("newRoomRadio") +@
+                onClick(fun() { UpdateSelectedRoom(NewRoom) }),
+                textNode("New Room"))) +*
+              div(class("col-sm-4"),
               input(
-                type("text") +@
+                id("newRoomText") +@
+                type("text") +@ class("form-control") +@
                 onInput(fun(str) { UpdateNewRoom(str) }) +@
+                onClick(fun() { UpdateSelectedRoom(NewRoom) }) +@
                 value(ncModel.newRoomText) +@
-                onEnter(fun() { SubmitJoinRoom }), he)
-            )
-        );
+                onEnter(fun() { SubmitJoinRoom }), he))));
 
-      fun roomRadio(roomName) {
+      fun renderRoomRadio(roomName, i) {
         var isChecked =
           switch(ncModel.selectedRoom) {
             case NewRoom -> false
             case SelectedRoom(room) -> roomName == room
           };
+        var radioID = "roomRadio" ^^ intToString(i);
 
-        div(class("radio"),
-            label(ae,
-              input(
-                type("radio") +@
-                name("roomName") +@
-                checked(isChecked) +@
-                onInput(fun(_) { UpdateSelectedRoom(SelectedRoom(roomName))}), he) +*
-              textNode(roomName)
-            )
-        )
+       #<div class="form-check">
+       #  <input class="form-check-input" type="radio" name="gridRadios" id="gridRadios1" value="option1" checked>
+       #  <label class="form-check-label" for="gridRadios1">
+       #    First radio
+       #  </label>
+       #</div>
+
+        div(class("form-check"),
+          div(class("col-sm-8"),
+            input(
+              class("form-check-input") +@
+              id(radioID) +@
+              type("radio") +@
+              checked(isChecked) +@
+              onClick(fun() { UpdateSelectedRoom(SelectedRoom(roomName))}), he) +*
+            label(class("form-check-label") +@
+              for_(radioID) +@
+              onClick(fun() { UpdateSelectedRoom(SelectedRoom(roomName))}),
+              textNode(roomName))))
       }
 
-      var radioForm : HTML(NCMessage) =
-        newRoomRadio +*
-        LinearMvuHTML.concat(map(fun(roomName) { roomRadio(roomName) }, ncModel.rooms));
+      var renderedRadios =
+        LinearMvuHTML.concat(mapi(fun(x, i) { renderRoomRadio(x, i) }, ncModel.rooms));
 
-      form(ae,
-        div(ae,
-          label(for_("nickname"), textNode("Nickname")) +*
-          input(
-            type("text") +@
-            id("nickname") +@
-            autofocus(true) +@
-            onInput(fun(nick) { UpdateNickname(nick) }), he)) +*
+      var radioForm : HTML(NCMessage) =
+        fieldset(class("form-group"),
+          div(class("row"),
+            label(class("col-form-label col-sm-2 pt-0"), textNode("Room")) +*
+              div(class("col-sm-8"), renderedRadios +* newRoomRadio)));
+
+      #form(ae,
+        div(class("form-group row"),
+          label(class("col-sm-2 col-form-label") +@ for_("nickname"), textNode("Nickname")) +*
+          div(class("col-sm-8"),
+            input(
+              class("form-control") +@
+              type("text") +@
+              id("nickname") +@
+              autofocus(true) +@
+              onEnter(fun() { SubmitJoinRoom }) +@
+              onInput(fun(nick) { UpdateNickname(nick) }), he))) +*
         radioForm +*
-        div(ae,
-          input(type("button") +@ value("Join") +@ onClick(fun() { SubmitJoinRoom }), he)))
+        div(class("form-group"),
+          input(type("button") +@ class("btn btn-success") +@ value("Join")
+            +@ onClick(fun() { SubmitJoinRoom }), he))
     }
 
     # TODO: Render error message
     div(ae,
       p(ae,
-        textNode("Choose one of the existing rooms or create a new one.") +*
-        roomForm(ncModel)))
+        textNode("Choose one of the existing rooms or create a new one.")) +*
+        roomForm(ncModel))
   }
 
   sig ncUpdt : (NCMessage, NCModel) ~%~> Transition(NCModel, NCMessage)
@@ -377,10 +406,10 @@ mutual {
     var msgs = LinearMvuHTML.concat(map(renderMessage, roomInfo.messages));
 
     var chatBox =
-      div(LinearMvuAttrs.style("overflow-y:scroll; width:100%; height:400px;"), msgs);
+      div(LinearMvuAttrs.style("overflow-y:scroll; width:100%; height:235px;"), msgs);
 
     var chatInputBox =
-      input(LinearMvuAttrs.style("width:100%;") +@
+      input(class("form-control") +@ LinearMvuAttrs.style("width:100%;") +@
            value(roomInfo.currentChatMessage) +@
            onEnter(fun() { SubmitChat }) +@
            onInput(fun(msg) { UpdateChatBox(msg) }), he);
@@ -409,8 +438,25 @@ mutual {
         modifyModel((ri with currentChatMessage = newMessage), cs, mi)
 
       case SubmitChat ->
-        var cs = select ChatMessage cs;
-        var cs = send(ri.currentChatMessage, cs);
+        fun isTopicCmd(s) {
+          (charAt(s, 0) == '/') &&
+          (strlen(s) > 8) &&
+          (strsub(s, 0, 7) == "/topic ")
+        }
+
+        fun getTopic(s) {
+          strsub(s, 7, strlen(s) - 7)
+        }
+
+        var msg = ri.currentChatMessage;
+        var (cs, msg) =
+          if (isTopicCmd(msg)) {
+            var topic = getTopic(msg);
+            (select ChangeTopic cs, topic)
+          } else {
+            (select ChatMessage cs, msg)
+          };
+        var cs = send(msg, cs);
         modifyModel((ri with currentChatMessage=""), cs, mi)
 
       case ModUpdateSelection(newSelected) ->
@@ -515,25 +561,16 @@ fun mainPage() {
   page
     <html>
       <head>
-        <title>Extended Links Chat Application</title>
+        <title>Links Chat</title>
         <link href="http://fonts.googleapis.com/css?family=Merriweather:400,300italic,300" rel="stylesheet" type="text/css"></link>
         <link href="http://fonts.googleapis.com/css?family=Kotta+One" rel="stylesheet" type="text/css"></link>
         <link href="http://fonts.googleapis.com/css?family=Lora" rel="stylesheet" type="text/css"></link>
         <link href="css/bootstrap.min.css" rel="stylesheet"></link>
         <link href="css/abcd.css" rel="stylesheet"></link>
       </head>
-
-      <div class="navbar-wrapper">
-        <div class="container">
-          <div id="navbar" class="navbar navbar-inverse navbar-fixed-top" role="navigation">
-          </div>
-        </div>
-      </div>
-
       <div class ="jumbotron">
         <div class="container">
           <h2>Links Session-Typed Chat</h2>
-          <div id="placeholder"></div>
         </div>
       </div>
 
