@@ -48,7 +48,7 @@ typename RoomJoinResult =
 
 
 module Moderator {
-  sig create : (RoomHandle) ~> ModeratorSend
+  sig create : (RoomHandle) ~%~> ModeratorSend
   fun create(roomAp) {
     fun loop(s) {
       offer(s) {
@@ -84,7 +84,7 @@ module Room {
 
   # Gets us a pair of (RoomSend, ~RoomSend) endpoints.
   # Perhaps this should be in the standard library.
-  sig createRoomSend : () ~> (RoomSend, ~RoomSend)
+  sig createRoomSend : () ~%~> (RoomSend, ~RoomSend)
   fun createRoomSend() {
     var transit = new();
     var (ap: AP(RoomSend)) = new();
@@ -98,10 +98,10 @@ module Room {
     (ep1, ep2)
   }
 
-  sig loop : (RoomState, ClientMap) ~> ()
+  sig loop : (RoomState, ClientMap) ~%~> ()
   fun loop(state, clients) {
 
-    sig broadcastJoined : (Nickname, ClientMap) ~> ClientMap
+    sig broadcastJoined : (Nickname, ClientMap) ~%~> ClientMap
     fun broadcastJoined(nick, clients) {
       AssocLinList.map(fun((s, info)) {
         var s = select NewUser s;
@@ -268,7 +268,7 @@ module Room {
     }
   }
 
-  sig join : (RoomHandle, Nickname) ~> RoomJoinResponse
+  sig join : (RoomHandle, Nickname) ~%~> RoomJoinResponse
   fun join(ap, nick) {
     var s = request(ap);
     var s = select JoinRequest s;
@@ -278,7 +278,7 @@ module Room {
     res
   }
 
-  sig create : (RoomName) ~> RoomHandle
+  sig create : (RoomName) ~%~> RoomHandle
   fun create(roomName) {
     var (ap: RoomHandle) = new();
     var (state: RoomState) =
@@ -287,26 +287,26 @@ module Room {
     ap
   }
 
-  sig kill : (RoomHandle) ~> ()
+  sig kill : (RoomHandle) ~%~> ()
   fun kill(ap) {
     close(select Kill request(ap))
   }
 
-  sig chatMessage : (RoomHandle, Nickname, Message) ~> ()
+  sig chatMessage : (RoomHandle, Nickname, Message) ~%~> ()
   fun chatMessage(ap, nick, msg) {
     var s = request(ap);
     var s = select Chat s;
     close(send((nick, msg), s))
   }
 
-  sig newTopic : (RoomHandle, Topic) ~> ()
+  sig newTopic : (RoomHandle, Topic) ~%~> ()
   fun newTopic(ap, topic) {
     var s = request(ap);
     var s = select NewTopic s;
     close(send(topic, s))
   }
 
-  sig leave : (RoomHandle, Nickname) ~> ()
+  sig leave : (RoomHandle, Nickname) ~%~> ()
   fun leave(ap, nick) {
     var s = request(ap);
     var s = select Leave s;
@@ -423,12 +423,12 @@ module RoomManager {
 # to operate on
 typename WorkerResult = [| SameRoom:ClientSend | LeftRoom |];
 
-sig acceptAndWork : (ServerAccept) ~> ()
+sig acceptAndWork : (ServerAccept) ~%~> ()
 fun acceptAndWork(s) server {
 
   # Main loop: offers on WorkerReceive channel, communicates
   # with room
-  sig workerLoop : (Nickname, RoomHandle, WorkerReceive) ~> ()
+  sig workerLoop : (Nickname, RoomHandle, WorkerReceive) ~%~> ()
   fun workerLoop(nick, roomHandle, s) {
     try {
       offer(s) {
@@ -481,7 +481,7 @@ fun acceptAndWork(s) server {
   }
 }
 
-sig acceptor : () ~> ()
+sig acceptor : () ~%~> ()
 fun acceptor() server {
   # Accept a new client from worker AP (defined in ChatSessions)
   var s = accept(wap);

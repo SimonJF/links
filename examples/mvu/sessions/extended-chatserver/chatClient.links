@@ -1,12 +1,12 @@
 open import ChatSessions;
-open import Mvu;
-open import MvuSubscriptions;
-open import MvuCommands;
-import MvuHTML;
-import MvuAttrs;
+open import LinearMvu;
+open import LinearMvuSubscriptions;
+open import LinearMvuCommands;
+import LinearMvuHTML;
+import LinearMvuAttrs;
 
-var ae = MvuAttrs.empty;
-var he = MvuHTML.empty;
+var ae = LinearMvuAttrs.empty;
+var he = LinearMvuHTML.empty;
 
 ## Types
 
@@ -87,15 +87,15 @@ typename ConnectedMessage = [|
 mutual {
 
   fun waitingView(_) {
-    open MvuHTML;
-    open MvuAttrs;
+    open LinearMvuHTML;
+    open LinearMvuAttrs;
     fun role(x) { attr("role", x) }
 
     div(class("spinner-border") +@ role("status"),
       span(class("sr-only"), textNode("Loading...")))
   }
 
-  sig waitingUpdt : (WaitingMessage, ()) {}~> Transition(WaitingModel, WaitingMessage)
+  # sig waitingUpdt : (WaitingMessage, ()) {}~> Transition(WaitingModel, WaitingMessage)
   fun waitingUpdt(msg, _) {
     switch(msg) {
       case ConnectedAsUser(nick, rn, topic, nicks, cs, cr) ->
@@ -108,10 +108,10 @@ mutual {
           connectedView, connectedUpdt, emptySubs, connectedExtract, subscribeClient(cr))
       case ErrorConnecting(rooms, err, cs) ->
         var model = ncMkModel(cs, "", rooms, Just(err));
-        transition(model, ncView, ncUpdt, emptySubs, ncExtract, MvuCommands.empty)
+        transition(model, ncView, ncUpdt, emptySubs, ncExtract, LinearMvuCommands.empty)
       case RoomsDelivered(rooms, cs) ->
         var model = ncMkModel(cs, "", rooms, Nothing);
-        transition(model, ncView, ncUpdt, emptySubs, ncExtract, MvuCommands.empty)
+        transition(model, ncView, ncUpdt, emptySubs, ncExtract, LinearMvuCommands.empty)
     }
   }
 
@@ -119,8 +119,8 @@ mutual {
 
   sig emptySubs : forall
       model :: Type(Unl, Any),
-      message :: Type(Any, Any) . (model) ~%~> MvuSubscriptions.Sub(message)
-  fun emptySubs(_) { MvuSubscriptions.empty }
+      message :: Type(Any, Any) . (model) ~%~> LinearMvuSubscriptions.Sub(message)
+  fun emptySubs(_) { LinearMvuSubscriptions.empty }
 
 # sig waitingTransition : forall model :: Type(Any, Any), msg :: Type(Any, Any) .
 #   (Command(msg)) ~%~> Transition(model, msg)
@@ -180,16 +180,16 @@ mutual {
   }
 
 
-  sig ncMkModel : (ClientSelect, Nickname, [RoomName], Maybe(Error)) ~> NCModel
+  #sig ncMkModel : (ClientSelect, Nickname, [RoomName], Maybe(Error)) ~> NCModel
   fun ncMkModel(cs, nick, rooms, err) {
     (cs, (nickname=nick, rooms = rooms, selectedRoom = NewRoom, newRoomText = "", error = err))
   }
 
 
-  sig ncView : (NCUnrModel) ~%~> MvuHTML.HTML(NCMessage)
+  sig ncView : (NCUnrModel) ~%~> LinearMvuHTML.HTML(NCMessage)
   fun ncView(ncModel) {
-    open MvuHTML;
-    open MvuAttrs;
+    open LinearMvuHTML;
+    open LinearMvuAttrs;
 
     sig roomForm : (NCUnrModel) ~%~> HTML(NCMessage)
     fun roomForm(ncModel) {
@@ -234,7 +234,7 @@ mutual {
 
       var radioForm : HTML(NCMessage) =
         newRoomRadio +*
-        MvuHTML.concat(map(fun(roomName) { roomRadio(roomName) }, ncModel.rooms));
+        LinearMvuHTML.concat(map(fun(roomName) { roomRadio(roomName) }, ncModel.rooms));
 
       form(ae,
         div(ae,
@@ -260,7 +260,7 @@ mutual {
   fun ncUpdt(msg, (cs, ncModel)) {
 
     sig ncNoTrans: (NotConnectedModel, ClientSelect) ~%~> Transition(NCModel, NCMessage)
-    fun ncNoTrans(ncModel, cs) { noTransition((cs, ncModel), MvuCommands.empty) }
+    fun ncNoTrans(ncModel, cs) { noTransition((cs, ncModel), LinearMvuCommands.empty) }
 
     switch(msg) {
       case UpdateNickname(nick) ->
@@ -282,9 +282,9 @@ mutual {
 
 
   ### Connected
-  sig subscribeClient : (ClientReceive) ~> Command(ConnectedMessage)
+  # sig subscribeClient : (ClientReceive) ~> Command(ConnectedMessage)
   fun subscribeClient(cr) {
-    sig clientReceive : (ClientReceive) ~> ConnectedMessage
+    sig clientReceive : (ClientReceive) ~%~> ConnectedMessage
     fun clientReceive(cr) {
       offer(cr) {
         case IncomingChatMessage(cr) ->
@@ -350,8 +350,8 @@ mutual {
   }
 
   fun connectedView((roomInfo, modInfo)) {
-    open MvuHTML;
-    open MvuAttrs;
+    open LinearMvuHTML;
+    open LinearMvuAttrs;
 
     var adminBox = div(ae, he);
 
@@ -374,13 +374,13 @@ mutual {
     }
     var topic = infoHeader("Topic", roomInfo.topic);
     var room = infoHeader("Room", roomInfo.roomName);
-    var msgs = MvuHTML.concat(map(renderMessage, roomInfo.messages));
+    var msgs = LinearMvuHTML.concat(map(renderMessage, roomInfo.messages));
 
     var chatBox =
-      div(MvuAttrs.style("overflow-y:scroll; width:100%; height:400px;"), msgs);
+      div(LinearMvuAttrs.style("overflow-y:scroll; width:100%; height:400px;"), msgs);
 
     var chatInputBox =
-      input(MvuAttrs.style("width:100%;") +@
+      input(LinearMvuAttrs.style("width:100%;") +@
            value(roomInfo.currentChatMessage) +@
            onEnter(fun() { SubmitChat }) +@
            onInput(fun(msg) { UpdateChatBox(msg) }), he);
@@ -395,7 +395,7 @@ mutual {
 
   fun connectedUpdt(msg, model) {
     fun modifyModel(ri, cs, mi) {
-      noTransition((ri, cs, mi), MvuCommands.empty)
+      noTransition((ri, cs, mi), LinearMvuCommands.empty)
     }
 
     fun modifyAndSubscribe(ri, cs, mi, cr) {
@@ -504,12 +504,12 @@ fun mainPage() {
   var _ = spawnClient {
     var cs = request(wap);
     var (rooms, cs) = receive(cs);
-    runLinear("vdom-placeholder",
+    runTransition("vdom-placeholder",
       ncMkModel(cs, "", rooms, Nothing),
       ncView,
       ncUpdt,
       emptySubs,
-      ncExtract)
+      ncExtract, LinearMvuCommands.empty)
   };
 
   page
@@ -532,8 +532,7 @@ fun mainPage() {
 
       <div class ="jumbotron">
         <div class="container">
-          <h1>Links Session-Typed Chat</h1>
-          <hr>...complete with totally original stylesheet</hr>
+          <h2>Links Session-Typed Chat</h2>
           <div id="placeholder"></div>
         </div>
       </div>
