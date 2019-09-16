@@ -3,7 +3,6 @@ open import MvuAttrs;
 open import MvuEvents;
 open import MvuHTML;
 open import MvuSubscriptions;
-open import MvuCommands;
 
 # Needed to ensure that virtual-dom is open
 module VirtualDom {
@@ -20,7 +19,13 @@ module VDom {
     updateDom : forall a :: Type(Any, Any), e :: Row . (HTML(a), Sub(a)) ~e~> ();
   }
 }
-
+###
+module VDom {
+  alien javascript "/lib/vdom.js" {
+    runDom : (String, HTML(a), AP(?a.End), Sub(a)) ~> ();
+    updateDom : (HTML(a)) ~> ();
+  }
+}
 ######
 
 # Main event loop
@@ -29,14 +34,13 @@ sig evtLoop :
   (AP(?msg.End),
    model,
    (model) ~e~> HTML(msg),
-   (msg, model) ~e~> (model, Command(msg)),
+   (msg, model) ~e~> model,
    (model) ~e~> Sub(msg),
    Sub(msg)) ~e~> ()
 fun evtLoop(ap, model, view, updt, subscriptionsFn, prevSubscriptions) {
   var (message, s) = receive(accept(ap));
   close(s);
-  var (model, cmd) = updt(message, model);
-  processCommand(cmd, ap);
+  var model = updt(message, model);
   # Get new subscriptions
   var newSubscriptions = subscriptionsFn(model);
   # Update DOM
@@ -45,33 +49,38 @@ fun evtLoop(ap, model, view, updt, subscriptionsFn, prevSubscriptions) {
   evtLoop(ap, model, view, updt, subscriptionsFn, newSubscriptions)
 }
 
+sig evtLoop:
+  (AP(?msg.End),
+   model,
+   (model) ~> HTML(msg),
+   (msg, model) ~> model,
+   (model) ~> Sub(msg),
+   Sub(msg)) ~> ()
+fun evtLoop(ap, model, view, updt, subscriptionsFn, prevSubscriptions) {
+  var (message, s) = receive(accept(ap));
+  close(s);
+  var model = updt(message, model);
+  VDom.updateDom(view(model), newSubscriptions);
+  evtLoop(ap, model, view, updt)
+}
+
+
+
 # User-facing function (assuming an unrestricted model)
 sig run:
   forall msg, model, e :: Row, f :: Row.
   (String,
     model,
     (model) ~e~> HTML(msg),
-    (msg, model) ~e~> (model, Command(msg)),
-    (model) ~e~> Sub(msg),
-    Command(msg)) ~f~> ()
-fun run(placeholder, model, view, updt, subscriptions, cmd) {
+    (msg, model) ~e~> (model),
+    (model) ~e~> Sub(msg)) ~f~> ()
+fun run(placeholder, model, view, updt, subscriptions) {
   var evtHandler = spawnClient {
     var ap = new();
-    processCommand(cmd, ap);
     VDom.runDom(placeholder, view(model), ap, subscriptions(model));
     evtLoop(ap, model, view, updt, subscriptions, subscriptions(model))
   };
   ()
-}
-
-sig runCmd: forall msg, model, e :: Row, f :: Row.
-  (String,
-    model,
-    (model) ~e~> HTML(msg),
-    (msg, model) ~e~> (model, Command(msg)),
-    Command(msg)) ~f~> ()
-fun runCmd(placeholder, model, view, updt, cmd) {
-  run(placeholder, model, view, updt, fun(_) { SubEmpty }, cmd )
 }
 
 sig runSimple : forall msg, model, e :: Row, f :: Row.
@@ -80,9 +89,7 @@ sig runSimple : forall msg, model, e :: Row, f :: Row.
     (model) ~e~> HTML(msg),
     (msg, model) ~e~> model) ~f~> ()
 fun runSimple(placeholder, model, view, updt) {
-  run(placeholder, model, view,
-      fun(msg, model) { (updt(msg, model), MvuCommands.empty) },
-      fun(_) { SubEmpty }, MvuCommands.empty )
+  run(placeholder, model, view, updt, fun(_) { SubEmpty } )
 }
 
 sig runStatic :
@@ -91,3 +98,33 @@ sig runStatic :
 fun runStatic(placeholder, model, view) {
   runSimple(placeholder, model, view, fun(_, model) { model })
 }
+
+
+var mvuPagePlaceholder = "___mvuPlaceholder";
+
+var mvuPg = page <div id="{mvuPagePlaceholder}" />;
+
+sig mvuStaticPage :
+  forall model, e :: Row, f :: Row .
+  (model, (model) ~e~> HTML(())) ~f~> Page
+fun mvuStaticPage(model, view) {
+  runStatic(mvuPagePlaceholder, model, view); mvuPg
+}
+
+sig mvuPage :
+  forall model, msg, e :: Row, f :: Row .
+  (model, (model) ~e~> HTML(msg), (msg, model) ~e~> model) ~f~> Page
+fun mvuPage(model, view, updt) {
+  runSimple(mvuPagePlaceholder, model, view, updt); mvuPg
+}
+
+sig mvuSubPage :
+  forall msg, model, e :: Row, f :: Row.
+  ( model,
+    (model) ~e~> HTML(msg),
+    (msg, model) ~e~> (model),
+    (model) ~e~> Sub(msg)) ~f~> Page
+fun mvuSubPage(model, view, updt, sub) {
+  run(mvuPagePlaceholder, model, view, updt, sub); mvuPg
+}
+
