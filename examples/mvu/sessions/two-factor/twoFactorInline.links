@@ -57,7 +57,7 @@ module Server {
 
   sig serverMain : (ServerMain) ~%~> ()
   fun serverMain(s) {
-    close(send("Money!", s))
+    close(send("500 GBP", s))
   }
 
   fun generateKey() {
@@ -209,7 +209,7 @@ module Client {
         };
 
       alertBox +*
-      form(class("form-signin"),
+      div(class("form-signin"),
         label(for_("username") +@ class("sr-only"),
           textNode("Username")) +*
         input(type("text") +@ id("username") +@ class("form-control") +@
@@ -262,7 +262,7 @@ module Client {
     fun challengeView(uModel) {
       open LinearMvuHTML;
       open LinearMvuAttrs;
-      form(class("form-signin"),
+      div(class("form-signin"),
         div(a0,
           p(a0, textNode("It seems you are logging on from a new device.")) +*
           p(a0, textNode("To ensure security of your account, please enter " ^^
@@ -309,7 +309,7 @@ module Client {
   fun mainPage(_) {
     LinearMvu.runTransition("placeholder",
         emptyCredentialsModel(""), credentialsView, credentialsUpdt,
-        noSubs, credentialsExtract);
+        noSubs, credentialsExtract, LinearMvuCommands.empty);
 
      page
        <html>
