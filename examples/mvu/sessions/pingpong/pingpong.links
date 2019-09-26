@@ -42,12 +42,6 @@ module ClientCommon {
         </head>
 
         <body>
-          <div class ="jumbotron">
-            <div class="container">
-              <h1>PingPong Example</h1>
-            </div>
-          </div>
-
           <div id="placeholder"></div>
         </body>
       </html>;
@@ -71,11 +65,10 @@ module Pinger {
     fun waitingView(_) {
       vdom
         <div id="main" class="container marketing">
-          <div class="row featurette pagination-centered">
-            <button type="button" class="btn btn-lg" id="pingButton" disabled="disabled">
-              Send Ping!
-            </button>
-          </div>
+          <h2>Pinger</h2>
+          <button type="button" class="btn btn-lg" id="pingButton" disabled="disabled">
+            Send Ping!
+          </button>
         </div>
     }
 
@@ -93,12 +86,11 @@ module Pinger {
     fun pingingView(_) {
       vdom
         <div id="main" class="container marketing">
-          <div class="row featurette pagination-centered">
-            <button type="button" class="btn btn-lg" id="pingButton"
-              e:onClick="{fun() { ButtonPressed }}" >
-              Send Ping!
-            </button>
-          </div>
+          <h2>Pinger</h2>
+          <button type="button" class="btn btn-primary btn-lg" id="pingButton"
+            e:onClick="{fun() { ButtonPressed }}" >
+            Send Ping!
+          </button>
         </div>
     }
 
@@ -154,11 +146,10 @@ module Ponger {
     fun waitingView(_) {
       vdom
         <div id="main" class="container marketing">
-          <div class="row featurette pagination-centered">
-            <button type="button" class="btn btn-lg" id="pingButton" disabled="disabled">
-              Send Pong!
-            </button>
-          </div>
+          <h2>Ponger</h2>
+          <button type="button" class="btn btn-lg" id="pingButton" disabled="disabled">
+            Send Pong!
+          </button>
         </div>
     }
 
@@ -176,12 +167,11 @@ module Ponger {
     fun pongingView(_) {
       vdom
         <div id="main" class="container marketing">
-          <div class="row featurette pagination-centered">
-            <button type="button" class="btn btn-lg" id="pingButton"
-              e:onClick="{fun() { ButtonPressed }}" >
-              Send Pong!
-            </button>
-          </div>
+          <h2>Ponger</h2>
+          <button type="button" class="btn btn-primary btn-lg" id="pingButton"
+            e:onClick="{fun() { ButtonPressed }}" >
+            Send Pong!
+          </button>
         </div>
     }
 
