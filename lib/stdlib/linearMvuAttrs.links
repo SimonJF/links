@@ -159,7 +159,7 @@ fun onClick(f) {
 }
 
 fun onChange(f) {
-  eventHandler(UnitHandler("change", f))
+  eventHandler(PropertyHandler("change", "value", fun(val) { Just(f(val)) } ))
 }
 
 fun onMouseMove(f) {
