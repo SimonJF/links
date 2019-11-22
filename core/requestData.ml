@@ -9,10 +9,19 @@ type flat_query_record = {
 }
   [@@deriving show]
 
-type query_record =
-  Flat of flat_query_record | Nested of (flat_query_record list)
+
+type nested_query_record = {
+  subqueries: flat_query_record list;
+  overall_time: time;
+}
   [@@deriving show]
+
+type query_record =
+  Flat of flat_query_record | Nested of nested_query_record
+  [@@deriving show]
+
 type request_data = {
+  request_uri : string;
   cgi_parameters : (string * string) list ref;
   cookies : (string * string) list ref;
   http_response_headers : (string * string) list ref;
@@ -23,6 +32,7 @@ type request_data = {
   [@@deriving show]
 
 let new_empty_request_data () = {
+  request_uri = "";
   cgi_parameters = ref [];
   cookies = ref [];
   http_response_headers = ref [];
@@ -31,7 +41,8 @@ let new_empty_request_data () = {
   client_id = ref (dummy_client_id);
 }
 
-let new_request_data cgi_params cookies client_id = {
+let new_request_data request_uri cgi_params cookies client_id = {
+    request_uri;
     cgi_parameters = ref cgi_params;
     cookies = ref cookies;
     queries = ref [];
@@ -39,6 +50,9 @@ let new_request_data cgi_params cookies client_id = {
     http_response_code = ref 200;
     client_id = ref client_id;
 }
+
+
+let get_request_uri rq = rq.request_uri
 
 let get_cgi_parameters req_data = !(req_data.cgi_parameters)
 let set_cgi_parameters req_data x = req_data.cgi_parameters := x
@@ -66,9 +80,25 @@ let add_flat_query_record rq query_string query_time =
   let fqr = Flat {query_string; query_time} in
   rq.queries := fqr :: !(rq.queries)
 
-let add_nested_query_record rq fqrs =
-  let fqrs = List.map (fun (q, time) -> query_record q time) fqrs in
-  rq.queries := (Nested fqrs) :: !(rq.queries)
+let add_nested_query_record rq fqrs overall_time =
+  let subqueries = List.map (fun (q, time) -> query_record q time) fqrs in
+  rq.queries := (Nested { subqueries; overall_time }) :: !(rq.queries)
+
+let dump_query_metrics rq =
+  let reduce (total_query_count, total_time) = function
+    | Flat fqr ->
+        Printf.printf "flat query: %s, time: %Lu\n%!" fqr.query_string fqr.query_time;
+        (total_query_count + 1, Int64.add total_time fqr.query_time)
+    | Nested nqr ->
+        let query_count = List.length nqr.subqueries in
+        Printf.printf "nested query. subquery count: %d, time: %Lu\n%!" query_count nqr.overall_time;
+        (total_query_count + (List.length nqr.subqueries),
+          Int64.add total_time nqr.overall_time) in
+
+  let (count, query_time) = List.fold_left reduce (0, 0L) !(rq.queries) in
+  Logging.(log query_time_logfile
+    (Printf.sprintf "%s,%d,%Lu" rq.request_uri count query_time));
+  Printf.printf "== Overall ==\nCount: %d\nTotal time (ms): %Lu\n%!" count query_time
 
 module DecodeRequestHeaders =
   struct
