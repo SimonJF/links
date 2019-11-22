@@ -1,5 +1,8 @@
 open ProcessTypes
 
+type time = int64
+  [@@deriving show]
+
 type request_data
   [@@deriving show]
 
@@ -25,6 +28,8 @@ val set_http_response_code : request_data -> int -> unit
 val get_client_id : request_data -> client_id
 val set_client_id : request_data -> client_id -> unit
 
+val add_flat_query_record : request_data -> string -> time -> unit
+val add_nested_query_record : request_data -> (string * time) list -> unit
 
 module DecodeRequestHeaders :
 sig

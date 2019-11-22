@@ -697,6 +697,7 @@ struct
           | _ -> eval_error "Error evaluating table handle"
       end
     | Query (range, policy, e, _t) ->
+       let rq = Value.Env.request_data env in
        let range =
          match range with
          | None -> None
@@ -709,6 +710,11 @@ struct
            | Nested -> `Nested
            | Default ->
                if Settings.get Database.shredding then `Nested else `Flat in
+
+       let get_time () = Unix.gettimeofday () in
+
+       let diff_time t1 t2 =
+         (t2 -. t1) *. 1000.0 |> Int64.of_float in
 
        let evaluate_standard () =
          match EvalQuery.compile env (range, e) with
@@ -727,9 +733,15 @@ struct
                    fieldMap
                    []
                in
-               apply_cont cont env (Database.execute_select fields q db) in
+               let t1 = get_time () in
+               let res = Database.execute_select fields q db in
+               let t2 = get_time () in
+               RequestData.add_flat_query_record rq q (diff_time t1 t2);
+               apply_cont cont env res in
 
        let evaluate_nested () =
+         let queries = ref [] in
+         let add_query q time = queries := (q, time) :: !queries in
          if range != None then eval_error "Range is not supported for nested queries";
            match EvalNestedQuery.compile_shredded env e with
            | None -> computation env cont e
@@ -743,11 +755,16 @@ struct
                 in
                 let execute_shredded_raw (q, t) =
                   let q = Sql.string_of_query db range q in
-                  Database.execute_select_result (get_fields t) q db, t in
+                  let t1 = get_time () in
+                  let res = Database.execute_select_result (get_fields t) q db, t in
+                  let t2 = get_time () in
+                  add_query q (diff_time t1 t2);
+                  res in
                 let raw_results =
                   EvalNestedQuery.Shred.pmap execute_shredded_raw p in
                 let mapped_results =
                   EvalNestedQuery.Shred.pmap EvalNestedQuery.Stitch.build_stitch_map raw_results in
+                RequestData.add_nested_query_record rq !queries;
                 apply_cont cont env
                   (EvalNestedQuery.Stitch.stitch_mapped_query mapped_results)
               else

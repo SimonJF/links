@@ -1,10 +1,23 @@
 open ProcessTypes
 
+type time = int64
+  [@@deriving show]
+
+type flat_query_record = {
+  query_string: string;
+  query_time: time;
+}
+  [@@deriving show]
+
+type query_record =
+  Flat of flat_query_record | Nested of (flat_query_record list)
+  [@@deriving show]
 type request_data = {
   cgi_parameters : (string * string) list ref;
   cookies : (string * string) list ref;
   http_response_headers : (string * string) list ref;
   http_response_code : int ref;
+  queries : (query_record list) ref;
   client_id : client_id ref;
 }
   [@@deriving show]
@@ -13,6 +26,7 @@ let new_empty_request_data () = {
   cgi_parameters = ref [];
   cookies = ref [];
   http_response_headers = ref [];
+  queries = ref [];
   http_response_code = ref 200;
   client_id = ref (dummy_client_id);
 }
@@ -20,6 +34,7 @@ let new_empty_request_data () = {
 let new_request_data cgi_params cookies client_id = {
     cgi_parameters = ref cgi_params;
     cookies = ref cookies;
+    queries = ref [];
     http_response_headers = ref [];
     http_response_code = ref 200;
     client_id = ref client_id;
@@ -40,7 +55,20 @@ let set_http_response_code req_data x = req_data.http_response_code := x
 let get_client_id req_data = !(req_data.client_id)
 let set_client_id req_data x = req_data.client_id := x
 
+let query_record query_string query_time = { query_string; query_time }
 
+(*
+let string_of_flat_query_record qr =
+  qr.query_string ^ " " ^ (Int64.to_string qr.query_time)
+  *)
+
+let add_flat_query_record rq query_string query_time =
+  let fqr = Flat {query_string; query_time} in
+  rq.queries := fqr :: !(rq.queries)
+
+let add_nested_query_record rq fqrs =
+  let fqrs = List.map (fun (q, time) -> query_record q time) fqrs in
+  rq.queries := (Nested fqrs) :: !(rq.queries)
 
 module DecodeRequestHeaders =
   struct
@@ -106,7 +134,5 @@ let decode : string -> string = fun s ->
       s
   in
   strip_heading_and_trailing_spaces rs
-
-
-  end
+end
 
