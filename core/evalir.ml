@@ -742,6 +742,7 @@ struct
          let queries = ref [] in
          let add_query q time = queries := (q, time) :: !queries in
          if range != None then eval_error "Range is not supported for nested queries";
+           let start = get_time () in
            match EvalNestedQuery.compile_shredded env e with
            | None -> computation env cont e
            | Some (db, p) ->
@@ -763,9 +764,11 @@ struct
                   EvalNestedQuery.Shred.pmap execute_shredded_raw p in
                 let mapped_results =
                   EvalNestedQuery.Shred.pmap EvalNestedQuery.Stitch.build_stitch_map raw_results in
-                RequestData.add_nested_query_record rq !queries;
-                apply_cont cont env
-                  (EvalNestedQuery.Stitch.stitch_mapped_query mapped_results)
+                let res = EvalNestedQuery.Stitch.stitch_mapped_query mapped_results in
+                let finish = get_time () in
+                let overall_time = diff_time start finish in
+                RequestData.add_nested_query_record rq !queries overall_time;
+                apply_cont cont env res
               else
                 let error_msg =
                   Printf.sprintf

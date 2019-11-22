@@ -277,7 +277,8 @@ struct
           | (_, { as_directory = Some (Right { request_handler = (valenv, v); error_handler = (error_valenv, error_v) }); _}) :: _, _ ->
              let (_, nenv, tyenv) = !env in
              let cid = get_or_make_client_id cgi_args in
-             let req_data = RequestData.new_request_data cgi_args cookies cid in
+             let uri_str = Uri.to_string (Request.uri req) in
+             let req_data = RequestData.new_request_data uri_str cgi_args cookies cid in
              let req_env = Value.Env.set_request_data (Value.Env.shadow tl_valenv ~by:valenv) req_data in
              let req_error_env = Value.Env.set_request_data (Value.Env.shadow tl_valenv ~by:error_valenv) req_data in
              Webif.do_request
