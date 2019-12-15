@@ -713,7 +713,7 @@ struct
        let get_time () = Unix.gettimeofday () in
 
        let diff_time t1 t2 =
-         (t2 -. t1) *. 1000.0 |> Int64.of_float in
+         (t2 -. t1) *. 1000.0 in
 
        let evaluate_standard () =
          match EvalQuery.compile env (range, e) with

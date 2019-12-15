@@ -163,7 +163,7 @@ struct
          Debug.print("Doing EvalMain");
          Logging.time_lwt run >>= fun (res, time) ->
          let log_entry =
-           Printf.sprintf "%s,%Lu" (RequestData.get_request_uri rq) time in
+           Printf.sprintf "%s,%f" (RequestData.get_request_uri rq) time in
          Logging.(log page_time_logfile log_entry);
          RequestData.dump_query_metrics rq;
          Lwt.return res

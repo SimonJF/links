@@ -1,6 +1,6 @@
 open ProcessTypes
 
-type time = int64
+type time = float
   [@@deriving show]
 
 type request_data

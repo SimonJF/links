@@ -1,6 +1,6 @@
 open ProcessTypes
 
-type time = int64
+type time = float
   [@@deriving show]
 
 type flat_query_record = {
@@ -15,6 +15,9 @@ type nested_query_record = {
   overall_time: time;
 }
   [@@deriving show]
+
+let sum_query_time =
+  List.fold_left (fun acc x -> acc +. x.query_time) 0.0
 
 type query_record =
   Flat of flat_query_record | Nested of nested_query_record
@@ -85,20 +88,27 @@ let add_nested_query_record rq fqrs overall_time =
   rq.queries := (Nested { subqueries; overall_time }) :: !(rq.queries)
 
 let dump_query_metrics rq =
-  let reduce (total_query_count, total_time) = function
+  let reduce (total_query_count, total_query_time, total_time) = function
     | Flat fqr ->
-        Printf.printf "flat query: %s, time: %Lu\n%!" fqr.query_string fqr.query_time;
-        (total_query_count + 1, Int64.add total_time fqr.query_time)
+        let debug_str =
+          Printf.sprintf "flat query: %s, time: %f\n" fqr.query_string fqr.query_time in
+        Debug.print debug_str;
+        (total_query_count + 1, total_query_time +. fqr.query_time, total_time +. fqr.query_time)
     | Nested nqr ->
         let query_count = List.length nqr.subqueries in
-        Printf.printf "nested query. subquery count: %d, time: %Lu\n%!" query_count nqr.overall_time;
+        let debug_str =
+          Printf.sprintf "nested query. subquery count: %d, time: %f\n" query_count nqr.overall_time in
+        Debug.print debug_str;
         (total_query_count + (List.length nqr.subqueries),
-          Int64.add total_time nqr.overall_time) in
+          total_query_time +. (sum_query_time nqr.subqueries),
+          total_time +. nqr.overall_time) in
 
-  let (count, query_time) = List.fold_left reduce (0, 0L) !(rq.queries) in
+  let (count, execution_time, overall_time) = List.fold_left reduce (0, 0.0, 0.0) !(rq.queries) in
   Logging.(log query_time_logfile
-    (Printf.sprintf "%s,%d,%Lu" rq.request_uri count query_time));
-  Printf.printf "== Overall ==\nCount: %d\nTotal time (ms): %Lu\n%!" count query_time
+    (Printf.sprintf "%s,%d,%f,%f" rq.request_uri count execution_time overall_time));
+  let debug_str =
+    Printf.sprintf "== Overall ==\nCount: %d\nTotal query time (ms): %f\n" count overall_time in
+  Debug.print debug_str
 
 module DecodeRequestHeaders =
   struct
