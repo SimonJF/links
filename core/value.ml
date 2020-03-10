@@ -828,8 +828,10 @@ let rec p_value (ppf : formatter) : t -> 'a = function
   | `Pid (`ClientPid (cid, i)) -> fprintf ppf "Pid Client num %s, process %s" (ClientID.to_string cid) (ProcessID.to_string i)
   | `Alien -> fprintf ppf "alien"
   | `DateTime dt ->
+      (* Month is stored as 0-indexed, but printed as 1-indexed. *)
+      let month = dt.month + 1 in
       fprintf ppf "%04d-%02d-%02d %02d:%02d:%02d.%d"
-        dt.year dt.month dt.day dt.hours dt.minutes dt.seconds
+        dt.year month dt.day dt.hours dt.minutes dt.seconds
         dt.milliseconds
 and p_record_fields ppf = function
   | [] -> fprintf ppf ""
