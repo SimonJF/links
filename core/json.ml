@@ -2,6 +2,7 @@
 open ProcessTypes
 open CommonTypes
 open Utility
+open CalendarLib
 
 (* Setting *)
 let show_json
@@ -117,15 +118,13 @@ and jsonize_primitive : Value.primitive_value -> Yojson.Basic.t  = function
   | `XML xmlitem -> json_of_xmlitem xmlitem
   | `String s -> `String s
   | `DateTime dt ->
-      let open Value in
       `Assoc
-        [("_year",         `Int dt.year);
-         ("_month",        `Int dt.month);
-         ("_day",          `Int dt.day);
-         ("_hours",        `Int dt.hours);
-         ("_minutes",      `Int dt.minutes);
-         ("_seconds",      `Int dt.seconds);
-         ("_milliseconds", `Int dt.milliseconds)]
+        [("_year",         `Int (Calendar.year dt));
+         ("_month",        `Int (Calendar.month dt |> Date.int_of_month));
+         ("_day",          `Int (Calendar.day_of_month dt));
+         ("_hours",        `Int (Calendar.hour dt));
+         ("_minutes",      `Int (Calendar.minute dt));
+         ("_seconds",      `Int (Calendar.second dt))]
 and json_of_xmlitem = function
   | Value.Text s ->
       `Assoc [("type", `String "TEXT"); ("text", `String s)]

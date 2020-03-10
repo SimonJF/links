@@ -73,43 +73,15 @@ let value_of_db_string (value:string) t =
        if value = "" then Value.box_float 0.00      (* HACK HACK *)
        else Value.box_float (float_of_string value)
     | `Primitive Primitive.DateTime ->
+        let open CalendarLib in
         let bad_date = Errors.RuntimeError ("Ill-formed date: " ^ value) in
         (* 2020-03-09 16:07:59.597942 *)
-        (* TODO: It's probably good to put this elsewhere at some point *)
-        let parse_date str =
-          match String.split_on_char '-' str with
-            | [y; m; d] ->
-                (int_of_string y, int_of_string m, int_of_string d)
-            | _ -> raise bad_date in
-
-        let parse_time str =
-          match String.split_on_char ':' str with
-            | [h; m; s] ->
-                (int_of_string h, int_of_string m, int_of_string s)
-            | _ -> raise bad_date in
-
-        let parse_time_ms str =
-          match String.split_on_char '.' str with
-            | [time] ->
-                let (h, m, s) = parse_time time in (h, m, s, 0)
-            | [time; ms] ->
-                let (h, m, s) = parse_time time in
-                (h, m, s, int_of_string ms)
-            | _ -> raise bad_date in
-
+        (* Discard milliseconds and use Calendar parser *)
         begin
-          match String.split_on_char ' ' value with
-            | [date; time] ->
-                let (year, month, day) = parse_date date in
-                let (hours, minutes, seconds, milliseconds) = parse_time_ms time in
-                Value.(
-                  make_datetime ~year ~month ~day ~hours ~minutes ~seconds ~milliseconds
-                  |> box_datetime)
-            | [date] ->
-                let (year, month, day) = parse_date date in
-                Value.(
-                  make_datetime ~year ~month ~day ~hours:0 ~minutes:0 ~seconds:0 ~milliseconds:0
-                  |> box_datetime)
+          match String.split_on_char '.' value with
+            | [datetime; _ms] ->
+                Printer.CalendarPrinter.from_string datetime
+                |> Value.box_datetime
             | _ -> raise bad_date
         end
     | t -> raise (runtime_error

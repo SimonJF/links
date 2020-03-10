@@ -25,6 +25,7 @@ depends: [
   "linenoise"
   "ANSITerminal"
   "lwt" {>= "3.1.0"}
+  "calendar"
   "cohttp"
   "cohttp-lwt"
   "cohttp-lwt-unix"

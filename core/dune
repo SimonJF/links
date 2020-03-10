@@ -13,7 +13,7 @@
   (modes native)
   (libraries str linenoise base64 safepass unix result
              yojson ppx_deriving_yojson.runtime
-             lwt lwt.unix
+             lwt lwt.unix calendar
              cohttp cohttp-lwt-unix cohttp-lwt
              conduit-lwt-unix uri
              websocket websocket-lwt-unix.cohttp

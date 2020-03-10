@@ -1,7 +1,5 @@
 open CommonTypes
 open List
-
-(*open Value*)
 open Types
 open Utility
 open Proc
@@ -181,7 +179,7 @@ let add_attribute : Value.t * Value.t -> Value.t -> Value.t =
 let add_attributes : (Value.t * Value.t) list -> Value.t -> Value.t =
   List.fold_right add_attribute
 
-let project_datetime (f: Value.datetime -> int) : located_primitive * Types.datatype * pure =
+let project_datetime (f: DateTime.t -> int) : located_primitive * Types.datatype * pure =
   (p1 (fun dt -> Value.box_int (f (Value.unbox_datetime dt))),
   datatype "(DateTime) -> Int",
   PURE)
@@ -1061,14 +1059,13 @@ let env : (string * (located_primitive * Types.datatype * pure)) list = [
   (p1 (fun r ->
          match r with
            | `DateTime dt ->
-               let open Value in
                let tm = {
-                Unix.tm_sec = dt.seconds;
-                Unix.tm_min = dt.minutes;
-                Unix.tm_hour = dt.hours;
-                Unix.tm_mday = dt.day;
-                Unix.tm_mon = dt.month;
-                Unix.tm_year = (dt.year - 1900);
+                Unix.tm_sec = DateTime.second dt;
+                Unix.tm_min = DateTime.minute dt;
+                Unix.tm_hour = DateTime.hour dt;
+                Unix.tm_mday = DateTime.day_of_month dt;
+                Unix.tm_mon = DateTime.month dt |> CalendarLib.Date.int_of_month;
+                Unix.tm_year = (DateTime.year dt) - 1900;
                 Unix.tm_wday = 0; (* ignored *)
                 Unix.tm_yday =  0; (* ignored *)
                 Unix.tm_isdst = false } in
@@ -1081,27 +1078,23 @@ let env : (string * (located_primitive * Types.datatype * pure)) list = [
   "intToDate",
   (p1 (fun t ->
          let tm = Unix.localtime(float_of_int (Value.unbox_int t)) in
-         Value.(
-           make_datetime
+           (DateTime.lmake
              ~year:(tm.Unix.tm_year + 1900)
              ~month:tm.Unix.tm_mon
              ~day:tm.Unix.tm_mday
-             ~hours:tm.Unix.tm_hour
-             ~minutes:tm.Unix.tm_min
-             ~seconds:tm.Unix.tm_sec
-             ~milliseconds:0
-           |> box_datetime)),
+             ~hour:tm.Unix.tm_hour
+             ~minute:tm.Unix.tm_min
+             ~second:tm.Unix.tm_sec ())
+           |> Value.box_datetime),
   datatype "(Int) ~> DateTime",
   IMPURE);
 
-  "dateYear", (project_datetime (fun dt -> let open Value in dt.year));
-  "dateDay", project_datetime (fun dt -> let open Value in dt.day);
-  "dateMonth", project_datetime (fun dt -> let open Value in dt.month);
-  "dateHours", project_datetime (fun dt -> let open Value in dt.hours);
-  "dateMinutes", project_datetime (fun dt -> let open Value in dt.minutes);
-  "dateSeconds", project_datetime (fun dt -> let open Value in dt.seconds);
-  "dateMilliseconds",
-    project_datetime (fun dt -> let open Value in dt.milliseconds);
+  "dateYear", (project_datetime (fun dt -> DateTime.year dt));
+  "dateDay", project_datetime (fun dt -> DateTime.day_of_month dt);
+  "dateMonth", project_datetime (fun dt -> DateTime.month dt |> CalendarLib.Date.int_of_month);
+  "dateHours", project_datetime (fun dt -> DateTime.hour dt);
+  "dateMinutes", project_datetime (fun dt -> DateTime.minute dt);
+  "dateSeconds", project_datetime (fun dt -> DateTime.second dt);
 
   (* Database functions *)
   "AsList",

@@ -166,22 +166,6 @@ type xmlitem =   Text of string
 and xml = xmlitem list
     [@@deriving show,yojson]
 
-type datetime = {
-  year: int;
-  month: int;
-  day: int;
-  hours: int;
-  minutes: int;
-  seconds: int;
-  milliseconds: int
-}
-  [@@deriving show]
-
-let make_datetime ~year ~month ~day ~hours ~minutes ~seconds ~milliseconds =
-  { year; month; day; hours; minutes; seconds; milliseconds }
-
-
-
 let is_attr = function
   | Attr _   -> true
   | NsAttr _ -> true
@@ -224,7 +208,7 @@ type primitive_value = [
 | primitive_value_basis
 | `Database of (database * string)
 | `Table of table
-| `DateTime of datetime
+| `DateTime of DateTime.t
 ]
   [@@deriving show]
 
@@ -827,12 +811,7 @@ let rec p_value (ppf : formatter) : t -> 'a = function
   | `Pid (`ServerPid i) -> fprintf ppf "Pid Server (%s)" (ProcessID.to_string i)
   | `Pid (`ClientPid (cid, i)) -> fprintf ppf "Pid Client num %s, process %s" (ClientID.to_string cid) (ProcessID.to_string i)
   | `Alien -> fprintf ppf "alien"
-  | `DateTime dt ->
-      (* Month is stored as 0-indexed, but printed as 1-indexed. *)
-      let month = dt.month + 1 in
-      fprintf ppf "%04d-%02d-%02d %02d:%02d:%02d.%d"
-        dt.year month dt.day dt.hours dt.minutes dt.seconds
-        dt.milliseconds
+  | `DateTime dt -> DateTime.pp ppf dt
 and p_record_fields ppf = function
   | [] -> fprintf ppf ""
   | [(l, v)] -> fprintf ppf "@[@{<recordlabel>%a@} = %a@]"

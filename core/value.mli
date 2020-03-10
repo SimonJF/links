@@ -1,6 +1,7 @@
 (* Values and environments *)
 open CommonTypes
 open ProcessTypes
+open CalendarLib
 
 class type otherfield
  = object method show : string end
@@ -52,26 +53,6 @@ type xmlitem =   Text of string
 and xml = xmlitem list
   [@@deriving show,yojson]
 
-type datetime = {
-  year: int;
-  month: int;
-  day: int;
-  hours: int;
-  minutes: int;
-  seconds: int;
-  milliseconds: int
-}
-
-val make_datetime :
-  year:int ->
-  month:int ->
-  day:int ->
-  hours:int ->
-  minutes:int ->
-  seconds:int ->
-  milliseconds:int -> datetime
-
-
 type table = (database * string) * string * string list list * Types.row
   [@@deriving show]
 
@@ -88,7 +69,7 @@ type primitive_value = [
   | primitive_value_basis
   | `Database of (database * string)
   | `Table of table
-  | `DateTime of datetime ]
+  | `DateTime of Calendar.t ]
   [@@deriving show]
 
 type spawn_location = [
@@ -295,8 +276,8 @@ val box_channel : chan -> t
 val unbox_channel : t -> chan
 val box_access_point : access_point -> t
 val unbox_access_point : t -> access_point
-val box_datetime : datetime -> t
-val unbox_datetime : t -> datetime
+val box_datetime : Calendar.t-> t
+val unbox_datetime : t -> Calendar.t
 
 val intmap_of_record : t -> t Utility.intmap option
 
