@@ -1064,7 +1064,7 @@ let env : (string * (located_primitive * Types.datatype * pure)) list = [
                 Unix.tm_min = DateTime.minute dt;
                 Unix.tm_hour = DateTime.hour dt;
                 Unix.tm_mday = DateTime.day_of_month dt;
-                Unix.tm_mon = DateTime.month dt |> CalendarLib.Date.int_of_month;
+                Unix.tm_mon = (DateTime.month dt |> CalendarLib.Date.int_of_month) - 1;
                 Unix.tm_year = (DateTime.year dt) - 1900;
                 Unix.tm_wday = 0; (* ignored *)
                 Unix.tm_yday =  0; (* ignored *)
@@ -1080,7 +1080,7 @@ let env : (string * (located_primitive * Types.datatype * pure)) list = [
          let tm = Unix.localtime(float_of_int (Value.unbox_int t)) in
            (DateTime.lmake
              ~year:(tm.Unix.tm_year + 1900)
-             ~month:tm.Unix.tm_mon
+             ~month:(tm.Unix.tm_mon + 1)
              ~day:tm.Unix.tm_mday
              ~hour:tm.Unix.tm_hour
              ~minute:tm.Unix.tm_min

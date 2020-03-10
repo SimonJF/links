@@ -102,6 +102,8 @@ let main () =
   let context'' =
     for_each context' process_file file_list
   in
+  (* TODO: Find a better place for this *)
+  CalendarLib.Time_Zone.(change Local);
   match file_list, to_evaluate with
   | [], [] -> Repl.interact context''
   | _, _ -> ()

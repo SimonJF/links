@@ -1,14 +1,14 @@
 Epoch time
 intToDate(0)
-stdout : @1970-01-01 0.:00:00.0 : DateTime
+stdout : @1970-01-01 0.:00:00 : DateTime
 
 Epoch year
 dateYear(intToDate(0))
 stdout : 1970 : Int
 
 Epoch month
-dateMonth(intToDate(0))
-stdout : 0 : Int
+dateMonth(intToDate(1))
+stdout : 1 : Int
 
 Epoch day
 dateDay(intToDate(0))
@@ -24,8 +24,4 @@ stdout : 0 : Int
 
 Epoch seconds
 dateSeconds(intToDate(0))
-stdout : 0 : Int
-
-Epoch milliseconds
-dateMilliseconds(intToDate(0))
 stdout : 0 : Int
