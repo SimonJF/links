@@ -80,8 +80,6 @@ let add_value_information v json_state =
   List.fold_left (fun state_acc chan ->
     JsonState.add_carried_channel chan state_acc) json_state chans
 
-
-
 let add_ap_information cid json_state =
   let pending_aps = Session.get_and_mark_pending_aps cid in
   List.fold_left

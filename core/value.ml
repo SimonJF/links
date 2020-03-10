@@ -166,6 +166,21 @@ type xmlitem =   Text of string
 and xml = xmlitem list
     [@@deriving show,yojson]
 
+type datetime = {
+  year: int;
+  month: int;
+  day: int;
+  hours: int;
+  minutes: int;
+  seconds: int;
+  milliseconds: int
+}
+  [@@deriving show]
+
+let make_datetime ~year ~month ~day ~hours ~minutes ~seconds ~milliseconds =
+  { year; month; day; hours; minutes; seconds; milliseconds }
+
+
 
 let is_attr = function
   | Attr _   -> true
@@ -209,6 +224,7 @@ type primitive_value = [
 | primitive_value_basis
 | `Database of (database * string)
 | `Table of table
+| `DateTime of datetime
 ]
   [@@deriving show]
 
@@ -991,6 +1007,10 @@ and box_unit : unit -> t
 and unbox_unit : t -> unit = function
   | `Record [] -> ()
   | v -> raise (type_error "unit" v)
+and box_datetime datetime = `DateTime datetime
+and unbox_datetime = function
+  | `DateTime dt -> dt
+  | v -> raise (type_error "datetime" v)
 
 let box_op : t list -> t -> t =
   fun ps k -> let box = List.fold_left

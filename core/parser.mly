@@ -955,6 +955,7 @@ primary_datatype:
                                                                    | "XmlItem" -> Primitive Primitive.XmlItem
                                                                    | "String"  -> Primitive Primitive.String
                                                                    | "Database"-> DB
+                                                                   | "DateTime"-> Primitive Primitive.DateTime
                                                                    | "End"     -> Datatype.End
                                                                    | t         -> TypeApplication (t, [])
                                                                }

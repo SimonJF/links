@@ -116,6 +116,15 @@ and jsonize_primitive : Value.primitive_value -> Yojson.Basic.t  = function
   | `Table t -> json_of_table t
   | `XML xmlitem -> json_of_xmlitem xmlitem
   | `String s -> `String s
+  | `DateTime dt ->
+      `Assoc
+        [("_year",         `Int dt.year);
+         ("_month",        `Int dt.month);
+         ("_day",          `Int dt.day);
+         ("_hours",        `Int dt.hours);
+         ("_minutes",      `Int dt.minutes);
+         ("_seconds",      `Int dt.seconds);
+         ("_milliseconds", `Int dt.milliseconds)]
 and json_of_xmlitem = function
   | Value.Text s ->
       `Assoc [("type", `String "TEXT"); ("text", `String s)]

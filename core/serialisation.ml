@@ -142,11 +142,13 @@ module Compressible = struct
       | `ClientFunction f -> `ClientFunction f
       | `Continuation cont -> `Continuation (K.compress cont)
       | `Resumption r -> `Resumption (K.compress_r r)
+      (* SJF: Really, apaert from sockets, these should all be implemented. *)
       | `Pid _ -> assert false (* mmmmm *)
       | `Socket (_inc, _outc) -> assert false
       | `SessionChannel _ -> assert false (* mmmmm *)
       | `AccessPointID _ -> assert false (* mmmmm *)
       | `SpawnLocation _sl -> assert false (* wheeee! *)
+      | `DateTime _ -> assert false
       | `Alien -> `Alien
 
     let decompress_primitive : compressed_primitive_value -> [> primitive_value] = function
@@ -163,6 +165,7 @@ module Compressible = struct
          let driver, params = parse_db_string s in
          let database = db_connect driver params in
          `Database database
+      | `DateTime -> assert false (* SJF: TODO *)
 
     let rec decompress ?(globals=Env.empty) (compressed : compressed_t) : Value.t =
       let decompress x = decompress ~globals x in

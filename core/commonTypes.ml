@@ -207,7 +207,7 @@ module ForeignLanguage = struct
 end
 
 module Primitive = struct
-  type t = Bool | Int | Char | Float | XmlItem | DB | String
+  type t = Bool | Int | Char | Float | XmlItem | DB | String | DateTime
     [@@deriving show]
 
   let to_string = function
@@ -218,6 +218,7 @@ module Primitive = struct
     | XmlItem -> "XmlItem"
     | DB      -> "Database"
     | String  -> "String"
+    | DateTime -> "DateTime"
 end
 
 module Constant = struct

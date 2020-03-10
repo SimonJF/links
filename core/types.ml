@@ -681,7 +681,7 @@ module Base : Constraint = struct
         | _ -> super#point_satisfies f vars point
 
       method! type_satisfies vars = function
-        | `Primitive (Bool | Int | Char | Float | String) -> true
+        | `Primitive (Bool | Int | Char | Float | String | DateTime) -> true
         | (`Alias _ | `MetaTypeVar _) as t  -> super#type_satisfies vars t
         | _ -> false
     end
