@@ -128,6 +128,7 @@ module Compressible = struct
       | `Table ((_database, db), table, keys, row) ->
          `Table (db, table, keys, Types.string_of_datatype (`Record row))
       | `Database (_database, s) -> `Database s
+      | `DateTime _ -> assert false (* for now *)
 
     let rec compress : t -> compressed_t = function
       | #primitive_value as v -> compress_primitive_value v
@@ -148,7 +149,6 @@ module Compressible = struct
       | `SessionChannel _ -> assert false (* mmmmm *)
       | `AccessPointID _ -> assert false (* mmmmm *)
       | `SpawnLocation _sl -> assert false (* wheeee! *)
-      | `DateTime _ -> assert false
       | `Alien -> `Alien
 
     let decompress_primitive : compressed_primitive_value -> [> primitive_value] = function
@@ -165,7 +165,7 @@ module Compressible = struct
          let driver, params = parse_db_string s in
          let database = db_connect driver params in
          `Database database
-      | `DateTime -> assert false (* SJF: TODO *)
+      (* | `DateTime -> assert false (* SJF: TODO *) *)
 
     let rec decompress ?(globals=Env.empty) (compressed : compressed_t) : Value.t =
       let decompress x = decompress ~globals x in

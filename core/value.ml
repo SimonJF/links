@@ -827,6 +827,10 @@ let rec p_value (ppf : formatter) : t -> 'a = function
   | `Pid (`ServerPid i) -> fprintf ppf "Pid Server (%s)" (ProcessID.to_string i)
   | `Pid (`ClientPid (cid, i)) -> fprintf ppf "Pid Client num %s, process %s" (ClientID.to_string cid) (ProcessID.to_string i)
   | `Alien -> fprintf ppf "alien"
+  | `DateTime dt ->
+      fprintf ppf "%04d-%02d-%02d %02d:%02d:%02d.%d"
+        dt.year dt.month dt.day dt.hours dt.minutes dt.seconds
+        dt.milliseconds
 and p_record_fields ppf = function
   | [] -> fprintf ppf ""
   | [(l, v)] -> fprintf ppf "@[@{<recordlabel>%a@} = %a@]"

@@ -117,6 +117,7 @@ and jsonize_primitive : Value.primitive_value -> Yojson.Basic.t  = function
   | `XML xmlitem -> json_of_xmlitem xmlitem
   | `String s -> `String s
   | `DateTime dt ->
+      let open Value in
       `Assoc
         [("_year",         `Int dt.year);
          ("_month",        `Int dt.month);
