@@ -104,6 +104,12 @@ let spawn_location = {
   arity = []
 }
 
+let transaction_time_metadata = {
+  Abstype.id = "TransactionTime";
+  name       = "TransactionTime";
+  arity      = [pk_type, (lin_any, res_any)]
+}
+
 type ('t, 'r) session_type_basis =
     [ `Input of 't * 't
     | `Output of 't * 't

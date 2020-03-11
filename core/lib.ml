@@ -1096,6 +1096,31 @@ let env : (string * (located_primitive * Types.datatype * pure)) list = [
   "dateMinutes", project_datetime (fun dt -> DateTime.minute dt);
   "dateSeconds", project_datetime (fun dt -> DateTime.second dt);
 
+  (* Temporal metadata stuff *)
+  "ttData",
+    (p1 (fun r ->
+      Value.unbox_record r |> List.assoc "ttdata"),
+    datatype "(TransactionTime((|r))) -> (|r)",
+    PURE);
+
+  "ttFrom",
+    (p1 (fun r ->
+      Value.unbox_record r |> List.assoc "ttfrom"),
+    datatype "(TransactionTime((|r))) -> DateTime",
+    PURE);
+
+  "ttTo",
+    (p1 (fun r ->
+      Value.unbox_record r |> List.assoc "ttto"),
+    datatype "(TransactionTime((|r))) -> DateTime",
+    PURE);
+
+  (* Testing *)
+  "unsafeCoerce",
+  (p1 (fun x -> x),
+   datatype "(a) -> b",
+   PURE);
+
   (* Database functions *)
   "AsList",
   (p1 (fun _ -> raise (internal_error "Unoptimized table access!!!")),
