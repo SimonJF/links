@@ -193,6 +193,21 @@ let split_html : xml -> xml * xml =
 type table = (database * string) * string * string list list * Types.row
   [@@deriving show]
 
+
+(* TODO: Convert to this representation, and then add some representation of
+ * the temporal metadata (which may include steps taken to narrow / snapshot,
+ * for example) *)
+(*
+type table = {
+  database: (database * string);
+  name: string;
+  keys: string list list;
+  row: Types.row
+}
+  [@@deriving show]
+*)
+
+
 type primitive_value_basis =  [
 | `Bool of bool
 | `Char of char

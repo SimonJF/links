@@ -66,7 +66,7 @@ let rec is_guarded : TypeVarSet.t -> StringSet.t -> int -> datatype -> bool =
             end
         | `Effect row
         | `Variant row -> isgv row
-        | `Table (f, d, r) -> isg f && isg d && isg r
+        | `Table (f, d, r, _) -> isg f && isg d && isg r
         | `Lens _sort -> true (* does not contain type variables *)
         | `Alias (_, t) -> isg t
         | `Application (_, ts) ->
@@ -146,7 +146,7 @@ let rec is_negative : TypeVarSet.t -> StringSet.t -> int -> datatype -> bool =
         | `Record row -> isnr row
         | `Effect row
         | `Variant row -> isnr row
-        | `Table (f, d, r) -> isn f || isn d || isn r
+        | `Table (f, d, r, _) -> isn f || isn d || isn r
         | `Lens typ -> is_negative_lens_type bound_vars expanded_apps var typ
         | `Alias (_, t) -> isn t
         | `Application (_, ts) ->
@@ -228,7 +228,7 @@ and is_positive : TypeVarSet.t -> StringSet.t -> int -> datatype -> bool =
         | `Record row -> ispr row
         | `Effect row
         | `Variant row -> ispr row
-        | `Table (f, d, r) -> isp f || isp d || isp r
+        | `Table (f, d, r, _) -> isp f || isp d || isp r
         | `Lens typ -> is_positive_lens_typ bound_vars expanded_apps var typ
         | `Alias (_, t) -> isp t
         | `Application (_, ts) ->

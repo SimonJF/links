@@ -343,11 +343,11 @@ class map =
           let _x = o#phrase _x in
           let y = o#datatype y in
           let z = o#option
-            (fun o (a, b, c) ->
+            (fun o (a, b, c, md) ->
               let a = o#typ a in
               let b = o#typ b in
               let c = o#typ c in
-              (a, b, c)) z in
+              (a, b, c, md)) z in
           let _x_i2 =
             o#list
               (fun o (_x, _x_i1) ->
@@ -606,10 +606,10 @@ class map =
       | Record _x -> let _x = o#row _x in Record _x
       | Variant _x -> let _x = o#row _x in Variant _x
       | Effect r -> let r = o#row r in Effect r
-      | Table (_x, _x_i1, _x_i2) ->
+      | Table (_x, _x_i1, _x_i2, _md) ->
          let _x = o#datatype _x in
          let _x_i1 = o#datatype _x_i1 in
-         let _x_i2 = o#datatype _x_i2 in Table (_x, _x_i1, _x_i2)
+         let _x_i2 = o#datatype _x_i2 in Table (_x, _x_i1, _x_i2, _md)
       | List _x -> let _x = o#datatype _x in List _x
       | TypeApplication (_x, _x_i1) ->
           let _x = o#name _x in
@@ -1318,7 +1318,7 @@ class fold =
       | Record _x -> let o = o#row _x in o
       | Variant _x -> let o = o#row _x in o
       | Effect r -> let o = o#row r in o
-      | Table (_x, _x_i1, _x_i2) ->
+      | Table (_x, _x_i1, _x_i2, _md) ->
           let o = o#datatype _x in let o = o#datatype _x_i1 in let o = o#datatype _x_i2 in o
       | List _x -> let o = o#datatype _x in o
       | TypeApplication (_x, _x_i1) ->
@@ -1845,11 +1845,11 @@ class fold_map =
                let (o, _x) = o#datatype _x in
                let (o, _x_i1) =
                  o#option
-                   (fun o (a, b, c) ->
+                   (fun o (a, b, c, md) ->
                      let o, a = o#typ a in
                      let o, b = o#typ b in
                      let o, c = o#typ c in
-                     o, (a, b, c)) _x_i1
+                     o, (a, b, c, md)) _x_i1
                in (o, (_x, _x_i1)))
               _x_i1 in
           let (o, _x_i2) =
@@ -2155,10 +2155,10 @@ class fold_map =
       | Record _x -> let (o, _x) = o#row _x in (o, (Record _x))
       | Variant _x -> let (o, _x) = o#row _x in (o, (Variant _x))
       | Effect r -> let (o, r) = o#row r in (o, Effect r)
-      | Table (_x, _x_i1, _x_i2) ->
+      | Table (_x, _x_i1, _x_i2, _md) ->
           let (o, _x) = o#datatype _x in
           let (o, _x_i1) = o#datatype _x_i1 in
-          let (o, _x_i2) = o#datatype _x_i2 in (o, (Table (_x, _x_i1, _x_i2)))
+          let (o, _x_i2) = o#datatype _x_i2 in (o, (Table (_x, _x_i1, _x_i2, _md)))
       | List _x -> let (o, _x) = o#datatype _x in (o, (List _x))
       | TypeApplication (_x, _x_i1) ->
           let (o, _x) = o#string _x in

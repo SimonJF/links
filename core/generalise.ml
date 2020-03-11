@@ -56,7 +56,7 @@ let rec get_type_args : gen_kind -> TypeVarSet.t -> datatype -> type_arg list =
         | `Record row
         | `Effect row
         | `Variant row -> get_row_type_args kind bound_vars row
-        | `Table (r, w, n) -> gt r @ gt w @ gt n
+        | `Table (r, w, n, _) -> gt r @ gt w @ gt n
         | `Lens _ -> []
         | `Alias ((_, _, ts), t) ->
             concat_map (get_type_arg_type_args kind bound_vars) ts @ gt t

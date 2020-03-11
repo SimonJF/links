@@ -110,7 +110,7 @@ and typ =
     | `Record of row
     | `Variant of row
     | `Effect of row
-    | `Table of typ * typ * typ
+    | `Table of typ * typ * typ * TemporalMetadata.t
     | `Lens of Lens.Type.t
     | `Alias of ((string * Kind.t list * type_arg list) * typ)
     | `Application of (Abstype.t * type_arg list)
@@ -317,7 +317,7 @@ val make_list_type : datatype -> datatype
 val make_process_type : row -> datatype
 val make_record_type  : datatype field_env -> datatype
 val make_variant_type : datatype field_env -> datatype
-val make_table_type : datatype * datatype * datatype -> datatype
+val make_table_type : datatype * datatype * datatype * TemporalMetadata.t -> datatype
 val make_endbang_type : datatype
 
 (** subtyping *)

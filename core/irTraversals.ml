@@ -827,11 +827,11 @@ let ir_type_mod_visitor tyenv type_visitor =
             | Wrong datatype ->
                let (datatype, _) = type_visitor#typ datatype in
                super#special (Wrong datatype)
-            | Table (v1, v2, v3, (t1, t2, t3)) ->
+            | Table (v1, v2, v3, (t1, t2, t3, md)) ->
                let (t1, _) = type_visitor#typ t1 in
                let (t2, _) = type_visitor#typ t2 in
                let (t3, _) = type_visitor#typ t3 in
-               super#special (Table (v1, v2, v3, (t1, t2, t3)))
+               super#special (Table (v1, v2, v3, (t1, t2, t3, md)))
             | Query (opt, policy, computation, datatype) ->
                let (datatype, _) = type_visitor#typ datatype in
                super#special (Query (opt, policy, computation, datatype))

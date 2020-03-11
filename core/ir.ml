@@ -78,7 +78,8 @@ and special =
   | LensCheck  of value * Lens.Type.t
   | LensGet    of value * Types.datatype
   | LensPut    of value * value * Types.datatype
-  | Table      of value * value * value * (Types.datatype * Types.datatype * Types.datatype)
+  | Table      of value * value * value *
+      (Types.datatype * Types.datatype * Types.datatype * TemporalMetadata.t)
   | Query      of (value * value) option * QueryPolicy.t * computation * Types.datatype
   | InsertRows of value * value
   | InsertReturning of value * value * value

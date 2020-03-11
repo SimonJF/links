@@ -231,6 +231,12 @@ type unify_env =
   ; qenv: quantifier_env
   }
 
+let unify_metadata md1 md2 =
+  if md1 <> TemporalMetadata.unspecified && md2 <> TemporalMetadata.unspecified &&
+    md1 <> md2 then
+    raise (Failure (`Msg ("Temporal metadatas " ^ (TemporalMetadata.show md1) ^
+    " and " ^ (TemporalMetadata.show md2) ^ " are incompatible.")))
+
 let check_subkind var (lin, res) typ =
   if Linearity.is_nonlinear lin then
     if Types.Unl.can_type_be typ then
@@ -360,6 +366,7 @@ let rec unify' : unify_env -> (datatype * datatype) -> unit =
 
   let ut = unify' rec_env in
   let ur = unify_rows' rec_env in
+  let umd = unify_metadata in
   counter := !counter+1;
   let counter' = "(" ^ string_of_int !counter ^ ")" in
   Debug.if_set (show_unification) (fun () -> "Unifying "^string_of_datatype t1^" with "^string_of_datatype t2 ^ counter');
@@ -560,10 +567,11 @@ let rec unify' : unify_env -> (datatype * datatype) -> unit =
     | `Record l, `Record r -> ur (l, r)
     | `Variant l, `Variant r -> ur (l, r)
     | `Effect l, `Effect r -> ur (l, r)
-    | `Table (lf, ld, lr), `Table (rf, rd, rr) ->
-       (ut (lf, rf);
+    | `Table (lf, ld, lr, md1), `Table (rf, rd, rr, md2) ->
+        umd md1 md2;
+        ut (lf, rf);
         ut (ld, rd);
-        ut (lr, rr))
+        ut (lr, rr)
     | `Application (l, _), `Application (r, _) when l <> r ->
        raise (Failure
                 (`Msg ("Cannot unify abstract type '"^string_of_datatype t1^

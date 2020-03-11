@@ -91,7 +91,7 @@ let sort_cols_of_table t ~table =
     match TypeUtils.concrete_type t with
     | `Record _ as r -> r
     | `Application (_, [`Type (`Record _ as r)]) -> r
-    | `Table (r, _, _) -> r
+    | `Table (r, _, _, _) -> r
     | _ -> failwith "LensTypes does not type."
   in
   let rt = extract_record_type t |> lens_phrase_type_of_type in

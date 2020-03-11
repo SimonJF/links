@@ -600,7 +600,7 @@ module Desugar = struct
         | Record r -> `Record (row var_env alias_env r t')
         | Variant r -> `Variant (row var_env alias_env r t')
         | Effect r -> `Effect (row var_env alias_env r t')
-        | Table (r, w, n) -> `Table (datatype var_env r, datatype var_env w, datatype var_env n)
+        | Table (r, w, n, md) -> `Table (datatype var_env r, datatype var_env w, datatype var_env n, md)
         | List k -> `Application (Types.list, [ `Type (datatype var_env k) ])
         | TypeApplication (tycon, ts) ->
             (* Matches kinds of the quantifiers against the type arguments.
@@ -847,7 +847,8 @@ module Desugar = struct
     in
     (* We deliberately don't concretise the returned read_type in the hope of improving error
        messages during type inference. *)
-    (read_type, `Record write_row, `Record needed_row)
+    (* TODO: Once we've extended the term, `current` needs to change here *)
+    (read_type, `Record write_row, `Record needed_row, TemporalMetadata.current)
 end
 
 (** Convert a syntactic type into a semantic type, using `map' to resolve free type variables *)
@@ -873,11 +874,11 @@ object (self)
              unreachable from outside the block *)
           self, Block (bs, p)
     | TableLit (t, (dt, _), cs, keys, p) ->
-        let read, write, needed = Desugar.table_lit alias_env cs dt in
+        let read, write, needed, md = Desugar.table_lit alias_env cs dt in
         let o, t = self#phrase t in
         let o, keys = o#phrase keys in
         let o, p = o#phrase p in
-          o, TableLit (t, (dt, Some (read, write, needed)), cs, keys, p)
+          o, TableLit (t, (dt, Some (read, write, needed, md)), cs, keys, p)
     (* Switch and receive type annotations are never filled in by
        this point, so we ignore them.  *)
     | p -> super#phrasenode p

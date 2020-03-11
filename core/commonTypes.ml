@@ -255,3 +255,41 @@ module QueryPolicy = struct
   type t = Flat | Nested | Default
     [@@deriving show]
 end
+
+module TemporalMetadata = struct
+  type t =
+    | Unspecified (* Used for unification only. *)
+    | Current
+    | TransactionTime of { tt_from_field: string; tt_to_field: string }
+    | ValidTime       of { vt_from_field: string; vt_to_field: string }
+    | Bitemporal      of
+      { tt_from_field: string; tt_to_field: string;
+        vt_from_field: string; vt_to_field: string }
+
+  let unspecified = Unspecified
+  let current = Current
+
+  let transaction_time tt_from_field tt_to_field =
+    TransactionTime { tt_from_field; tt_to_field }
+
+  let valid_time vt_from_field vt_to_field =
+    ValidTime { vt_from_field; vt_to_field }
+
+  let bitemporal tt_from_field tt_to_field vt_from_field vt_to_field =
+    Bitemporal { tt_from_field; tt_to_field; vt_from_field; vt_to_field }
+
+  let show =
+    let open Printf in
+    function
+    | Unspecified -> "Unspecified"
+    | Current -> "Current"
+    | TransactionTime { tt_from_field; tt_to_field } ->
+        sprintf "Transaction(%s, %s)" tt_from_field tt_to_field
+    | ValidTime { vt_from_field; vt_to_field } ->
+        sprintf "Transaction(%s, %s)" vt_from_field vt_to_field
+    | Bitemporal { tt_from_field; tt_to_field; vt_from_field; vt_to_field } ->
+        sprintf "Transaction(%s, %s, %s, %s)" tt_from_field tt_to_field
+          vt_from_field vt_to_field
+
+  let pp fmt x = Format.pp_print_string fmt (show x)
+end

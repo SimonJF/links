@@ -85,7 +85,36 @@ let query_policy_of_string p =
   | rest      ->
      raise (ConcreteSyntaxError (pos p, "Invalid query policy: " ^ rest ^ ", expected 'flat' or 'nested'"))
 
-
+let parse_temporal_metadata label args_opt p : TemporalMetadata.t =
+  match label, args_opt with
+    | "Current", None -> TemporalMetadata.current
+    | "Current", _ ->
+       raise (ConcreteSyntaxError (pos p,
+        "'Current' metadata does not take field arguments"))
+    | "Transaction", Some ([tfrom; tto]) ->
+        TemporalMetadata.transaction_time tfrom tto
+    | "Transaction", _ ->
+       raise (ConcreteSyntaxError (pos p,
+        "'Transaction' metadata requires 'from' and 'to' field definitions, " ^
+        "e.g., Transaction(transaction_from, transaction_to)"))
+    | "Valid", Some ([vfrom; vto]) ->
+        TemporalMetadata.valid_time vfrom vto
+    | "Valid", _ ->
+       raise (ConcreteSyntaxError (pos p,
+        "'Valid' metadata requires 'from' and 'to' field definitions, " ^
+        "e.g., Valid(valid_from, valid_to)"))
+    | "Bitemporal", Some ([tfrom; tto; vfrom; vto]) ->
+        TemporalMetadata.bitemporal tfrom tto vfrom vto
+    | "Bitemporal", _ ->
+       raise (ConcreteSyntaxError (pos p,
+        "'Bitemporal' metadata requires 'from' and 'to' field definitions " ^
+        "for both valid and transaction dimensions, " ^
+        "e.g., Bitemporal(transaction_from, transaction_to, valid_from, valid_to)"))
+    | rest, _ ->
+       raise (ConcreteSyntaxError (pos p,
+        "Invalid temporal metadata annotation " ^ rest ^ ". Expected 'Valid(_, _)' or " ^
+        "'Temporal(from, to)' or 'Bitemporal(tfrom, tto, vfrom, vto)'"
+       ))
 
 let full_kind_of pos prim lin rest =
   let p = primary_kind_of_string pos prim in
@@ -933,15 +962,27 @@ parenthesized_datatypes:
 primary_datatype_pos:
 | primary_datatype                                             { with_pos $loc $1 }
 
+fieldname_list:
+| LPAREN separated_nonempty_list(COMMA, field_label) RPAREN    { $2 }
+
+temporal_metadata_type:
+| CONSTRUCTOR fieldname_list?                                  { parse_temporal_metadata $1 $2 $loc }
+
+table_handle:
+| TABLEHANDLE LPAREN datatype COMMA datatype
+    COMMA datatype RPAREN                                      { Datatype.Table ($3, $5, $7, TemporalMetadata.current) }
+| TABLEHANDLE
+    LPAREN datatype COMMA datatype COMMA datatype COMMA
+    temporal_metadata_type RPAREN                              { Datatype.Table ($3, $5, $7, $9) }
+
 primary_datatype:
 | TILDE primary_datatype_pos                                   { Datatype.Dual $2 }
 | parenthesized_datatypes                                      { match $1 with
                                                                    | [] -> Datatype.Unit
                                                                    | [n] -> WithPos.node n
                                                                    | ts  -> Datatype.Tuple ts }
+| table_handle                                                 { $1 }
 | LPAREN rfields RPAREN                                        { Datatype.Record $2 }
-| TABLEHANDLE
-     LPAREN datatype COMMA datatype COMMA datatype RPAREN      { Datatype.Table ($3, $5, $7) }
 | LBRACKETBAR vrow BARRBRACKET                                 { Datatype.Variant $2 }
 | LBRACKET datatype RBRACKET                                   { Datatype.List $2 }
 | type_var                                                     { $1 }

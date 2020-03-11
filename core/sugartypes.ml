@@ -108,7 +108,7 @@ module Datatype = struct
     | Record          of row
     | Variant         of row
     | Effect          of row
-    | Table           of with_pos * with_pos * with_pos
+    | Table           of with_pos * with_pos * with_pos * TemporalMetadata.t
     | List            of with_pos
     | TypeApplication of string * type_arg list
     | Primitive       of Primitive.t
@@ -347,7 +347,7 @@ and phrasenode =
   | Receive          of (Pattern.with_pos * phrase) list * Types.datatype option
   | DatabaseLit      of phrase * (phrase option * phrase option)
   | TableLit         of phrase * (Datatype.with_pos * (Types.datatype *
-                           Types.datatype * Types.datatype) option) *
+                           Types.datatype * Types.datatype * TemporalMetadata.t) option) *
                           (Name.t * fieldconstraint list) list * phrase * phrase
   | DBDelete         of Pattern.with_pos * phrase * phrase option
   | DBInsert         of phrase * Name.t list * phrase * phrase option

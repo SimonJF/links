@@ -328,12 +328,13 @@ let eq_types occurrence : type_eq_context -> (Types.datatype * Types.datatype) -
          end
 
       | `Alias (_, _) -> assert false
-      | `Table (lt1, lt2, lt3) ->
+      | `Table (lt1, lt2, lt3, md1) ->
          begin match t2 with
-         | `Table (rt1, rt2, rt3) ->
+         | `Table (rt1, rt2, rt3, md2) ->
             eqt (context, lt1, rt1) &&
             eqt (context, lt2, rt2) &&
-            eqt (context, lt3, rt3)
+            eqt (context, lt3, rt3) &&
+            md1 = md2
          | _ -> false
          end
       | `Lens _ -> raise (internal_error "The IR type equality check does not support lenses (yet)")

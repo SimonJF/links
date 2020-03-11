@@ -19,6 +19,7 @@ val element_type : ?overstep_quantifiers:bool -> Types.datatype -> Types.datatyp
 val table_read_type : Types.datatype -> Types.datatype
 val table_write_type : Types.datatype -> Types.datatype
 val table_needed_type : Types.datatype -> Types.datatype
+val table_metadata: Types.datatype -> TemporalMetadata.t
 
 val abs_type     : Types.datatype -> Types.datatype
 val app_type     : Types.datatype -> Types.datatype -> Types.datatype

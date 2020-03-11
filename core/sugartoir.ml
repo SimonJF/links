@@ -163,7 +163,7 @@ sig
 
   val database : value sem -> tail_computation sem
 
-  val table_handle : value sem * value sem * value sem * (datatype * datatype * datatype) -> tail_computation sem
+  val table_handle : value sem * value sem * value sem * (datatype * datatype * datatype * TemporalMetadata.t) -> tail_computation sem
 
   val lens_handle : value sem * Lens.Type.t -> tail_computation sem
 
@@ -479,14 +479,14 @@ struct
   let database s =
     bind s (fun v -> lift (Special (Database v), `Primitive Primitive.DB))
 
-  let table_handle (database, table, keys, (r, w, n)) =
+  let table_handle (database, table, keys, (r, w, n, md)) =
     bind database
       (fun database ->
          bind table
            (fun table ->
          bind keys
-        (fun keys ->  lift (Special (Table (database, table, keys, (r, w, n))),
-                               `Table (r, w, n)))))
+        (fun keys ->  lift (Special (Table (database, table, keys, (r, w, n, md))),
+                               `Table (r, w, n, md)))))
 
   let lens_handle (table, t) =
       bind table
@@ -1000,8 +1000,8 @@ struct
               let lens = ev lens in
               let data = ev data in
                 I.lens_put (lens, data, t)
-          | TableLit (name, (_, Some (readtype, writetype, neededtype)), _constraints, keys, db) ->
-              I.table_handle (ev db, ev name, ev keys, (readtype, writetype, neededtype))
+          | TableLit (name, (_, Some (readtype, writetype, neededtype, md)), _constraints, keys, db) ->
+              I.table_handle (ev db, ev name, ev keys, (readtype, writetype, neededtype, md))
           | Xml (tag, attrs, attrexp, children) ->
                if tag = "#" then
                  cofv (I.concat (instantiate "Nil"
