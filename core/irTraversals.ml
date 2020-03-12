@@ -297,11 +297,12 @@ struct
         | Database v ->
             let v, _, o = o#value v in
               Database v, `Primitive Primitive.DB, o
-        | Table (db, table_name, keys, tt) ->
+        | Table { database = db; table = table_name; keys; table_type = tt } ->
             let db, _, o = o#value db in
             let keys, _, o = o#value keys in
             let table_name, _, o = o#value table_name in
-              Table (db, table_name, keys, tt), `Table tt, o
+              Table { database = db; table = table_name; keys; table_type = tt },
+              `Table tt, o
         | Lens (table, rtype) ->
             let table, _, o = o#value table in
               Lens (table, rtype), `Lens rtype, o
@@ -827,11 +828,13 @@ let ir_type_mod_visitor tyenv type_visitor =
             | Wrong datatype ->
                let (datatype, _) = type_visitor#typ datatype in
                super#special (Wrong datatype)
-            | Table (v1, v2, v3, (t1, t2, t3, md)) ->
+            | Table { database = v1; table = v2; keys = v3;
+                table_type = (t1, t2, t3, md) } ->
                let (t1, _) = type_visitor#typ t1 in
                let (t2, _) = type_visitor#typ t2 in
                let (t3, _) = type_visitor#typ t3 in
-               super#special (Table (v1, v2, v3, (t1, t2, t3, md)))
+               super#special (Table { database = v1; table = v2; keys = v3;
+                 table_type = (t1, t2, t3, md) })
             | Query (opt, policy, computation, datatype) ->
                let (datatype, _) = type_visitor#typ datatype in
                super#special (Query (opt, policy, computation, datatype))

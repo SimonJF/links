@@ -78,8 +78,7 @@ and special =
   | LensCheck  of value * Lens.Type.t
   | LensGet    of value * Types.datatype
   | LensPut    of value * value * Types.datatype
-  | Table      of value * value * value *
-      (Types.datatype * Types.datatype * Types.datatype * TemporalMetadata.t)
+  | Table      of table
   | Query      of (value * value) option * QueryPolicy.t * computation * Types.datatype
   | InsertRows of value * value
   | InsertReturning of value * value * value
@@ -100,6 +99,12 @@ and handler = {
 }
 and handler_depth = | Deep of (binder * value) list | Shallow
 and lens_predicate = Static of Lens.Phrase.t | Dynamic of value
+and table = {
+  database: value;
+  table: value;
+  keys: value;
+  table_type: (Types.datatype * Types.datatype * Types.datatype * TemporalMetadata.t)
+}
   [@@deriving show]
 
 let binding_scope : binding -> scope =

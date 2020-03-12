@@ -737,7 +737,7 @@ struct
               ) ["name"; "args"; "driver"];
             Database v, `Primitive Primitive.DB, o
 
-        | Table (db, table_name, keys, tt) ->
+        | Table { database = db; table = table_name; keys; table_type = tt } ->
             let db, db_type, o = o#value db in
             o#check_eq_types db_type Types.database_type (SSpec special);
             let table_name, table_name_type, o = o#value table_name in
@@ -746,8 +746,8 @@ struct
             o#check_eq_types keys_type Types.keys_type (SSpec special);
             (* TODO: tt is a tuple of three records. Discussion pending about what kind of checks we should do here
                From an implementation perspective, we should check the consistency of the read, write, needed info here *)
-              Table (db, table_name, keys, tt), `Table tt, o
-
+            Table { database = db; table = table_name; keys; table_type = tt },
+            `Table tt, o
         | Query (range, policy, e, original_t) ->
             let range, o =
               o#optionu

@@ -485,8 +485,9 @@ struct
          bind table
            (fun table ->
          bind keys
-        (fun keys ->  lift (Special (Table (database, table, keys, (r, w, n, md))),
-                               `Table (r, w, n, md)))))
+        (fun keys ->
+          let tbl = { database; table; keys; table_type = (r, w, n, md) } in
+          lift (Special (Table tbl), `Table (r, w, n, md)))))
 
   let lens_handle (table, t) =
       bind table

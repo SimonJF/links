@@ -892,7 +892,8 @@ end = functor (K : CONTINUATION) -> struct
          K.apply kappa (Dict [])
       | Database v ->
          K.apply kappa (Dict [("_db", gv v)])
-      | Table (db, table_name, keys, (readtype, _writetype, _needtype, _md)) ->
+      | Table { database = db; table = table_name; keys;
+          table_type = (readtype, _, _, _) } ->
          K.apply kappa
            (Dict [("_table",
                    Dict [("db", gv db);

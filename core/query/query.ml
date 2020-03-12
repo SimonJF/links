@@ -754,7 +754,8 @@ struct
         let open Lang in
         check_policies_compatible env.policy policy;
         computation env e
-    | Special (Ir.Table (db, name, keys, (readtype, _, _, _))) as _s ->
+    | Special (Ir.Table { database = db; table = name;
+        keys; table_type = (readtype, _, _, _) }) ->
        (** WR: this case is because shredding needs to access the keys of tables
            but can we avoid it (issue #432)? *)
        (* Copied almost verbatim from evalir.ml, which seems wrong, we should probably call into that. *)

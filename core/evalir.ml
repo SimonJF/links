@@ -672,7 +672,7 @@ struct
           else Lens.Eval.Incremental in
         Lens.Eval.put ~behaviour lens data |> Lens_errors.unpack_eval_error ~die:(eval_error "%s");
         Value.box_unit () |> apply_cont cont env
-    | Table (db, name, keys, (readtype, _, _, _)) ->
+    | Table { database = db; table = name; keys; table_type = (readtype, _, _, _) } ->
       begin
         (* OPTIMISATION: we could arrange for concrete_type to have
            already been applied here *)
