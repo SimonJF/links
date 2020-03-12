@@ -2758,7 +2758,9 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * Usage.t =
             and name   = tc name in
               DatabaseLit (erase name, (opt_map erase driver, opt_map erase args)), `Primitive Primitive.DB,
               Usage.combine_many [from_option Usage.empty (opt_map usages driver); from_option Usage.empty (opt_map usages args); usages name]
-        | TableLit (tname, (dtype, Some (read_row, write_row, needed_row, md)), constraints, keys, db) ->
+        | TableLit
+            { name = tname; record_type = (dtype, Some (read_row, write_row, needed_row, md));
+              field_constraints = constraints;  keys; database = db } ->
             let tname = tc tname
             and db = tc db
             and keys = tc keys in
@@ -2767,8 +2769,10 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * Usage.t =
             and () = unify ~handle:Gripers.table_keys (pos_and_typ keys, no_pos Types.keys_type) in
             (* SJF TODO: Here, we need to ensure that either the recorded metadata
              * matches up with the datatype, or assign it based on the modified TableLit. *)
-              TableLit (erase tname, (dtype, Some (read_row, write_row, needed_row, md)),
-                constraints, erase keys, erase db),
+            TableLit { name = erase tname;
+                record_type = (dtype, Some (read_row, write_row, needed_row, md));
+                field_constraints = constraints; keys = erase keys;
+                database = erase db },
               `Table (read_row, write_row, needed_row, md),
               Usage.combine (usages tname) (usages db)
         | TableLit _ -> assert false

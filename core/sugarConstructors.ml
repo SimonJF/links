@@ -284,6 +284,9 @@ module SugarConstructors (Position : Pos)
         };
     }
 
+  let table_lit ?(ppos=dp) name record_type field_constraints keys database =
+    with_pos ppos (TableLit { name; record_type; field_constraints; keys; database })
+
 end
 
 (* Positions module based on standard Sugartypes positions. *)

@@ -582,14 +582,18 @@ class transform (env : Types.typing_environment) =
           let (o, data, _) = o#phrase data in
           let (o, t) = o#datatype t in
             (o, LensPutLit (lens, data, Some t), Types.make_list_type t)
-      | TableLit (name, (dtype, Some (read_row, write_row, needed_row, md)), constraints, keys, db) ->
+      | TableLit { name; record_type = (dtype, Some (read_row, write_row, needed_row, md));
+        field_constraints = constraints; keys; database = db } ->
           let (o, name, _) = o#phrase name in
           let (o, db, _) = o#phrase db in
           let (o, dtype) = o#sugar_datatype dtype in
           let (o, read_row) = o#datatype read_row in
           let (o, write_row) = o#datatype write_row in
           let (o, needed_row) = o#datatype needed_row in
-            (o, TableLit (name, (dtype, Some (read_row, write_row, needed_row, md)), constraints, keys, db), `Table (read_row, write_row, needed_row, md))
+          let tbl_ty = (read_row, write_row, needed_row, md) in
+          let tbl_lit = { name; record_type = (dtype, Some tbl_ty);
+            field_constraints = constraints; keys; database = db } in
+          (o, TableLit tbl_lit, `Table tbl_ty)
       | DBDelete (p, from, where) ->
           let (o, from, _) = o#phrase from in
           let (o, p) = o#pattern p in

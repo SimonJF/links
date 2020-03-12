@@ -302,6 +302,14 @@ and handler_parameterisation =
 and iterpatt =
   | List  of Pattern.with_pos * phrase
   | Table of Pattern.with_pos * phrase
+and table_lit =
+  { name: phrase;
+    record_type:
+      (Datatype.with_pos * (Types.datatype *
+        Types.datatype * Types.datatype * TemporalMetadata.t) option);
+    field_constraints: (Name.t * fieldconstraint list) list;
+    keys: phrase;
+    database: phrase }
 and phrasenode =
   | Constant         of Constant.t
   | Var              of Name.t
@@ -346,9 +354,7 @@ and phrasenode =
                           Types.datatype option
   | Receive          of (Pattern.with_pos * phrase) list * Types.datatype option
   | DatabaseLit      of phrase * (phrase option * phrase option)
-  | TableLit         of phrase * (Datatype.with_pos * (Types.datatype *
-                           Types.datatype * Types.datatype * TemporalMetadata.t) option) *
-                          (Name.t * fieldconstraint list) list * phrase * phrase
+  | TableLit         of table_lit
   | DBDelete         of Pattern.with_pos * phrase * phrase option
   | DBInsert         of phrase * Name.t list * phrase * phrase option
   | DBUpdate         of Pattern.with_pos * phrase * phrase option *
@@ -575,7 +581,7 @@ struct
         union_all [phrase p; option_map phrase popt1; option_map phrase popt2]
     | DBInsert (p1, _labels, p2, popt) ->
         union_all [phrase p1; phrase p2; option_map phrase popt]
-    | TableLit (p1, _, _, _, p2) -> union (phrase p1) (phrase p2)
+    | TableLit { name; database; _} -> union (phrase name) (phrase database)
     | Xml (_, attrs, attrexp, children) ->
         union_all
           [union_map (snd ->- union_map phrase) attrs;

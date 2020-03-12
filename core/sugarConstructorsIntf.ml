@@ -153,4 +153,15 @@ module type SugarConstructorsSig = sig
      -> ?parameters:((Pattern.with_pos * phrase) list)
      -> phrase -> clause list -> handler_depth
      -> handler
+
+  (* Tables *)
+  val table_lit
+      : ?ppos:t
+     -> phrase
+     -> (Datatype.with_pos * (Types.datatype *
+         Types.datatype * Types.datatype * TemporalMetadata.t) option)
+     -> (Name.t * fieldconstraint list) list
+     -> phrase
+     -> phrase
+     -> phrase
 end

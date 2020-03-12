@@ -1000,8 +1000,10 @@ struct
               let lens = ev lens in
               let data = ev data in
                 I.lens_put (lens, data, t)
-          | TableLit (name, (_, Some (readtype, writetype, neededtype, md)), _constraints, keys, db) ->
-              I.table_handle (ev db, ev name, ev keys, (readtype, writetype, neededtype, md))
+          | TableLit { name;
+              record_type = (_, Some (readtype, writetype, neededtype, md));
+              keys; database = db; _} ->
+                I.table_handle (ev db, ev name, ev keys, (readtype, writetype, neededtype, md))
           | Xml (tag, attrs, attrexp, children) ->
                if tag = "#" then
                  cofv (I.concat (instantiate "Nil"

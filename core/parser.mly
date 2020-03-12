@@ -756,11 +756,17 @@ formlet_expression:
 | PAGE xml                                                     { with_pos $loc (Page $2)          }
 
 table_expression:
+| TABLE exp WITH datatype perhaps_table_constraints FROM exp   { table_lit ~ppos:$loc $2 (datatype $4) $5
+                                                                   (list ~ppos:$loc []) $7 }
+| TABLE exp WITH datatype perhaps_table_constraints
+            TABLEKEYS exp FROM exp                             { table_lit ~ppos:$loc $2 (datatype $4) $5 $7 $9 }
+(*
 | TABLE exp WITH datatype perhaps_table_constraints FROM exp   { with_pos $loc (TableLit ($2, datatype $4, $5,
                                                                                           list ~ppos:$loc [], $7)) }
 /* SAND */
 | TABLE exp WITH datatype perhaps_table_constraints
             TABLEKEYS exp FROM exp                             { with_pos $loc (TableLit ($2, datatype $4, $5, $7, $9))}
+                                                                                          *)
 
 perhaps_table_constraints:
 | loption(preceded(WHERE, table_constraints))                  { $1 }

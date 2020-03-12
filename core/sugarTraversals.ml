@@ -339,7 +339,8 @@ class map =
                let _x_i1 = o#option (fun o -> o#phrase) _x_i1 in (_x, _x_i1))
               _x_i1
           in DatabaseLit ((_x, _x_i1))
-      | TableLit ((_x, (y, z), _x_i2, _x_i3, _x_i4)) ->
+      | TableLit ({ name = _x; record_type = (y, z); field_constraints = _x_i2;
+          keys = _x_i3; database = _x_i4 }) ->
           let _x = o#phrase _x in
           let y = o#datatype y in
           let z = o#option
@@ -356,7 +357,9 @@ class map =
                  in (_x, _x_i1))
               _x_i2 in
           let _x_i3 = o#phrase _x_i3 in
-      let _x_i4 = o#phrase _x_i4 in TableLit ((_x, (y, z), _x_i2, _x_i3, _x_i4))
+      let _x_i4 = o#phrase _x_i4 in
+        TableLit ({ name = _x; record_type = (y, z); field_constraints = _x_i2;
+          keys = _x_i3; database = _x_i4 })
       | LensLit ((_x, _x_i1)) ->
           let _x = o#phrase _x in
           let _x_i1 = o#option (fun o -> o#unknown) _x_i1 in
@@ -1080,7 +1083,8 @@ class fold =
                let o = o#option (fun o -> o#phrase) _x_i1 in o)
               _x_i1
           in o
-      | TableLit ((_x, (y,z), _x_i2, _x_i3, _x_i4)) ->
+      | TableLit ({ name = _x; record_type = (y, z); field_constraints = _x_i2;
+          keys = _x_i3; database = _x_i4 }) ->
           let o = o#phrase _x in
           let o = o#datatype y in
           let o = o#option
@@ -1838,7 +1842,9 @@ class fold_map =
                in (o, (_x, _x_i1)))
               _x_i1
           in (o, (DatabaseLit ((_x, _x_i1))))
-      | TableLit ((_x, _x_i1, _x_i2, _x_i3, _x_i4)) ->
+      | TableLit  ({ name = _x; record_type = _x_i1;
+          field_constraints = _x_i2;
+          keys = _x_i3; database = _x_i4 }) ->
           let (o, _x) = o#phrase _x in
           let (o, _x_i1) =
             (fun (_x, _x_i1) ->
@@ -1861,7 +1867,9 @@ class fold_map =
               _x_i2 in
           let (o, _x_i3) = o#phrase _x_i3 in
           let (o, _x_i4) = o#phrase _x_i4
-          in (o, (TableLit ((_x, _x_i1, _x_i2, _x_i3, _x_i4))))
+          in (o, (TableLit ({ name = _x; record_type = _x_i1;
+            field_constraints = _x_i2;
+            keys = _x_i3; database = _x_i4 })))
       | LensLit ((_x, _x_i1)) ->
           let (o, _x) = o#phrase _x in
           let (o, _x_i1) = o#option (fun o -> o#unknown) _x_i1 in
