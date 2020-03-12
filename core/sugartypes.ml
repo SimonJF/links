@@ -309,6 +309,7 @@ and table_lit =
         Types.datatype * Types.datatype * TemporalMetadata.t) option);
     field_constraints: (Name.t * fieldconstraint list) list;
     keys: phrase;
+    temporal_metadata: TemporalMetadata.t;
     database: phrase }
 and phrasenode =
   | Constant         of Constant.t

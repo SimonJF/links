@@ -87,34 +87,38 @@ let query_policy_of_string p =
 
 let parse_temporal_metadata label args_opt p : TemporalMetadata.t =
   match label, args_opt with
-    | "Current", None -> TemporalMetadata.current
-    | "Current", _ ->
+    | `Current, None -> TemporalMetadata.current
+    | `Current, _ ->
        raise (ConcreteSyntaxError (pos p,
-        "'Current' metadata does not take field arguments"))
-    | "Transaction", Some ([tfrom; tto]) ->
+        "Current time metadata does not take field arguments"))
+    | `Transaction, Some ([tfrom; tto]) ->
         TemporalMetadata.transaction_time tfrom tto
-    | "Transaction", _ ->
+    | `Transaction, _ ->
        raise (ConcreteSyntaxError (pos p,
-        "'Transaction' metadata requires 'from' and 'to' field definitions, " ^
-        "e.g., Transaction(transaction_from, transaction_to)"))
-    | "Valid", Some ([vfrom; vto]) ->
+        "Transaction time metadata requires 'from' and 'to' field definitions"))
+    | `Valid, Some ([vfrom; vto]) ->
         TemporalMetadata.valid_time vfrom vto
-    | "Valid", _ ->
+    | `Valid, _ ->
        raise (ConcreteSyntaxError (pos p,
-        "'Valid' metadata requires 'from' and 'to' field definitions, " ^
-        "e.g., Valid(valid_from, valid_to)"))
-    | "Bitemporal", Some ([tfrom; tto; vfrom; vto]) ->
+        "Valid time metadata requires 'from' and 'to' field definitions"))
+    | `Bitemporal, Some ([tfrom; tto; vfrom; vto]) ->
         TemporalMetadata.bitemporal tfrom tto vfrom vto
-    | "Bitemporal", _ ->
+    | `Bitemporal, _ ->
        raise (ConcreteSyntaxError (pos p,
-        "'Bitemporal' metadata requires 'from' and 'to' field definitions " ^
-        "for both valid and transaction dimensions, " ^
-        "e.g., Bitemporal(transaction_from, transaction_to, valid_from, valid_to)"))
-    | rest, _ ->
+        "Bitemporal metadata requires 'from' and 'to' field definitions " ^
+        "for both valid and transaction dimensions"))
+
+let parse_table_metadata label args_opt p = failwith ""
+let parse_table_type_metadata label args_opt p =
+  let mode =
+    match label with
+      | "Current" -> parse_temporal_metadata `Current args_opt p
+      | "Valid" -> parse_temporal_metadata `Valid args_opt p
+      | "Transaction" -> parse_temporal_metadata `Transaction args_opt p
+      | "Bitemporal" -> parse_temporal_metadata label args_opt p
+      | rest ->
        raise (ConcreteSyntaxError (pos p,
-        "Invalid temporal metadata annotation " ^ rest ^ ". Expected 'Valid(_, _)' or " ^
-        "'Temporal(from, to)' or 'Bitemporal(tfrom, tto, vfrom, vto)'"
-       ))
+        "Invalid temporal metadata annotation. Expected Current, Valid, Transaction, or Bitemporal."
 
 let full_kind_of pos prim lin rest =
   let p = primary_kind_of_string pos prim in
