@@ -53,8 +53,20 @@ type xmlitem =   Text of string
 and xml = xmlitem list
   [@@deriving show,yojson]
 
-type table = (database * string) * string * string list list * Types.row
+type table = {
+  database: (database * string);
+  name: string;
+  keys: string list list;
+  row: Types.row
+}
   [@@deriving show]
+
+val make_table :
+  database:(database * string) ->
+  name:string ->
+  keys:(string list list) ->
+  row:Types.row ->
+  table
 
 type primitive_value_basis =  [
   | `Bool of bool

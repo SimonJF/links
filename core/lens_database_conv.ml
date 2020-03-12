@@ -58,6 +58,7 @@ let lens_db_of_db (db : Value.database) =
   ; execute_select }
 
 let lens_table_of_table (table : Value.table) =
-  let _, table, keys, _ = table in
+  let open Value in
+  let table_name, keys = table.name, table.keys in
   let open Lens.Database.Table in
-  {name= table; keys}
+  {name = table_name; keys}

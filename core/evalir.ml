@@ -587,19 +587,18 @@ struct
         value env v >>= fun v ->
         apply_cont cont env (`Database (db_connect v))
     | Lens (table, t) ->
-      let open Lens in
       begin
-          let sort = Type.sort t in
+          let sort = Lens.Type.sort t in
           value env table >>= fun table ->
           match table with
-            | `Table (((db,_), table, _, _) as tinfo) ->
+            | `Table Value.( { database = (db,_); name = table;  _} as tinfo) ->
               let database = Lens_database_conv.lens_db_of_db db in
-              let sort = Sort.update_table_name sort ~table in
+              let sort = Lens.Sort.update_table_name sort ~table in
               let table = Lens_database_conv.lens_table_of_table tinfo in
-                 apply_cont cont env (`Lens (Value.Lens { sort; database; table; }))
+                 apply_cont cont env (`Lens (Lens.Value.Lens { sort; database; table; }))
             | `List records ->
               let records = List.map Lens_value_conv.lens_phrase_value_of_value records in
-              apply_cont cont env (`Lens (Value.LensMem { records; sort; }))
+              apply_cont cont env (`Lens (Lens.Value.LensMem { records; sort; }))
             | _ -> raise (internal_error ("Unsupported underlying lens value."))
       end
     | LensSerial { lens; columns; _ } ->
@@ -686,8 +685,14 @@ struct
               List.map
                 (fun key ->
                   List.map Value.unbox_string (Value.unbox_list key))
-                (Value.unbox_list keys)
-            in apply_cont cont env (`Table ((db, params), Value.unbox_string name, unboxed_keys, row))
+                (Value.unbox_list keys) in
+            let tbl =
+              Value.make_table
+                ~database:(db, params)
+                ~name:(Value.unbox_string name)
+                ~keys:unboxed_keys
+                ~row
+            in apply_cont cont env (`Table tbl)
           | _ -> eval_error "Error evaluating table handle"
       end
     | Query (range, policy, e, _t) ->
@@ -764,9 +769,10 @@ struct
         begin
           value env source >>= fun source ->
           value env rows >>= fun rows ->
+          let open Value in
           match source, rows with
           | `Table _, `List [] ->  apply_cont cont env (`Record [])
-          | `Table ((db, _params), table_name, _, _), rows ->
+          | `Table { database = (db, _); name = table_name; _ }, rows ->
               let (field_names,vss) = Value.row_columns_values db rows in
               Debug.print ("RUNNING INSERT QUERY:\n" ^ (db#make_insert_query(table_name, field_names, vss)));
               let () = ignore (Database.execute_insert (table_name, field_names, vss) db) in
@@ -784,6 +790,7 @@ struct
      case of inserting a single row.
   *)
     | InsertReturning (source, rows, returning) ->
+        let open Value in
         begin
           value env source >>= fun source ->
           value env rows >>= fun rows ->
@@ -791,7 +798,7 @@ struct
           match source, rows, returning with
           | `Table _, `List [], _ ->
               raise (internal_error "InsertReturning: undefined for empty list of rows")
-          | `Table ((db, _params), table_name, _, _), rows, returning ->
+          | `Table { database = (db, _); name = table_name; _}, rows, returning ->
               let (field_names,vss) = Value.row_columns_values db rows in
               let returning = Value.unbox_string returning in
               Debug.print ("RUNNING INSERT ... RETURNING QUERY:\n" ^
@@ -802,9 +809,10 @@ struct
         end
     | Update ((xb, source), where, body) ->
       begin
+        let open Value in
         value env source >>= fun source ->
         match source with
-          | `Table ((db, _), table, _, (fields, _, _)) ->
+          | `Table { database = (db, _); name = table; row = (fields, _, _); _ } ->
               Lwt.return
             (db, table, (StringMap.map (function
                                         | `Present t -> t
@@ -818,8 +826,9 @@ struct
     | Delete ((xb, source), where) ->
         value env source >>= fun source ->
         begin
+        let open Value in
         match source with
-          | `Table ((db, _), table, _, (fields, _, _)) ->
+          | `Table { database = (db, _); name = table; row = (fields, _, _); _ } ->
               Lwt.return
             (db, table, (StringMap.map (function
                                         | `Present t -> t

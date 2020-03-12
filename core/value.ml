@@ -190,14 +190,6 @@ let split_html : xml -> xml * xml =
   | [Node ("body", xs)] -> [], xs
   | xs -> [], xs
 
-type table = (database * string) * string * string list list * Types.row
-  [@@deriving show]
-
-
-(* TODO: Convert to this representation, and then add some representation of
- * the temporal metadata (which may include steps taken to narrow / snapshot,
- * for example) *)
-(*
 type table = {
   database: (database * string);
   name: string;
@@ -205,8 +197,9 @@ type table = {
   row: Types.row
 }
   [@@deriving show]
-*)
 
+let make_table ~database ~name ~keys ~row =
+  { database; name; keys; row }
 
 type primitive_value_basis =  [
 | `Bool of bool
@@ -806,7 +799,7 @@ let rec p_value (ppf : formatter) : t -> 'a = function
                                fprintf ppf "fun"
   | `Socket _ -> fprintf ppf "<socket>"
   | `Lens l -> fprintf ppf "(%a)" Lens.Value.pp l
-  | `Table (_, name, _, _) -> fprintf ppf "(table %s)" name
+  | `Table { name; _ } -> fprintf ppf "(table %s)" name
   | `Database (_, params) -> fprintf ppf "(database %s" params
   | `SessionChannel (ep1, ep2) ->
      fprintf ppf "Session channel. EP1: %s, EP2: %s"

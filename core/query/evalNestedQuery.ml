@@ -440,11 +440,12 @@ struct
                    | _ -> assert false)
                gs_out) in
     let r_out_type =
+      let open Value in
       Types.make_tuple_type
         (List.map
            (fun (_, source) ->
              match source with
-               | QL.Table (_, _, _, row) ->
+               | QL.Table { row; _ } ->
                  `Record row
                | _ -> assert false)
            gs_out) in

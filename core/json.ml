@@ -40,7 +40,7 @@ let json_of_db (db, params) : Yojson.Basic.t =
 WARNING:
   May need to be careful about free type variables / aliases in row
 *)
-let json_of_table ((db, params), name, keys, row) : Yojson.Basic.t =
+let json_of_table Value.{ database = (db, params); name; keys; row } : Yojson.Basic.t =
   let json_of_key k = `List (List.map (fun x -> `String x) k) in
   let json_of_keylist ks = `List (List.map json_of_key ks)  in
   `Assoc [

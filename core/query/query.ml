@@ -125,7 +125,7 @@ struct
         | Singleton t -> Types.make_list_type (te t)
         | Record fields -> record fields
         | If (_, t, _) -> te t
-        | Table (_, _, _, row) -> `Record row
+        | Table Value.{ row; _} -> `Record row
         | Constant (Constant.Bool   _) -> Types.bool_type
         | Constant (Constant.Int    _) -> Types.int_type
         | Constant (Constant.Char   _) -> Types.char_type
@@ -206,7 +206,7 @@ struct
           end
         | Constant c -> Constant c
 
-  let table_field_types (_, _, _, (fields, _, _)) =
+  let table_field_types Value.{ row = (fields, _, _); _} =
     StringMap.map (function
                     | `Present t -> t
                     | _ -> assert false) fields
@@ -443,9 +443,10 @@ let used_database v : Value.database option =
               | Some db -> Some db
           end
   and used =
+    let open Value in
     function
       | Q.For (_, gs, _, _body) -> generators gs
-      | Q.Table ((db, _), _, _, _) -> Some db
+      | Q.Table { database = (db, _); _} -> Some db
       | _ -> None in
   let rec comprehensions =
     function
@@ -766,7 +767,11 @@ struct
          List.map Q.unbox_string (Q.unbox_list key))
         (Q.unbox_list keys)
         in
-            Q.Table ((db, params), Q.unbox_string name, unboxed_keys, row)
+            Q.Table (Value.make_table
+              ~database:(db, params)
+              ~name:(Q.unbox_string name)
+              ~keys:unboxed_keys
+              ~row)
          | _ -> query_error "Error evaluating table handle"
        end
     | Special _s ->
@@ -1012,11 +1017,12 @@ let rec select_clause : Sql.index -> bool -> Q.t -> Sql.select_clause =
   fun index unit_query v ->
   (*  Debug.print ("select_clause: "^string_of_t v); *)
   let open Q in
+  let open Value in
   match v with
     | Concat _ -> assert false
     | For (_, [], _, body) ->
         select_clause index unit_query body
-    | For (_, (x, Table (_db, table, _keys, _row))::gs, os, body) ->
+    | For (_, (x, Table { name = table; _})::gs, os, body) ->
         let body = select_clause index unit_query (For (None, gs, [], body)) in
         let os = List.map (base index) os in
           begin
@@ -1032,7 +1038,7 @@ let rec select_clause : Sql.index -> bool -> Q.t -> Sql.select_clause =
       let (fields, tables, c', os) = select_clause index unit_query body in
       let c = Sql.smart_and c c' in
       (fields, tables, c, os)
-    | Table (_db, table, _keys, (fields, _, _)) ->
+    | Table { name = table; row = (fields, _, _); _ } ->
       (* eta expand tables. We might want to do this earlier on.  *)
       (* In fact this should never be necessary as it is impossible
          to produce non-eta expanded tables. *)
@@ -1132,10 +1138,11 @@ let gens_index (gs : (Var.var * Q.t) list)   =
     labels_of_field_types field_types
   in
  (* Use keys if available *)
+  let open Value in
   let key_fields t =
-    match t with
-      (_, _, (ks::_), _) -> StringSet.from_list ks
-    |    _ -> all_fields t
+    match t.keys with
+      | ks :: _ -> StringSet.from_list ks
+      | _       -> all_fields t
   in
   let table_index get_fields (x, source) =
     let t = match source with Q.Table t -> t | _ -> assert false in
