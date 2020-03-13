@@ -2179,6 +2179,14 @@ let check_unsafe_signature context unify inner = function
      unsafe
   | Some (_, None) -> raise (internal_error "Sugartypes.datatype' without a Types.typ instance")
 
+let check_metadata pos annotation term_md =
+  if annotation = TemporalMetadata.unspecified then ()
+  else if annotation = term_md then ()
+  else
+    Gripers.die pos
+      (Printf.sprintf "Temporal metadata %s is inconsistent with its annotation %s."
+        (TemporalMetadata.show_term term_md) (TemporalMetadata.show annotation))
+
 let rec pattern_env : Pattern.with_pos -> Types.datatype Env.t =
   fun { node = p; _} -> let open Pattern in
   match p with
@@ -2760,20 +2768,22 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * Usage.t =
               Usage.combine_many [from_option Usage.empty (opt_map usages driver); from_option Usage.empty (opt_map usages args); usages name]
         | TableLit
             { name = tname; record_type = (dtype, Some (read_row, write_row, needed_row, md));
-              field_constraints = constraints;  keys; database = db } ->
+              field_constraints = constraints; keys; temporal_metadata; database = db } ->
             let tname = tc tname
             and db = tc db
             and keys = tc keys in
             let () = unify ~handle:Gripers.table_name (pos_and_typ tname, no_pos Types.string_type)
             and () = unify ~handle:Gripers.table_db (pos_and_typ db, no_pos Types.database_type)
             and () = unify ~handle:Gripers.table_keys (pos_and_typ keys, no_pos Types.keys_type) in
-            (* SJF TODO: Here, we need to ensure that either the recorded metadata
-             * matches up with the datatype, or assign it based on the modified TableLit. *)
+            (* The temporal metadata check will succeed either if the annotation is unspecified,
+             * or the annotation matches the term-level specification. If the check succeeds,
+             * the term-level annotation has strictly more information, so we refine the type. *)
+            let () = check_metadata pos md temporal_metadata in
             TableLit { name = erase tname;
-                record_type = (dtype, Some (read_row, write_row, needed_row, md));
-                field_constraints = constraints; keys = erase keys;
+                record_type = (dtype, Some (read_row, write_row, needed_row, temporal_metadata));
+                field_constraints = constraints; keys = erase keys; temporal_metadata;
                 database = erase db },
-              `Table (read_row, write_row, needed_row, md),
+              `Table (read_row, write_row, needed_row, temporal_metadata),
               Usage.combine (usages tname) (usages db)
         | TableLit _ -> assert false
         | LensLit (table, _) ->

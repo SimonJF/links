@@ -874,13 +874,13 @@ object (self)
              unreachable from outside the block *)
           self, Block (bs, p)
     | TableLit { name = t; record_type = (dt, _);
-          field_constraints = cs; keys; database = p } ->
+          field_constraints = cs; keys; temporal_metadata; database = p } ->
         let read, write, needed, md = Desugar.table_lit alias_env cs dt in
         let o, t = self#phrase t in
         let o, keys = o#phrase keys in
         let o, p = o#phrase p in
           o, TableLit { name = t; record_type = (dt, Some (read, write, needed, md));
-            field_constraints = cs; keys; database = p }
+            field_constraints = cs; keys; temporal_metadata; database = p }
     (* Switch and receive type annotations are never filled in by
        this point, so we ignore them.  *)
     | p -> super#phrasenode p

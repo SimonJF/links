@@ -286,10 +286,24 @@ module TemporalMetadata = struct
     | TransactionTime { tt_from_field; tt_to_field } ->
         sprintf "Transaction(%s, %s)" tt_from_field tt_to_field
     | ValidTime { vt_from_field; vt_to_field } ->
-        sprintf "Transaction(%s, %s)" vt_from_field vt_to_field
+        sprintf "Valid(%s, %s)" vt_from_field vt_to_field
     | Bitemporal { tt_from_field; tt_to_field; vt_from_field; vt_to_field } ->
-        sprintf "Transaction(%s, %s, %s, %s)" tt_from_field tt_to_field
+        sprintf "Bitemporal(%s, %s, %s, %s)" tt_from_field tt_to_field
           vt_from_field vt_to_field
+
+  let show_term =
+    let open Printf in
+    function
+    | Unspecified -> "unspecified"
+    | Current -> "current"
+    | TransactionTime { tt_from_field; tt_to_field } ->
+        sprintf "transaction_time(%s, %s)" tt_from_field tt_to_field
+    | ValidTime { vt_from_field; vt_to_field } ->
+        sprintf "valid_time(%s, %s)" vt_from_field vt_to_field
+    | Bitemporal { tt_from_field; tt_to_field; vt_from_field; vt_to_field } ->
+        sprintf "bitemporal(%s, %s, %s, %s)" tt_from_field tt_to_field
+          vt_from_field vt_to_field
+
 
   let pp fmt x = Format.pp_print_string fmt (show x)
 end

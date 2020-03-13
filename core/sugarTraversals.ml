@@ -340,7 +340,7 @@ class map =
               _x_i1
           in DatabaseLit ((_x, _x_i1))
       | TableLit ({ name = _x; record_type = (y, z); field_constraints = _x_i2;
-          keys = _x_i3; database = _x_i4 }) ->
+          keys = _x_i3; temporal_metadata; database = _x_i4 }) ->
           let _x = o#phrase _x in
           let y = o#datatype y in
           let z = o#option
@@ -359,7 +359,7 @@ class map =
           let _x_i3 = o#phrase _x_i3 in
       let _x_i4 = o#phrase _x_i4 in
         TableLit ({ name = _x; record_type = (y, z); field_constraints = _x_i2;
-          keys = _x_i3; database = _x_i4 })
+          keys = _x_i3; temporal_metadata; database = _x_i4 })
       | LensLit ((_x, _x_i1)) ->
           let _x = o#phrase _x in
           let _x_i1 = o#option (fun o -> o#unknown) _x_i1 in
@@ -1084,7 +1084,7 @@ class fold =
               _x_i1
           in o
       | TableLit ({ name = _x; record_type = (y, z); field_constraints = _x_i2;
-          keys = _x_i3; database = _x_i4 }) ->
+          keys = _x_i3; database = _x_i4; _ }) ->
           let o = o#phrase _x in
           let o = o#datatype y in
           let o = o#option
@@ -1844,7 +1844,7 @@ class fold_map =
           in (o, (DatabaseLit ((_x, _x_i1))))
       | TableLit  ({ name = _x; record_type = _x_i1;
           field_constraints = _x_i2;
-          keys = _x_i3; database = _x_i4 }) ->
+          keys = _x_i3; temporal_metadata; database = _x_i4 }) ->
           let (o, _x) = o#phrase _x in
           let (o, _x_i1) =
             (fun (_x, _x_i1) ->
@@ -1869,7 +1869,7 @@ class fold_map =
           let (o, _x_i4) = o#phrase _x_i4
           in (o, (TableLit ({ name = _x; record_type = _x_i1;
             field_constraints = _x_i2;
-            keys = _x_i3; database = _x_i4 })))
+            keys = _x_i3; temporal_metadata; database = _x_i4 })))
       | LensLit ((_x, _x_i1)) ->
           let (o, _x) = o#phrase _x in
           let (o, _x_i1) = o#option (fun o -> o#unknown) _x_i1 in
