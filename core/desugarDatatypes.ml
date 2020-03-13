@@ -848,7 +848,7 @@ module Desugar = struct
     (* We deliberately don't concretise the returned read_type in the hope of improving error
        messages during type inference. *)
     (* TODO: Once we've extended the term, `current` needs to change here *)
-    (read_type, `Record write_row, `Record needed_row, TemporalMetadata.current)
+    (read_type, `Record write_row, `Record needed_row)
 end
 
 (** Convert a syntactic type into a semantic type, using `map' to resolve free type variables *)
@@ -875,11 +875,11 @@ object (self)
           self, Block (bs, p)
     | TableLit { name = t; record_type = (dt, _);
           field_constraints = cs; keys; temporal_metadata; database = p } ->
-        let read, write, needed, md = Desugar.table_lit alias_env cs dt in
+        let read, write, needed = Desugar.table_lit alias_env cs dt in
         let o, t = self#phrase t in
         let o, keys = o#phrase keys in
         let o, p = o#phrase p in
-          o, TableLit { name = t; record_type = (dt, Some (read, write, needed, md));
+          o, TableLit { name = t; record_type = (dt, Some (read, write, needed, temporal_metadata));
             field_constraints = cs; keys; temporal_metadata; database = p }
     (* Switch and receive type annotations are never filled in by
        this point, so we ignore them.  *)
