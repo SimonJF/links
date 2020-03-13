@@ -99,6 +99,8 @@ and handler = {
 }
 and handler_depth = | Deep of (binder * value) list | Shallow
 and lens_predicate = Static of Lens.Phrase.t | Dynamic of value
+(* Note: We don't need a term-level metadata field, since it's contained in the type,
+ * and the type has been checked to be consistent with the term annotation. *)
 and table = {
   database: value;
   table: value;

@@ -4152,7 +4152,6 @@ and type_binding : context -> binding -> binding * context * Usage.t =
   fun context {node = def; pos} ->
     let _UNKNOWN_POS_ = "<unknown>" in
     let no_pos t = (_UNKNOWN_POS_, t) in
-    let type_check = type_check in
     let unify pos (l, r) = unify_or_raise ~pos (l, r) in
     let unify_nopos ~handle (l, r) = unify_or_raise ~pos ~handle (no_pos l, no_pos r)
     and typ (_,t,_) = t
