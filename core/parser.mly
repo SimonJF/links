@@ -108,17 +108,31 @@ let parse_temporal_metadata label args_opt p : TemporalMetadata.t =
         "Bitemporal metadata requires 'from' and 'to' field definitions " ^
         "for both valid and transaction dimensions"))
 
-let parse_table_metadata label args_opt p = failwith ""
+let parse_table_metadata label args_opt p =
+  let mode =
+  match label with
+    | "current" -> `Current
+    | "valid_time" -> `Valid
+    | "transaction_time" -> `Transaction
+    | "bitemporal" -> `Bitemporal
+    | rest ->
+     raise (ConcreteSyntaxError (pos p,
+      "Invalid temporal metadata annotation " ^ rest ^ ". " ^
+      "Expected current, valid, transaction_time, or bitemporal.")) in
+  parse_temporal_metadata mode args_opt p
+
 let parse_table_type_metadata label args_opt p =
   let mode =
     match label with
-      | "Current" -> parse_temporal_metadata `Current args_opt p
-      | "Valid" -> parse_temporal_metadata `Valid args_opt p
-      | "Transaction" -> parse_temporal_metadata `Transaction args_opt p
-      | "Bitemporal" -> parse_temporal_metadata label args_opt p
+      | "Current" -> `Current
+      | "Valid" -> `Valid
+      | "Transaction" -> `Transaction
+      | "Bitemporal" -> `Bitemporal
       | rest ->
        raise (ConcreteSyntaxError (pos p,
-        "Invalid temporal metadata annotation. Expected Current, Valid, Transaction, or Bitemporal."
+        "Invalid temporal metadata annotation " ^ rest ^ ". " ^
+        "Expected Current, Valid, Transaction, or Bitemporal.")) in
+  parse_temporal_metadata mode args_opt p
 
 let full_kind_of pos prim lin rest =
   let p = primary_kind_of_string pos prim in
@@ -327,6 +341,7 @@ let parse_foreign_language pos lang =
 %token TYPE ROW PRESENCE
 %token TRY OTHERWISE RAISE
 %token <string> OPERATOR
+%token USING
 
 %start just_datatype
 %start interactive
@@ -760,17 +775,14 @@ formlet_expression:
 | PAGE xml                                                     { with_pos $loc (Page $2)          }
 
 table_expression:
-| TABLE exp WITH datatype perhaps_table_constraints FROM exp   { table_lit ~ppos:$loc $2 (datatype $4) $5
-                                                                   (list ~ppos:$loc []) $7 }
 | TABLE exp WITH datatype perhaps_table_constraints
-            TABLEKEYS exp FROM exp                             { table_lit ~ppos:$loc $2 (datatype $4) $5 $7 $9 }
-(*
-| TABLE exp WITH datatype perhaps_table_constraints FROM exp   { with_pos $loc (TableLit ($2, datatype $4, $5,
-                                                                                          list ~ppos:$loc [], $7)) }
-/* SAND */
-| TABLE exp WITH datatype perhaps_table_constraints
-            TABLEKEYS exp FROM exp                             { with_pos $loc (TableLit ($2, datatype $4, $5, $7, $9))}
-                                                                                          *)
+  tablekeys? temporal_metadata_table? FROM exp                 { table_lit ~ppos:$loc $2 (datatype $4) $5 $6 $7 $9 }
+
+tablekeys:
+| TABLEKEYS exp                                                { $2 }
+
+temporal_metadata_table:
+| USING VARIABLE fieldname_list?                               { parse_table_metadata $2 $3 $loc }
 
 perhaps_table_constraints:
 | loption(preceded(WHERE, table_constraints))                  { $1 }
@@ -976,7 +988,7 @@ fieldname_list:
 | LPAREN separated_nonempty_list(COMMA, field_label) RPAREN    { $2 }
 
 temporal_metadata_type:
-| CONSTRUCTOR fieldname_list?                                  { parse_temporal_metadata $1 $2 $loc }
+| CONSTRUCTOR fieldname_list?                                  { parse_table_type_metadata $1 $2 $loc }
 
 table_handle:
 | TABLEHANDLE LPAREN datatype COMMA datatype

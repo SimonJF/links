@@ -157,11 +157,12 @@ module type SugarConstructorsSig = sig
   (* Tables *)
   val table_lit
       : ?ppos:t
-     -> phrase
+     -> phrase (* Table name *)
      -> (Datatype.with_pos * (Types.datatype *
-         Types.datatype * Types.datatype * TemporalMetadata.t) option)
-     -> (Name.t * fieldconstraint list) list
-     -> phrase
-     -> phrase
+         Types.datatype * Types.datatype * TemporalMetadata.t) option) (* Record type *)
+     -> (Name.t * fieldconstraint list) list (* Field constraints *)
+     -> phrase option (* Table keys *)
+     -> TemporalMetadata.t option (* Temporal metadata *)
+     -> phrase (* Database *)
      -> phrase
 end
