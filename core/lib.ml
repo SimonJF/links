@@ -1099,19 +1099,19 @@ let env : (string * (located_primitive * Types.datatype * pure)) list = [
   (* Temporal metadata stuff *)
   "ttData",
     (p1 (fun r ->
-      Value.unbox_record r |> List.assoc "ttdata"),
+      Value.unbox_record r |> List.assoc TemporalMetadata.Transaction.data_field),
     datatype "(TransactionTime((|r))) -> (|r)",
     PURE);
 
   "ttFrom",
     (p1 (fun r ->
-      Value.unbox_record r |> List.assoc "ttfrom"),
+      Value.unbox_record r |> List.assoc TemporalMetadata.Transaction.from_field),
     datatype "(TransactionTime((|r))) -> DateTime",
     PURE);
 
   "ttTo",
     (p1 (fun r ->
-      Value.unbox_record r |> List.assoc "ttto"),
+      Value.unbox_record r |> List.assoc TemporalMetadata.Transaction.to_field),
     datatype "(TransactionTime((|r))) -> DateTime",
     PURE);
 

@@ -3473,15 +3473,13 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * Usage.t =
                          let (_, tbl_ty, _) as e = tc e in
                          let tt = Types.make_table_type (a, b, c, TemporalMetadata.unspecified) in
                          let () = unify ~handle:Gripers.iteration_table_body (pos_and_typ e, no_pos tt) in
-                         let md = TypeUtils.table_metadata tbl_ty in
                          let pattern = tpc pattern in
                          (* Iteration pattern types bind metadata types in the case of temporal tables. *)
                          (* TODO: Will need to update this for ValidTime and Bitemporal *)
                          let pattern_type =
                            let open CommonTypes.TemporalMetadata in
                            match TypeUtils.table_metadata tbl_ty with
-                             | TransactionTime _ ->
-                                `Application (Types.transaction_time_metadata, [`Type a])
+                             | TransactionTime _ -> Types.transaction_absty a
                              | ValidTime _ | Bitemporal _ ->
                                 raise (internal_error "ValidTime / Bitemporal metadata not yet supported")
                              | Current | Unspecified -> a in

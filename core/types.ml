@@ -110,6 +110,9 @@ let transaction_time_metadata = {
   arity      = [pk_type, (lin_any, res_any)]
 }
 
+let transaction_absty typ =
+  `Application (transaction_time_metadata, [`Type typ])
+
 type ('t, 'r) session_type_basis =
     [ `Input of 't * 't
     | `Output of 't * 't

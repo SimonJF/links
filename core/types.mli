@@ -130,6 +130,8 @@ and type_arg =
     [ `Type of typ | `Row of row | `Presence of field_spec ]
     [@@deriving show]
 
+val transaction_absty : typ -> typ
+
 type session_type = (typ, row) session_type_basis
 
 type datatype = typ

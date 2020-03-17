@@ -202,6 +202,7 @@ module Typeability_preserving = struct
            Basicsettings.Sessions.exceptions_enabled
            (module DesugarSessionExceptions)
        ; (module DesugarProcesses)
+       ; (module DesugarTemporalQueries)
        ; (module DesugarFors)
        ; (module DesugarRegexes)
        ; (module DesugarFormlets)
