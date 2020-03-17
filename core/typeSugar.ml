@@ -1128,10 +1128,9 @@ end
 
     let iteration_table_pattern ~pos ~t1:l ~t2:(rexpr,rt) ~error:_ =
       build_tyvar_names [snd l; rt];
-      let rt = Types.make_table_type
-                 (rt, Types.fresh_type_variable (lin_any, res_any)
-                    , Types.fresh_type_variable (lin_any, res_any)
-                    , TemporalMetadata.unspecified) in
+      let rt = Types.make_table_type rt
+                 (Types.fresh_type_variable (lin_any, res_any))
+                 (Types.fresh_type_variable (lin_any, res_any)) in
         with_but2things pos
           ("The binding must match the table in a table generator")
           ("pattern", l) ("expression", (rexpr, rt))
@@ -2180,12 +2179,15 @@ let check_unsafe_signature context unify inner = function
   | Some (_, None) -> raise (internal_error "Sugartypes.datatype' without a Types.typ instance")
 
 let check_metadata pos annotation term_md =
-  if annotation = TemporalMetadata.unspecified then ()
-  else if annotation = term_md then ()
-  else
-    Gripers.die pos
-      (Printf.sprintf "Temporal metadata %s is inconsistent with its annotation %s."
-        (TemporalMetadata.show_term term_md) (TemporalMetadata.show annotation))
+    match Unionfind.find annotation with
+      | `Undefined -> Unionfind.change annotation (`Metadata term_md)
+      | `Metadata md ->
+          if md = term_md then
+            ()
+          else
+            Gripers.die pos
+              (Printf.sprintf "Temporal metadata %s is inconsistent with its annotation %s."
+                (TemporalMetadata.show_term term_md) (TemporalMetadata.show annotation))
 
 let rec pattern_env : Pattern.with_pos -> Types.datatype Env.t =
   fun { node = p; _} -> let open Pattern in
@@ -2775,15 +2777,12 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * Usage.t =
             let () = unify ~handle:Gripers.table_name (pos_and_typ tname, no_pos Types.string_type)
             and () = unify ~handle:Gripers.table_db (pos_and_typ db, no_pos Types.database_type)
             and () = unify ~handle:Gripers.table_keys (pos_and_typ keys, no_pos Types.keys_type) in
-            (* The temporal metadata check will succeed either if the annotation is unspecified,
-             * or the annotation matches the term-level specification. If the check succeeds,
-             * the term-level annotation has strictly more information, so we refine the type. *)
             let () = check_metadata pos md temporal_metadata in
             TableLit { name = erase tname;
                 record_type = (dtype, Some (read_row, write_row, needed_row, temporal_metadata));
                 field_constraints = constraints; keys = erase keys; temporal_metadata;
                 database = erase db },
-              `Table (read_row, write_row, needed_row, temporal_metadata),
+              `Table (read_row, write_row, needed_row, md),
               Usage.combine (usages tname) (usages db)
         | TableLit _ -> assert false
         | LensLit (table, _) ->
@@ -3470,19 +3469,20 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * Usage.t =
                          let a = `Record (Types.make_empty_open_row (lin_unl, res_base)) in
                          let b = `Record (Types.make_empty_open_row (lin_unl, res_base)) in
                          let c = `Record (Types.make_empty_open_row (lin_unl, res_base)) in
-                         let (_, tbl_ty, _) as e = tc e in
-                         let tt = Types.make_table_type (a, b, c, TemporalMetadata.unspecified) in
+                         let d = Types.make_empty_table_metadata () in
+                         let e = tc e in
+                         let tt = Types.make_table_type ~metadata:d a b c in
                          let () = unify ~handle:Gripers.iteration_table_body (pos_and_typ e, no_pos tt) in
                          let pattern = tpc pattern in
                          (* Iteration pattern types bind metadata types in the case of temporal tables. *)
                          (* TODO: Will need to update this for ValidTime and Bitemporal *)
                          let pattern_type =
                            let open CommonTypes.TemporalMetadata in
-                           match TypeUtils.table_metadata tbl_ty with
+                           match TypeUtils.table_metadata tt with
                              | TransactionTime _ -> Types.transaction_absty a
                              | ValidTime _ | Bitemporal _ ->
                                 raise (internal_error "ValidTime / Bitemporal metadata not yet supported")
-                             | Current | Unspecified -> a in
+                             | Current -> a in
                          let () = unify ~handle:Gripers.iteration_table_pattern (ppos_and_typ pattern, (exp_pos e, pattern_type)) in
                            (Table (erase_pat pattern, erase e) :: generators,
                             usages e :: generator_usages,

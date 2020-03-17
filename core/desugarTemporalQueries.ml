@@ -41,16 +41,18 @@ let transaction_generator pat tbl read_row from_col to_col =
  * For transaction-time tables, we use a variant of
  * Fehrenbach & Cheney's provenance translation to construct
  * a for-comprehension to add the transaction-time metadata *)
-let translate_iterpatt pat phr : Types.datatype -> iterpatt =
+let translate_iterpatt pat phr dt =
   let open TemporalMetadata in
-  function
-    | `Table (_, _, _, Current) -> Table (pat, phr)
-    | `Table (read_row, _, _, TransactionTime { tt_from_field; tt_to_field }) ->
+  let read_type = TypeUtils.table_read_type dt in
+  let metadata = TypeUtils.table_metadata dt in
+  match metadata with
+    | Current -> Table (pat, phr)
+    | TransactionTime { tt_from_field; tt_to_field } ->
         transaction_generator pat phr read_row tt_from_field tt_to_field
-    | `Table (_, _, _, md) ->
+    | Undefined -> raise (internal_error "Undefined metadata after typechecking")
+    | _ ->
         raise (internal_error @@
           "Metadata " ^ (TemporalMetadata.show md) ^ " not yet supported.")
-    | _ -> raise (internal_error "Bad iteration pattern type")
 
 
 class desugar_temporal env =
@@ -64,7 +66,7 @@ object (o : 'self_type)
            * tables *)
         let (o, pat) = o#pattern pat in
         let (o, phr, dt) = o#phrase phr in
-        (o, translate_iterpatt pat phr dt)
+        (o, translate_iterpatt pat phr (TypeUtils.concrete_type dt))
       | ip -> super#iterpatt ip
 end
 

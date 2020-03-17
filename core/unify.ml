@@ -231,11 +231,16 @@ type unify_env =
   ; qenv: quantifier_env
   }
 
-let unify_metadata md1 md2 =
-  if md1 <> TemporalMetadata.unspecified && md2 <> TemporalMetadata.unspecified &&
-    md1 <> md2 then
-    raise (Failure (`Msg ("Temporal metadatas " ^ (TemporalMetadata.show md1) ^
-    " and " ^ (TemporalMetadata.show md2) ^ " are incompatible.")))
+let unify_metadata p1 p2 =
+  match (Unionfind.find p1, Unionfind.find p2) with
+    | `Undefined, `Undefined -> Unionfind.union p1 p2
+    | `Metadata _, `Undefined -> Unionfind.union p2 p1
+    | `Undefined, `Metadata _ -> Unionfind.union p1 p2
+    | `Metadata md1, `Metadata md2 ->
+        if md1 <> md2 then
+          raise (Failure (`Msg ("Temporal metadatas " ^ (TemporalMetadata.show md1) ^
+          " and " ^ (TemporalMetadata.show md2) ^ " are incompatible.")))
+        else Unionfind.union p1 p2
 
 let check_subkind var (lin, res) typ =
   if Linearity.is_nonlinear lin then

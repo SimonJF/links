@@ -32,6 +32,10 @@ type 't meta_row_var_basis =
 
 type 't meta_presence_var_basis = 't meta_type_var_non_rec_basis
 
+type meta_md_var_basis = [
+  | `Undefined | `Metadata of TemporalMetadata.t
+]
+
 type 't meta_max_basis = 't meta_row_var_basis
 
 module Abstype :
@@ -110,7 +114,7 @@ and typ =
     | `Record of row
     | `Variant of row
     | `Effect of row
-    | `Table of typ * typ * typ * TemporalMetadata.t
+    | `Table of typ * typ * typ * meta_md_var
     | `Lens of Lens.Type.t
     | `Alias of ((string * Kind.t list * type_arg list) * typ)
     | `Application of (Abstype.t * type_arg list)
@@ -125,12 +129,14 @@ and row = field_spec_map * row_var * bool
 and meta_type_var = (typ meta_type_var_basis) point
 and meta_row_var = (row meta_row_var_basis) point
 and meta_presence_var = (field_spec meta_presence_var_basis) point
+and meta_md_var = meta_md_var_basis point
 and meta_var = [ `Type of meta_type_var | `Row of meta_row_var | `Presence of meta_presence_var ]
 and type_arg =
     [ `Type of typ | `Row of row | `Presence of field_spec ]
     [@@deriving show]
 
 val transaction_absty : typ -> typ
+val make_empty_table_metadata : unit -> meta_md_var
 
 type session_type = (typ, row) session_type_basis
 
@@ -319,7 +325,7 @@ val make_list_type : datatype -> datatype
 val make_process_type : row -> datatype
 val make_record_type  : datatype field_env -> datatype
 val make_variant_type : datatype field_env -> datatype
-val make_table_type : datatype * datatype * datatype * TemporalMetadata.t -> datatype
+val make_table_type : ?metadata:(TemporalMetadata.t) -> datatype -> datatype -> datatype -> datatype
 val make_endbang_type : datatype
 
 (** subtyping *)

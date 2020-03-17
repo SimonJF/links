@@ -41,6 +41,11 @@ type 'r meta_row_var_basis =
 type 't meta_presence_var_basis = 't meta_type_var_non_rec_basis
       [@@deriving show]
 
+type meta_md_var_basis = [
+  | `Undefined | `Metadata of TemporalMetadata.t
+]
+  [@@deriving show]
+
 (* this subsumes all of the other meta_X_basis thingies *)
 type 't meta_max_basis = 't meta_row_var_basis
 
@@ -113,6 +118,8 @@ let transaction_time_metadata = {
 let transaction_absty typ =
   `Application (transaction_time_metadata, [`Type typ])
 
+let make_empty_table_metadata () = Unionfind.fresh `Undefined
+
 type ('t, 'r) session_type_basis =
     [ `Input of 't * 't
     | `Output of 't * 't
@@ -163,7 +170,7 @@ and typ =
     | `Record of row
     | `Variant of row
     | `Effect of row
-    | `Table of typ * typ * typ * TemporalMetadata.t
+    | `Table of typ * typ * typ * meta_md_var
     | `Lens of Lens.Type.t
     | `Alias of ((string * Kind.t list * type_arg list) * typ)
     | `Application of (Abstype.t * type_arg list)
@@ -178,6 +185,7 @@ and row            = field_spec_map * row_var * bool (* true if the row variable
 and meta_type_var  = (typ meta_type_var_basis) point
 and meta_row_var   = (row meta_row_var_basis) point
 and meta_presence_var = (field_spec meta_presence_var_basis) point
+and meta_md_var    = meta_md_var_basis point
 and meta_var = [ `Type of meta_type_var | `Row of meta_row_var | `Presence of meta_presence_var ]
 and type_arg =
     [ `Type of typ | `Row of row | `Presence of field_spec ]
@@ -2620,7 +2628,13 @@ let make_closed_row : datatype field_env -> row = fun fields ->
 let make_record_type ts = `Record (make_closed_row ts)
 let make_variant_type ts = `Variant (make_closed_row ts)
 
-let make_table_type (r, w, n, md) = `Table (r, w, n, md)
+let make_table_type ?metadata r w n =
+  let md =
+    match metadata with
+      | Some md -> `Metadata md
+      | None -> `Undefined in
+  `Table (r, w, n, Unionfind.fresh md)
+
 let make_endbang_type : datatype = `Alias (("EndBang", [], []), `Output (unit_type, `End))
 
 let make_function_type : ?linear:bool -> datatype list -> row -> datatype -> datatype
