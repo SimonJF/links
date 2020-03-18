@@ -33,26 +33,24 @@ let transaction_generator pat tbl read_row from_col to_col =
       ], None)) in
 
   let body = dp (ListLit ([record], Some transaction_md_ty)) in
-  let inner_iter = dp (Iteration ([(Table (fresh_var_pat, tbl) ) ], body, None, None)) in
+  let inner_iter = dp (Iteration ([(Table (TableMode.current, fresh_var_pat, tbl) ) ], body, None, None)) in
   List (pat, inner_iter)
 
-(* Here, we analyse the type of the table generator.
- * For current-time tables, we leave the pattern as-is.
- * For transaction-time tables, we use a variant of
- * Fehrenbach & Cheney's provenance translation to construct
- * a for-comprehension to add the transaction-time metadata *)
-let translate_iterpatt pat phr dt =
-  let open TemporalMetadata in
+(* Desugar based on the mode of the iteration pattern.
+ * Currently, this doesn't support projecting from the dynamically-specified fields.
+ * This makes sense, since without it, how would we do, say, polymorphism?
+ *)
+let translate_iterpatt mode pat phr dt =
   let read_row = TypeUtils.table_read_type dt in
-  let metadata = TypeUtils.table_metadata dt in
-  match metadata with
-    | Current -> Table (pat, phr)
-    | TransactionTime { tt_from_field; tt_to_field } ->
-        transaction_generator pat phr read_row tt_from_field tt_to_field
-    | _ ->
-        raise (internal_error @@
-          "Metadata " ^ (TemporalMetadata.show metadata) ^ " not yet supported.")
-
+  let open TableMode in
+  match mode with
+    | TableMode.Current -> Table (mode, pat, phr)
+    | Transaction ->
+        (* FIXME: This should reflect the fields specified in the "table" declaration.
+         * We'll likely need to find some way to access the term-level metadata (new constructs?) *)
+        transaction_generator pat phr read_row "ttime_from" "ttime_to"
+    | Valid | Bitemporal ->
+       raise (internal_error "ValidTime / Bitemporal metadata not yet supported")
 
 class desugar_temporal env =
 object (o : 'self_type)
@@ -60,12 +58,12 @@ object (o : 'self_type)
 
   method! iterpatt : Sugartypes.iterpatt -> ('self_type * iterpatt) =
     function
-      | Table (pat, phr) ->
+      | Table (mode, pat, phr) ->
           (* Here's where we do the type-directed transformation of
            * tables *)
         let (o, pat) = o#pattern pat in
         let (o, phr, dt) = o#phrase phr in
-        (o, translate_iterpatt pat phr (TypeUtils.concrete_type dt))
+        (o, translate_iterpatt mode pat phr (TypeUtils.concrete_type dt))
       | ip -> super#iterpatt ip
 end
 

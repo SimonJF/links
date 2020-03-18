@@ -223,12 +223,7 @@ let rec table_needed_type t = match concrete_type t with
 
 let rec table_metadata t = match concrete_type t with
   | `ForAll (_, t) -> table_metadata t
-  | `Table (_, _, _, md) ->
-      begin
-        match Unionfind.find md with
-          | `Undefined -> error ("Unresolved temporal metadata variable")
-          | `Metadata md -> md
-      end
+  | `Table (_, _, _, md) -> md
   | t ->
       error ("Attempt to take metadata of non-table: " ^ string_of_datatype t)
 

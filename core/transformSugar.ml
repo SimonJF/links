@@ -594,7 +594,7 @@ class transform (env : Types.typing_environment) =
           let tbl_lit = { name; record_type = (dtype, Some tbl_ty);
             field_constraints = constraints; keys; temporal_metadata; database = db } in
           (o, TableLit tbl_lit, `Table tbl_ty)
-      | DBDelete (p, from, where) ->
+      | DBDelete (mode, p, from, where) ->
           let (o, from, _) = o#phrase from in
           let (o, p) = o#pattern p in
             (* BUG:
@@ -605,13 +605,13 @@ class transform (env : Types.typing_environment) =
                The same applies to DBUpdate and Iteration.
             *)
           let (o, where, _) = option o (fun o -> o#phrase) where in
-            (o, DBDelete (p, from, where), Types.unit_type)
-      | DBInsert (into, labels, values, id) ->
+            (o, DBDelete (mode, p, from, where), Types.unit_type)
+      | DBInsert (mode, into, labels, values, id) ->
           let (o, into, _) = o#phrase into in
           let (o, values, _) = o#phrase values in
           let (o, id, _) = option o (fun o -> o#phrase) id in
-            (o, DBInsert (into, labels, values, id), Types.unit_type)
-      | DBUpdate (p, from, where, set) ->
+            (o, DBInsert (mode, into, labels, values, id), Types.unit_type)
+      | DBUpdate (mode, p, from, where, set) ->
           let (o, from, _) = o#phrase from in
           let (o, p) = o#pattern p in
           let (o, where, _) = option o (fun o -> o#phrase) where in
@@ -621,7 +621,7 @@ class transform (env : Types.typing_environment) =
                  let (o, value, _) = o#phrase value in (o, (name, value)))
               set
           in
-            (o, DBUpdate (p, from, where, set), Types.unit_type)
+            (o, DBUpdate (mode, p, from, where, set), Types.unit_type)
       | Xml (tag, attrs, attrexp, children) ->
           let (o, attrs) =
             listu o
@@ -716,10 +716,10 @@ class transform (env : Types.typing_environment) =
           let (o, e, _) = o#phrase e in
           let (o, p) = o#pattern p in
           (o, List (p, e))
-      | Table (p, e) ->
+      | Table (m, p, e) ->
           let (o, e, _) = o#phrase e in
           let (o, p) = o#pattern p in
-          (o, Table (p, e))
+          (o, Table (m, p, e))
 
     method funlit : Types.row -> funlit -> ('self_type * funlit * Types.datatype) =
       fun inner_eff (pss, e) ->

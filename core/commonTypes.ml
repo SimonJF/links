@@ -256,9 +256,18 @@ module QueryPolicy = struct
     [@@deriving show]
 end
 
+module TableMode = struct
+  type t = Current | Transaction | Valid | Bitemporal
+  [@@deriving show]
+
+  let current = Current
+  let transaction = Transaction
+  let valid = Valid
+  let bitemporal = Bitemporal
+end
+
 module TemporalMetadata = struct
   type t =
-    | Unspecified (* Used for unification only. *)
     | Current
     | TransactionTime of { tt_from_field: string; tt_to_field: string }
     | ValidTime       of { vt_from_field: string; vt_to_field: string }
@@ -266,7 +275,6 @@ module TemporalMetadata = struct
       { tt_from_field: string; tt_to_field: string;
         vt_from_field: string; vt_to_field: string }
 
-  let unspecified = Unspecified
   let current = Current
 
   let transaction_time tt_from_field tt_to_field =
@@ -281,7 +289,6 @@ module TemporalMetadata = struct
   let show =
     let open Printf in
     function
-    | Unspecified -> "Unspecified"
     | Current -> "Current"
     | TransactionTime { tt_from_field; tt_to_field } ->
         sprintf "Transaction(%s, %s)" tt_from_field tt_to_field
@@ -294,7 +301,6 @@ module TemporalMetadata = struct
   let show_term =
     let open Printf in
     function
-    | Unspecified -> "unspecified"
     | Current -> "current"
     | TransactionTime { tt_from_field; tt_to_field } ->
         sprintf "transaction_time(%s, %s)" tt_from_field tt_to_field

@@ -301,7 +301,7 @@ and handler_parameterisation =
   }
 and iterpatt =
   | List  of Pattern.with_pos * phrase
-  | Table of Pattern.with_pos * phrase
+  | Table of TableMode.t * Pattern.with_pos * phrase
 and table_lit =
   { name: phrase;
     record_type:
@@ -356,9 +356,9 @@ and phrasenode =
   | Receive          of (Pattern.with_pos * phrase) list * Types.datatype option
   | DatabaseLit      of phrase * (phrase option * phrase option)
   | TableLit         of table_lit
-  | DBDelete         of Pattern.with_pos * phrase * phrase option
-  | DBInsert         of phrase * Name.t list * phrase * phrase option
-  | DBUpdate         of Pattern.with_pos * phrase * phrase option *
+  | DBDelete         of TableMode.t * Pattern.with_pos * phrase * phrase option
+  | DBInsert         of TableMode.t * phrase * Name.t list * phrase * phrase option
+  | DBUpdate         of TableMode.t * Pattern.with_pos * phrase * phrase option *
                           (Name.t * phrase) list
   | LensLit          of phrase * Lens.Type.t option
   | LensSerialLit    of phrase * string list * Lens.Type.t option
@@ -580,7 +580,7 @@ struct
     | ConstructorLit (_, popt, _) -> option_map phrase popt
     | DatabaseLit (p, (popt1, popt2)) ->
         union_all [phrase p; option_map phrase popt1; option_map phrase popt2]
-    | DBInsert (p1, _labels, p2, popt) ->
+    | DBInsert (_, p1, _labels, p2, popt) ->
         union_all [phrase p1; phrase p2; option_map phrase popt]
     | TableLit { name; database; _} -> union (phrase name) (phrase database)
     | Xml (_, attrs, attrexp, children) ->
@@ -595,10 +595,10 @@ struct
     | Iteration (generators, body, where, orderby) ->
         let xs = union_map (function
                              | List (_, source)
-                             | Table (_, source) -> phrase source) generators in
+                             | Table (_, _, source) -> phrase source) generators in
         let pat_bound = union_map (function
                                   | List (pat, _)
-                                  | Table (pat, _) -> pattern pat) generators in
+                                  | Table (_, pat, _) -> pattern pat) generators in
           union_all [xs;
                      diff (phrase body) pat_bound;
                      diff (option_map phrase where) pat_bound;
@@ -620,11 +620,11 @@ struct
     | Offer (p, cases, _) -> union (phrase p) (union_map case cases)
     | CP cp -> cp_phrase cp
     | Receive (cases, _) -> union_map case cases
-    | DBDelete (pat, p, where) ->
+    | DBDelete (_, pat, p, where) ->
         union (phrase p)
           (diff (option_map phrase where)
              (pattern pat))
-    | DBUpdate (pat, from, where, fields) ->
+    | DBUpdate (_, pat, from, where, fields) ->
         let pat_bound = pattern pat in
           union_all [phrase from;
                      diff (option_map phrase where) pat_bound;

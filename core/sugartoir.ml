@@ -1031,16 +1031,16 @@ struct
           | Block (bs, e) -> eval_bindings Scope.Local env bs e
           | Query (range, policy, e, _) ->
               I.query (opt_map (fun (limit, offset) -> (ev limit, ev offset)) range, policy, ec e)
-	  | DBInsert (source, _fields, rows, None) ->
-	      let source = ev source in
-	      let rows = ev rows in
-	      I.db_insert env (source, rows)
-	  | DBInsert (source, _fields, rows, Some returning) ->
-	      let source = ev source in
-	      let rows = ev rows in
-	      let returning = ev returning in
-	      I.db_insert_returning env (source, rows, returning)
-          | DBUpdate (p, source, where, fields) ->
+          | DBInsert (_, source, _fields, rows, None) ->
+              let source = ev source in
+              let rows = ev rows in
+              I.db_insert env (source, rows)
+          | DBInsert (_, source, _fields, rows, Some returning) ->
+              let source = ev source in
+              let rows = ev rows in
+              let returning = ev returning in
+              I.db_insert_returning env (source, rows, returning)
+          | DBUpdate (_, p, source, where, fields) ->
               let p, penv = CompilePatterns.desugar_pattern (lookup_effects env) p in
               let env' = env ++ penv in
               let source = ev source in
@@ -1050,7 +1050,7 @@ struct
                   where in
               let body = eval env' (WithPos.make ~pos (RecordLit (fields, None))) in
                 I.db_update env (p, source, where, body)
-          | DBDelete (p, source, where) ->
+          | DBDelete (_, p, source, where) ->
               let p, penv = CompilePatterns.desugar_pattern (lookup_effects env) p in
               let env' = env ++ penv in
               let source = ev source in

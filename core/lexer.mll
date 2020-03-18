@@ -196,6 +196,9 @@ rule lex ctxt nl = parse
   | '}'                                 { ctxt#pop_lexer (* fall back *); RBRACE }
   | "<->"                               { LRARROW }
   | "<--"                               { LLARROW }
+  | "<-t-"                              { LTLARROW }
+  | "<-v-"                              { LVLARROW }
+  | "<-b-"                              { LBLARROW }
   | "<-"                                { LARROW }
   | "<|"                                { LEFTTRIANGLE }
   | "|>"                                { RIGHTTRIANGLE }

@@ -408,17 +408,17 @@ class map =
           let _x_i1 = o#phrase _x_i1 in
           let _x_i2 = o#option (fun o -> o#typ) _x_i2 in
             LensPutLit ((_x, _x_i1, _x_i2))
-      | DBDelete ((_x, _x_i1, _x_i2)) ->
+      | DBDelete ((_mode, _x, _x_i1, _x_i2)) ->
           let _x = o#pattern _x in
           let _x_i1 = o#phrase _x_i1 in
           let _x_i2 = o#option (fun o -> o#phrase) _x_i2
-          in DBDelete ((_x, _x_i1, _x_i2))
-      | DBInsert ((_x, _x_i1, _x_i2, _x_i3)) ->
+          in DBDelete ((_mode, _x, _x_i1, _x_i2))
+      | DBInsert ((_mode, _x, _x_i1, _x_i2, _x_i3)) ->
           let _x = o#phrase _x in
           let _x_i1 = o#list (fun o -> o#name) _x_i1 in
           let _x_i2 = o#phrase _x_i2 in
-          let _x_i3 = o#option (fun o -> o#phrase) _x_i3 in DBInsert ((_x, _x_i1, _x_i2, _x_i3))
-      | DBUpdate ((_x, _x_i1, _x_i2, _x_i3)) ->
+          let _x_i3 = o#option (fun o -> o#phrase) _x_i3 in DBInsert ((_mode, _x, _x_i1, _x_i2, _x_i3))
+      | DBUpdate ((_mode, _x, _x_i1, _x_i2, _x_i3)) ->
           let _x = o#pattern _x in
           let _x_i1 = o#phrase _x_i1 in
           let _x_i2 = o#option (fun o -> o#phrase) _x_i2 in
@@ -428,7 +428,7 @@ class map =
                  let _x = o#name _x in
                  let _x_i1 = o#phrase _x_i1 in (_x, _x_i1))
               _x_i3
-          in DBUpdate ((_x, _x_i1, _x_i2, _x_i3))
+          in DBUpdate ((_mode, _x, _x_i1, _x_i2, _x_i3))
       | Xml ((_x, _x_i1, _x_i2, _x_i3)) ->
           let _x = o#name _x in
           let _x_i1 =
@@ -545,9 +545,9 @@ class map =
       | List ((_x, _x_i1)) ->
           let _x = o#pattern _x in
           let _x_i1 = o#phrase _x_i1 in List ((_x, _x_i1))
-      | Table ((_x, _x_i1)) ->
+      | Table ((mode, _x, _x_i1)) ->
           let _x = o#pattern _x in
-          let _x_i1 = o#phrase _x_i1 in Table ((_x, _x_i1))
+          let _x_i1 = o#phrase _x_i1 in Table ((mode, _x, _x_i1))
 
     method funlit : funlit -> funlit =
       fun (_x, _x_i1) ->
@@ -1147,15 +1147,15 @@ class fold =
           let o = o#phrase _x_i1 in
           let o = o#option (fun o -> o#unknown) _x_i2 in
             o
-      | DBDelete ((_x, _x_i1, _x_i2)) ->
+      | DBDelete ((_mode, _x, _x_i1, _x_i2)) ->
           let o = o#pattern _x in
           let o = o#phrase _x_i1 in
           let o = o#option (fun o -> o#phrase) _x_i2 in o
-      | DBInsert ((_x, _x_i1, _x_i2, _x_i3)) ->
+      | DBInsert ((_mode, _x, _x_i1, _x_i2, _x_i3)) ->
           let o = o#phrase _x in
           let o = o#list (fun o -> o#name) _x_i1 in
           let o = o#phrase _x_i2 in let o = o#option (fun o -> o#phrase) _x_i3 in o
-      | DBUpdate ((_x, _x_i1, _x_i2, _x_i3)) ->
+      | DBUpdate ((_mode, _x, _x_i1, _x_i2, _x_i3)) ->
           let o = o#pattern _x in
           let o = o#phrase _x_i1 in
           let o = o#option (fun o -> o#phrase) _x_i2 in
@@ -1267,7 +1267,7 @@ class fold =
       function
       | List ((_x, _x_i1)) ->
           let o = o#pattern _x in let o = o#phrase _x_i1 in o
-      | Table ((_x, _x_i1)) ->
+      | Table ((_mode, _x, _x_i1)) ->
           let o = o#pattern _x in let o = o#phrase _x_i1 in o
 
     method funlit : funlit -> 'self_type =
@@ -1918,18 +1918,18 @@ class fold_map =
           let (o, _x_i1) = o#phrase _x_i1 in
           let (o, _x_i2) = o#option (fun o -> o#typ) _x_i2 in
             (o, (LensPutLit ((_x, _x_i1, _x_i2))))
-      | DBDelete ((_x, _x_i1, _x_i2)) ->
+      | DBDelete ((_mode, _x, _x_i1, _x_i2)) ->
           let (o, _x) = o#pattern _x in
           let (o, _x_i1) = o#phrase _x_i1 in
           let (o, _x_i2) = o#option (fun o -> o#phrase) _x_i2
-          in (o, (DBDelete ((_x, _x_i1, _x_i2))))
-      | DBInsert ((_x, _x_i1, _x_i2, _x_i3)) ->
+          in (o, (DBDelete ((_mode, _x, _x_i1, _x_i2))))
+      | DBInsert ((_mode, _x, _x_i1, _x_i2, _x_i3)) ->
           let (o, _x) = o#phrase _x in
           let (o, _x_i1) = o#list (fun o -> o#name) _x_i1 in
           let (o, _x_i2) = o#phrase _x_i2 in
           let (o, _x_i3) = o#option (fun o -> o#phrase) _x_i3
-          in (o, (DBInsert ((_x, _x_i1, _x_i2, _x_i3))))
-      | DBUpdate ((_x, _x_i1, _x_i2, _x_i3)) ->
+          in (o, (DBInsert ((_mode, _x, _x_i1, _x_i2, _x_i3))))
+      | DBUpdate ((_mode, _x, _x_i1, _x_i2, _x_i3)) ->
           let (o, _x) = o#pattern _x in
           let (o, _x_i1) = o#phrase _x_i1 in
           let (o, _x_i2) = o#option (fun o -> o#phrase) _x_i2 in
@@ -1939,7 +1939,7 @@ class fold_map =
                  let (o, _x) = o#name _x in
                  let (o, _x_i1) = o#phrase _x_i1 in (o, (_x, _x_i1)))
               _x_i3
-          in (o, (DBUpdate ((_x, _x_i1, _x_i2, _x_i3))))
+          in (o, (DBUpdate ((_mode, _x, _x_i1, _x_i2, _x_i3))))
       | Xml ((_x, _x_i1, _x_i2, _x_i3)) ->
           let (o, _x) = o#name _x in
           let (o, _x_i1) =
@@ -2089,9 +2089,9 @@ class fold_map =
       | List ((_x, _x_i1)) ->
           let (o, _x) = o#pattern _x in
           let (o, _x_i1) = o#phrase _x_i1 in (o, (List ((_x, _x_i1))))
-      | Table ((_x, _x_i1)) ->
+      | Table ((mode, _x, _x_i1)) ->
           let (o, _x) = o#pattern _x in
-          let (o, _x_i1) = o#phrase _x_i1 in (o, (Table ((_x, _x_i1))))
+          let (o, _x_i1) = o#phrase _x_i1 in (o, (Table ((mode, _x, _x_i1))))
 
     method funlit : funlit -> ('self_type * funlit) =
       fun (_x, _x_i1) ->

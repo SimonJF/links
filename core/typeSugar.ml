@@ -2894,7 +2894,7 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * Usage.t =
            let ltrow = Lens_type_conv.type_of_lens_phrase_type ~context trow in
            unify (pos_and_typ data, (exp_pos lens, Types.make_list_type ltrow)) ~handle:Gripers.lens_put_input;
            LensPutLit (erase lens, erase data, Some Types.unit_type), make_tuple_type [], Usage.combine (usages lens) (usages data)
-        | DBDelete (pat, from, where) ->
+        | DBDelete (mode, pat, from, where) ->
             let pat  = tpc pat in
             let from = tc from in
             let read  = `Record (Types.make_empty_open_row (lin_any, res_base)) in
@@ -2924,9 +2924,9 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * Usage.t =
                 unify ~handle:Gripers.delete_outer
                   (no_pos (`Record context.effect_row), no_pos (`Record outer_effects))
             in
-              DBDelete (erase_pat pat, erase from, opt_map erase where), Types.unit_type,
+              DBDelete (mode, erase_pat pat, erase from, opt_map erase where), Types.unit_type,
               Usage.combine (usages from) (hide (from_option Usage.empty (opt_map usages where)))
-        | DBInsert (into, labels, values, id) ->
+        | DBInsert (mode, into, labels, values, id) ->
             let into   = tc into in
             let values = tc values in
             let id = opt_map tc id in
@@ -2997,9 +2997,9 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * Usage.t =
                 unify ~handle:Gripers.insert_outer
                   (no_pos (`Record context.effect_row), no_pos (`Record outer_effects))
             in
-              DBInsert (erase into, labels, erase values, opt_map erase id), return_type,
+              DBInsert (mode, erase into, labels, erase values, opt_map erase id), return_type,
               Usage.combine_many [usages into; usages values; from_option Usage.empty (opt_map usages id)]
-        | DBUpdate (pat, from, where, set) ->
+        | DBUpdate (mode, pat, from, where, set) ->
             let pat  = tpc pat in
             let from = tc from in
             let read =  `Record (Types.make_empty_open_row (lin_any, res_base)) in
@@ -3061,7 +3061,7 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * Usage.t =
                 unify ~handle:Gripers.update_outer
                   (no_pos (`Record context.effect_row), no_pos (`Record outer_effects))
             in
-              DBUpdate (erase_pat pat, erase from, opt_map erase where, List.map (fun (n,(p,_,_)) -> n, p) set),
+              DBUpdate (mode, erase_pat pat, erase from, opt_map erase where, List.map (fun (n,(p,_,_)) -> n, p) set),
               Types.unit_type,
               Usage.combine_many (usages from :: hide (from_option Usage.empty (opt_map usages where)) :: List.map hide (List.map (usages -<- snd) set))
         | Query (range, policy, p, _) ->
@@ -3465,26 +3465,26 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * Usage.t =
                            (List (erase_pat pattern, erase e) :: generators,
                             usages e :: generator_usages,
                             pattern_env pattern :: environments)
-                     | Table (pattern, e) ->
+                     | Table (mode, pattern, e) ->
                          let a = `Record (Types.make_empty_open_row (lin_unl, res_base)) in
                          let b = `Record (Types.make_empty_open_row (lin_unl, res_base)) in
                          let c = `Record (Types.make_empty_open_row (lin_unl, res_base)) in
                          let d = Types.make_empty_table_metadata () in
+                         let pattern = tpc pattern in
                          let e = tc e in
                          let tt = `Table (a, b, c, d) in
                          let () = unify ~handle:Gripers.iteration_table_body (pos_and_typ e, no_pos tt) in
-                         let pattern = tpc pattern in
                          (* Iteration pattern types bind metadata types in the case of temporal tables. *)
                          (* TODO: Will need to update this for ValidTime and Bitemporal *)
                          let pattern_type =
-                           let open CommonTypes.TemporalMetadata in
-                           match TypeUtils.table_metadata tt with
-                             | TransactionTime _ -> Types.transaction_absty a
-                             | ValidTime _ | Bitemporal _ ->
-                                raise (internal_error "ValidTime / Bitemporal metadata not yet supported")
-                             | Current -> a in
+                           let open CommonTypes.TableMode in
+                           match mode with
+                             | Current -> a
+                             | Transaction -> Types.transaction_absty a
+                             | Valid | Bitemporal ->
+                                raise (internal_error "ValidTime / Bitemporal metadata not yet supported") in
                          let () = unify ~handle:Gripers.iteration_table_pattern (ppos_and_typ pattern, (exp_pos e, pattern_type)) in
-                           (Table (erase_pat pattern, erase e) :: generators,
+                           (Table (mode, erase_pat pattern, erase e) :: generators,
                             usages e :: generator_usages,
                             pattern_env pattern:: environments))
                 ([], [], []) generators in

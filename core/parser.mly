@@ -308,7 +308,7 @@ let parse_foreign_language pos lang =
 %token LBRACKETPLUSBAR BARPLUSRBRACKET
 %token LBRACKETAMPBAR BARAMPRBRACKET
 %token LEFTTRIANGLE RIGHTTRIANGLE NU
-%token FOR LARROW LLARROW WHERE FORMLET PAGE
+%token FOR LARROW LLARROW LTLARROW LBLARROW LVLARROW WHERE FORMLET PAGE
 %token LRARROW
 %token COMMA VBAR DOT DOTDOT COLON COLONCOLON
 %token TABLE TABLEHANDLE TABLEKEYS FROM DATABASE QUERY WITH YIELDS ORDERBY
@@ -669,10 +669,10 @@ typed_expression:
 | typed_expression COLON datatype LARROW datatype              { with_pos $loc (Upcast ($1, datatype $3, datatype $5)) }
 
 db_expression:
-| DELETE LPAREN table_generator RPAREN perhaps_where           { let pat, phrase = $3 in with_pos $loc (DBDelete (pat, phrase, $5)) }
+| DELETE LPAREN table_generator RPAREN perhaps_where           { let mode, pat, phrase = $3 in with_pos $loc (DBDelete (mode, pat, phrase, $5)) }
 | UPDATE LPAREN table_generator RPAREN
          perhaps_where
-         SET LPAREN labeled_exps RPAREN                        { let pat, phrase = $3 in with_pos $loc (DBUpdate(pat, phrase, $5, $8)) }
+         SET LPAREN labeled_exps RPAREN                        { let mode, pat, phrase = $3 in with_pos $loc (DBUpdate(mode, pat, phrase, $5, $8)) }
 
 /* XML */
 xmlid:
@@ -751,13 +751,16 @@ perhaps_generators:
 
 generator:
 | list_generator                                               { List  (fst $1, snd $1) }
-| table_generator                                              { Table (fst $1, snd $1) }
+| table_generator                                              { let (x, y, z) = $1 in Table (x, y, z) }
 
 list_generator:
 | pattern LARROW exp                                           { ($1, $3) }
 
 table_generator:
-| pattern LLARROW exp                                          { ($1, $3) }
+| pattern LLARROW exp                                          { (TableMode.current, $1, $3) }
+| pattern LTLARROW exp                                         { (TableMode.transaction, $1, $3) }
+| pattern LVLARROW exp                                         { (TableMode.valid, $1, $3) }
+| pattern LBLARROW exp                                         { (TableMode.bitemporal, $1, $3) }
 
 perhaps_where:
 | /* empty */                                                  { None    }
@@ -819,11 +822,11 @@ exp:
 | typed_expression                                             { $1 }
 
 database_expression:
-| INSERT exp VALUES LPAREN record_labels RPAREN exp            { db_insert ~ppos:$loc $2 $5 $7 None }
+| INSERT exp VALUES LPAREN record_labels RPAREN exp            { db_insert ~ppos:$loc (TableMode.current) $2 $5 $7 None }
 | INSERT exp VALUES LBRACKET LPAREN loption(labeled_exps)
-  RPAREN RBRACKET preceded(RETURNING, VARIABLE)?               { db_insert ~ppos:$loc $2 (labels $6) (db_exps ~ppos:$loc($6) $6) $9  }
+  RPAREN RBRACKET preceded(RETURNING, VARIABLE)?               { db_insert ~ppos:$loc (TableMode.current) $2 (labels $6) (db_exps ~ppos:$loc($6) $6) $9  }
 | INSERT exp VALUES LPAREN record_labels RPAREN typed_expression
-  RETURNING VARIABLE                                           { db_insert ~ppos:$loc $2 $5 $7 (Some $9) }
+  RETURNING VARIABLE                                           { db_insert ~ppos:$loc (TableMode.current) $2 $5 $7 (Some $9) }
 | DATABASE atomic_expression perhaps_db_driver                 { with_pos $loc (DatabaseLit ($2, $3))           }
 
 fn_dep_cols:
