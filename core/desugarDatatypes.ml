@@ -600,7 +600,9 @@ module Desugar = struct
         | Record r -> `Record (row var_env alias_env r t')
         | Variant r -> `Variant (row var_env alias_env r t')
         | Effect r -> `Effect (row var_env alias_env r t')
-        | Table (r, w, n, md) -> `Table (datatype var_env r, datatype var_env w, datatype var_env n, md)
+        | Table (r, w, n, md) ->
+            `Table (datatype var_env r, datatype var_env w,
+              datatype var_env n, Types.make_table_metadata_var md)
         | List k -> `Application (Types.list, [ `Type (datatype var_env k) ])
         | TypeApplication (tycon, ts) ->
             (* Matches kinds of the quantifiers against the type arguments.
@@ -879,7 +881,8 @@ object (self)
         let o, t = self#phrase t in
         let o, keys = o#phrase keys in
         let o, p = o#phrase p in
-          o, TableLit { name = t; record_type = (dt, Some (read, write, needed, temporal_metadata));
+        let md = Types.make_table_metadata_var temporal_metadata in
+          o, TableLit { name = t; record_type = (dt, Some (read, write, needed, md));
             field_constraints = cs; keys; temporal_metadata; database = p }
     (* Switch and receive type annotations are never filled in by
        this point, so we ignore them.  *)

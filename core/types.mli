@@ -137,6 +137,7 @@ and type_arg =
 
 val transaction_absty : typ -> typ
 val make_empty_table_metadata : unit -> meta_md_var
+val make_table_metadata_var : TemporalMetadata.t -> meta_md_var
 
 type session_type = (typ, row) session_type_basis
 

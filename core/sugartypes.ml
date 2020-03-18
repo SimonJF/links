@@ -306,7 +306,7 @@ and table_lit =
   { name: phrase;
     record_type:
       (Datatype.with_pos * (Types.datatype *
-        Types.datatype * Types.datatype * TemporalMetadata.t) option);
+        Types.datatype * Types.datatype * Types.meta_md_var) option);
     field_constraints: (Name.t * fieldconstraint list) list;
     keys: phrase;
     temporal_metadata: TemporalMetadata.t;

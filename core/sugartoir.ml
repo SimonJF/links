@@ -163,7 +163,7 @@ sig
 
   val database : value sem -> tail_computation sem
 
-  val table_handle : value sem * value sem * value sem * (datatype * datatype * datatype * TemporalMetadata.t) -> tail_computation sem
+  val table_handle : value sem * value sem * value sem * (datatype * datatype * datatype * Types.meta_md_var) -> tail_computation sem
 
   val lens_handle : value sem * Lens.Type.t -> tail_computation sem
 

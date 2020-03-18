@@ -105,7 +105,7 @@ and table = {
   database: value;
   table: value;
   keys: value;
-  table_type: (Types.datatype * Types.datatype * Types.datatype * TemporalMetadata.t)
+  table_type: (Types.datatype * Types.datatype * Types.datatype * Types.meta_md_var)
 }
   [@@deriving show]
 

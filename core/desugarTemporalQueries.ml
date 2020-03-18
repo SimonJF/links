@@ -43,16 +43,15 @@ let transaction_generator pat tbl read_row from_col to_col =
  * a for-comprehension to add the transaction-time metadata *)
 let translate_iterpatt pat phr dt =
   let open TemporalMetadata in
-  let read_type = TypeUtils.table_read_type dt in
+  let read_row = TypeUtils.table_read_type dt in
   let metadata = TypeUtils.table_metadata dt in
   match metadata with
     | Current -> Table (pat, phr)
     | TransactionTime { tt_from_field; tt_to_field } ->
         transaction_generator pat phr read_row tt_from_field tt_to_field
-    | Undefined -> raise (internal_error "Undefined metadata after typechecking")
     | _ ->
         raise (internal_error @@
-          "Metadata " ^ (TemporalMetadata.show md) ^ " not yet supported.")
+          "Metadata " ^ (TemporalMetadata.show metadata) ^ " not yet supported.")
 
 
 class desugar_temporal env =

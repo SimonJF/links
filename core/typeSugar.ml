@@ -2187,7 +2187,7 @@ let check_metadata pos annotation term_md =
           else
             Gripers.die pos
               (Printf.sprintf "Temporal metadata %s is inconsistent with its annotation %s."
-                (TemporalMetadata.show_term term_md) (TemporalMetadata.show annotation))
+                (TemporalMetadata.show_term term_md) (TemporalMetadata.show md))
 
 let rec pattern_env : Pattern.with_pos -> Types.datatype Env.t =
   fun { node = p; _} -> let open Pattern in
@@ -2779,7 +2779,7 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * Usage.t =
             and () = unify ~handle:Gripers.table_keys (pos_and_typ keys, no_pos Types.keys_type) in
             let () = check_metadata pos md temporal_metadata in
             TableLit { name = erase tname;
-                record_type = (dtype, Some (read_row, write_row, needed_row, temporal_metadata));
+                record_type = (dtype, Some (read_row, write_row, needed_row, md));
                 field_constraints = constraints; keys = erase keys; temporal_metadata;
                 database = erase db },
               `Table (read_row, write_row, needed_row, md),
@@ -2901,7 +2901,7 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * Usage.t =
             let write = `Record (Types.make_empty_open_row (lin_any, res_base)) in
             let needed = `Record (Types.make_empty_open_row (lin_any, res_base)) in
             let () = unify ~handle:Gripers.delete_table
-              (pos_and_typ from, no_pos (`Table (read, write, needed, TemporalMetadata.unspecified))) in
+              (pos_and_typ from, no_pos (`Table (read, write, needed, Types.make_empty_table_metadata ()))) in
             let () = unify ~handle:Gripers.delete_pattern (ppos_and_typ pat, no_pos read) in
 
             let hide =
@@ -2934,7 +2934,7 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * Usage.t =
             let write = `Record (Types.make_empty_open_row (lin_any, res_base)) in
             let needed = `Record (Types.make_empty_open_row (lin_any, res_base)) in
             let () = unify ~handle:Gripers.insert_table
-              (pos_and_typ into, no_pos (`Table (read, write, needed, TemporalMetadata.unspecified))) in
+              (pos_and_typ into, no_pos (`Table (read, write, needed, Types.make_empty_table_metadata ()))) in
 
             let field_env =
               List.fold_right
@@ -3006,7 +3006,7 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * Usage.t =
             let write = `Record (Types.make_empty_open_row (lin_any, res_base)) in
             let needed = `Record (Types.make_empty_open_row (lin_any, res_base)) in
             let () = unify ~handle:Gripers.update_table
-              (pos_and_typ from, no_pos (`Table (read, write, needed, TemporalMetadata.unspecified))) in
+              (pos_and_typ from, no_pos (`Table (read, write, needed, Types.make_empty_table_metadata ()))) in
 
             let hide =
               let bs = Env.domain (pattern_env pat) in
@@ -3471,7 +3471,7 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * Usage.t =
                          let c = `Record (Types.make_empty_open_row (lin_unl, res_base)) in
                          let d = Types.make_empty_table_metadata () in
                          let e = tc e in
-                         let tt = Types.make_table_type ~metadata:d a b c in
+                         let tt = `Table (a, b, c, d) in
                          let () = unify ~handle:Gripers.iteration_table_body (pos_and_typ e, no_pos tt) in
                          let pattern = tpc pattern in
                          (* Iteration pattern types bind metadata types in the case of temporal tables. *)

@@ -119,6 +119,7 @@ let transaction_absty typ =
   `Application (transaction_time_metadata, [`Type typ])
 
 let make_empty_table_metadata () = Unionfind.fresh `Undefined
+let make_table_metadata_var md = Unionfind.fresh (`Metadata md)
 
 type ('t, 'r) session_type_basis =
     [ `Input of 't * 't
@@ -1932,6 +1933,11 @@ struct
     fun ({ bound_vars; _ } as context) ((policy, vars) as p) t ->
       let sd = datatype context p in
 
+      let show_md_var var =
+        match Unionfind.find var with
+          | `Undefined -> "?"
+          | `Metadata md -> TemporalMetadata.show md in
+
       let unwrap = fst -<- unwrap_row in
         (* precondition: the row is unwrapped *)
       let string_of_tuple context (field_env, _, _) =
@@ -2089,7 +2095,7 @@ struct
                sd r ^ "," ^
                sd w ^ "," ^
                sd n ^ "," ^
-               TemporalMetadata.show md ^
+               show_md_var md ^
                ")"
           | `Lens typ ->
             let open Lens in

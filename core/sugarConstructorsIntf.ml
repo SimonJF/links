@@ -159,7 +159,7 @@ module type SugarConstructorsSig = sig
       : ?ppos:t
      -> phrase (* Table name *)
      -> (Datatype.with_pos * (Types.datatype *
-         Types.datatype * Types.datatype * TemporalMetadata.t) option) (* Record type *)
+         Types.datatype * Types.datatype * Types.meta_md_var) option) (* Record type *)
      -> (Name.t * fieldconstraint list) list (* Field constraints *)
      -> phrase option (* Table keys *)
      -> TemporalMetadata.t option (* Temporal metadata *)
