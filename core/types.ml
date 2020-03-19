@@ -2657,6 +2657,10 @@ let make_thunk_type : row -> datatype -> datatype
   = fun effs rtype ->
   make_function_type [] effs rtype
 
+let make_pure_thunk_type : datatype -> datatype
+  = fun rtype ->
+  make_pure_function_type [] rtype
+
 (* We replace some of the generated printing functions here such that
    they may use our own printing functions instead. If the generated functions are
    to be used, we remove potential cycles arising from recursive types/rows first.

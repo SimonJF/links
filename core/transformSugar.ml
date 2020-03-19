@@ -178,6 +178,9 @@ class transform (env : Types.typing_environment) =
     method sugar_datatype : Datatype.with_pos -> ('self_type * Datatype.with_pos) =
       fun s -> (o, s)
 
+    (* For anyone looking here in future -- a visitor is implemented in types.ml.
+     * You can override `datatype` with an appropriate type visitor to get the
+     * desired behaviour. *)
     method datatype : Types.datatype -> ('self_type * Types.datatype) =
       fun t -> (o, t)
 
@@ -828,12 +831,13 @@ class transform (env : Types.typing_environment) =
          let o, language = o#foreign_language (Alien.language alien) in
          (o, Foreign (Alien.modify ~language ~declarations alien))
       | Typenames ts ->
-          let (o, _) = listu o (fun o {node=(name, vars, (x, dt')); pos} ->
+          let (o, ts) = listu o (fun o {node=(name, vars, (x, dt')); pos} ->
               match dt' with
                 | Some dt ->
+                   let (o, dt) = o#datatype dt in
                    let o = o#bind_tycon name
                      (`Alias (List.map (snd ->- val_of) vars, dt)) in
-                   (o, WithPos.make ~pos (name, vars, (x, dt')))
+                   (o, WithPos.make ~pos (name, vars, (x, Some dt)))
                 | None -> raise (internal_error "Unannotated type alias")
             ) ts in
           (o, Typenames ts)
@@ -854,8 +858,10 @@ class transform (env : Types.typing_environment) =
     method binder : Binder.with_pos -> ('self_type * Binder.with_pos) =
       fun bndr ->
       assert (Binder.has_type bndr);
-      let var_env = TyEnv.bind (Binder.to_name bndr) (Binder.to_type bndr) var_env in
-      ({< var_env=var_env >}, bndr)
+      let (o, dt) = o#datatype (Binder.to_type bndr) in
+      let bndr = Binder.set_type bndr dt in
+      let var_env = TyEnv.bind (Binder.to_name bndr) dt var_env in
+      (o#with_var_env var_env, bndr)
 
     method cp_phrase : cp_phrase -> ('self_type * cp_phrase * Types.datatype) =
       fun phrase ->

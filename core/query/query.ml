@@ -228,7 +228,7 @@ struct
     function
       | Concat vs -> concat_map unbox_list vs
       | Singleton v -> [v]
-      | _ -> raise (runtime_type_error "failed to unbox list")
+      | other -> raise (runtime_type_error <| "failed to unbox list, got " ^ (show other) )
 
   let unbox_string =
     function

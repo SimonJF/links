@@ -123,3 +123,29 @@ down to a single query).
 
   3. Implementation of semantics
 
+
+
+-------
+
+# 19th March
+
+To get around the iteration metadata problem, it's probably worth putting my
+hands up and saying Stefan's translation (i.e., translating table handles into
+pairs), is definitely the best way to go for now since later on we don't have
+access to this information.
+
+Then, we need to think about update, insertion, and deletion.
+
+Insertion, update, and deletion operations, thankfully, *cannot* appear in query
+blocks, since they're wild. It's difficult to see how we can do the translation
+for updates pre-desugaring, since the `set` clause isn't a term -- merely a
+mapping from labels to new terms.
+
+So, my current thinking is to do the following. We use Stefan's translation for
+adding transaction-time metadata -- this saves us doing ugly stuff in the
+normaliser for now.
+
+Then, we add the special stuff that needs to be added to insert / update /
+delete in query.ml itself (since all are wild, and special in their own ways --
+but actually a lot simpler than the general case).
+
