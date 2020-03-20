@@ -203,6 +203,7 @@ module Typeability_preserving = struct
            (module DesugarSessionExceptions)
        ; (module DesugarProcesses)
        ; (module DesugarTemporalQueries)
+       ; (module DesugarTemporalMetadata)
        ; (module DesugarFors)
        ; (module DesugarRegexes)
        ; (module DesugarFormlets)

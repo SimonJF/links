@@ -55,7 +55,8 @@ let transaction_accessor_fn tbl read_row from_col to_col =
   let fn_body =
     dp (Iteration ([(Table (TableMode.current, fresh_var_pat, tbl))],
       iter_body, None, None)) in
-  FunLit (Some [], DeclaredLinearity.Unl, ([], fn_body), Location.Server)
+  FunLit (Some [(Types.unit_type, Types.make_empty_closed_row ())],
+    DeclaredLinearity.Unl, ([], fn_body), Location.Server)
 
 let project_handle phr = dp (Projection (phr, "1"))
 let project_accessor phr = dp (Projection (phr, "2"))
@@ -105,7 +106,6 @@ object (o : 'self_type)
     (o, t)
 
   method! phrasenode : phrasenode -> ('self_type * phrasenode * Types.datatype) =
-    let open SourceCode.WithPos in
     function
       | TableLit { name; record_type = (sugar_dt, dt);
           field_constraints; keys; temporal_metadata; database } ->
@@ -169,7 +169,7 @@ let desugar_temporal_queries env =
 
 module Typeable
   = Transform.Typeable.Make(struct
-        let name = "temporal"
+        let name = "temporal queries"
         let obj env =
           (desugar_temporal_queries env : TransformSugar.transform :> Transform.Typeable.sugar_transformer)
       end)
