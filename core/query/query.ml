@@ -206,10 +206,30 @@ struct
           end
         | Constant c -> Constant c
 
-  let table_field_types Value.{ row = (fields, _, _); _} =
-    StringMap.map (function
-                    | `Present t -> t
-                    | _ -> assert false) fields
+  let table_field_types Value.{ row = (fields, _, _); temporal_metadata; _ } =
+    (* As well as the declared fields in the table, we must also include
+     * the period-stamping fields included in the temporal metadata. *)
+    let dt x = (x, `Primitive Primitive.DateTime) in
+    let metadata_fields =
+      let open TemporalMetadata in
+      match temporal_metadata with
+        | Current -> []
+        | ValidTime { vt_from_field; vt_to_field } ->
+            [dt vt_from_field; dt vt_to_field]
+        | TransactionTime { tt_from_field; tt_to_field } ->
+            [dt tt_from_field; dt tt_to_field]
+        | Bitemporal { tt_from_field; tt_to_field; vt_from_field; vt_to_field } ->
+            List.map dt [tt_from_field; tt_to_field; vt_from_field; vt_to_field ] in
+
+    let declared_fields =
+      StringMap.map (function
+                      | `Present t -> t
+                      | _ -> assert false) fields in
+
+    (* Add metadata fields *)
+    List.fold_left
+      (fun acc (k, v) -> StringMap.add k v acc)
+      declared_fields metadata_fields
 
   let unbox_xml =
     function
@@ -755,7 +775,7 @@ struct
         check_policies_compatible env.policy policy;
         computation env e
     | Special (Ir.Table { database = db; table = name;
-        keys; table_type = (readtype, _, _, _) }) ->
+        keys; table_type = (readtype, _, _, md) }) ->
        (** WR: this case is because shredding needs to access the keys of tables
            but can we avoid it (issue #432)? *)
        (* Copied almost verbatim from evalir.ml, which seems wrong, we should probably call into that. *)
@@ -768,11 +788,21 @@ struct
          List.map Q.unbox_string (Q.unbox_list key))
         (Q.unbox_list keys)
         in
+        (* TODO: We should refine the types: after sugartoir, we have concrete information
+         * about this, so should propagate it *)
+        let temporal_metadata =
+          begin
+            match Unionfind.find md with
+              | `Undefined -> raise (internal_error "Unresolved temporal metadata")
+              | `Metadata md -> md
+          end in
+
             Q.Table (Value.make_table
               ~database:(db, params)
               ~name:(Q.unbox_string name)
               ~keys:unboxed_keys
-              ~row)
+              ~row
+              ~temporal_metadata)
          | _ -> query_error "Error evaluating table handle"
        end
     | Special _s ->

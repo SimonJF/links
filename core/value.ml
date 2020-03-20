@@ -194,12 +194,13 @@ type table = {
   database: (database * string);
   name: string;
   keys: string list list;
-  row: Types.row
+  row: Types.row;
+  temporal_metadata: TemporalMetadata.t
 }
   [@@deriving show]
 
-let make_table ~database ~name ~keys ~row =
-  { database; name; keys; row }
+let make_table ~database ~name ~keys ~row ~temporal_metadata =
+  { database; name; keys; row; temporal_metadata }
 
 type primitive_value_basis =  [
 | `Bool of bool

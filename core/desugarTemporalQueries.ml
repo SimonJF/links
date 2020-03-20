@@ -34,9 +34,20 @@ let current_accessor_fn tbl read_row =
 
 
 (* fun () { for (x <-- tbl) [(!data = x, !ttfrom = x.from_col, !ttto = x.to_col)] } *)
-let transaction_accessor_fn tbl read_row from_col to_col =
-  let transaction_md_ty = Types.transaction_absty read_row in
-  let fresh_bnd = dp (Binder.make ~name:"!bnd" ~ty:transaction_md_ty ()) in
+let transaction_accessor_fn tbl read_ty from_col to_col =
+  let read_row =
+    match read_ty with
+      | `Record row -> row
+      | typ -> raise (internal_error
+          ("Read row type should be a record; got: " ^ (Types.show_typ typ))) in
+  let transaction_md_ty = Types.transaction_absty read_ty in
+  (* Iterator for the table is has the read row, extended with the
+   * transaction time period types *)
+  let datetime = `Primitive Primitive.DateTime in
+  let iter_bnd_ty =
+    `Record (Types.extend_row
+      (StringMap.from_alist [(from_col, datetime); (to_col, datetime)]) read_row) in
+  let fresh_bnd = dp (Binder.make ~name:"!bnd" ~ty:iter_bnd_ty ()) in
   let fresh_var = Binder.to_name fresh_bnd in
   let fresh_var_pat = dp (Pattern.Variable fresh_bnd) in
   let record =
@@ -56,7 +67,7 @@ let transaction_accessor_fn tbl read_row from_col to_col =
     dp (Iteration ([(Table (TableMode.current, fresh_var_pat, tbl))],
       iter_body, None, None)) in
   FunLit (Some [(Types.unit_type, Types.make_empty_closed_row ())],
-    DeclaredLinearity.Unl, ([], fn_body), Location.Server)
+    DeclaredLinearity.Unl, ([[]], fn_body), Location.Server)
 
 let project_handle phr = dp (Projection (phr, "1"))
 let project_accessor phr = dp (Projection (phr, "2"))

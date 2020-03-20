@@ -672,7 +672,7 @@ struct
           else Lens.Eval.Incremental in
         Lens.Eval.put ~behaviour lens data |> Lens_errors.unpack_eval_error ~die:(eval_error "%s");
         Value.box_unit () |> apply_cont cont env
-    | Table { database = db; table = name; keys; table_type = (readtype, _, _, _) } ->
+    | Table { database = db; table = name; keys; table_type = (readtype, _, _, md) } ->
       begin
         (* OPTIMISATION: we could arrange for concrete_type to have
            already been applied here *)
@@ -686,12 +686,21 @@ struct
                 (fun key ->
                   List.map Value.unbox_string (Value.unbox_list key))
                 (Value.unbox_list keys) in
+            (* TODO: We should refine the types: after sugartoir, we have concrete information
+             * about this, so should propagate it *)
+            let temporal_metadata =
+              begin
+                match Unionfind.find md with
+                  | `Undefined -> raise (internal_error "Unresolved temporal metadata")
+                  | `Metadata md -> md
+              end in
             let tbl =
               Value.make_table
                 ~database:(db, params)
                 ~name:(Value.unbox_string name)
                 ~keys:unboxed_keys
                 ~row
+                ~temporal_metadata
             in apply_cont cont env (`Table tbl)
           | _ -> eval_error "Error evaluating table handle"
       end

@@ -57,7 +57,8 @@ type table = {
   database: (database * string);
   name: string;
   keys: string list list;
-  row: Types.row
+  row: Types.row;
+  temporal_metadata: TemporalMetadata.t
 }
   [@@deriving show]
 
@@ -66,6 +67,7 @@ val make_table :
   name:string ->
   keys:(string list list) ->
   row:Types.row ->
+  temporal_metadata:TemporalMetadata.t ->
   table
 
 type primitive_value_basis =  [
