@@ -244,6 +244,9 @@ rule lex ctxt nl = parse
   | "infixr"                            { FIXITY Associativity.Right }
   | "prefix"                            { FIXITY Associativity.Right }
   | "postfix"                           { FIXITY Associativity.Left }
+  | "ttData"                            { TTDATA }
+  | "ttFrom"                            { TTFROM }
+  | "ttTo"                              { TTTO }
   | "~fun"                              { FROZEN_FUN }
   | "~linfun"                           { FROZEN_LINFUN }
   | def_id as var                       { try List.assoc var keywords

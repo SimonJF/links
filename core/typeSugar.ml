@@ -81,6 +81,7 @@ struct
     | TableLit _
     | TextNode _
     | Section _
+    | TemporalOp _
     | FreezeSection _ -> true
 
     | ListLit (ps, _)
@@ -412,6 +413,8 @@ sig
     annotation:Types.datatype ->
     escapees:((string * Types.datatype) list) ->
     unit
+
+  val transaction_accessor: TemporalOperation.t -> griper
 
 end
   = struct
@@ -1574,6 +1577,18 @@ end
                display_ty (var, annotation)              ^ nl () ^
                "escape their scope, as they are present in the types:" ^ nli () ^
                displayed_tys)
+
+
+    let transaction_accessor op ~pos ~t1:(_, actual) ~t2:(_, expected) ~error:_ =
+      build_tyvar_names [actual; expected];
+      let ppr_actual   = show_type actual   in
+      let ppr_expected = show_type expected in
+      die pos ("The argument of " ^ (TemporalOperation.name op) ^ " " ^
+               "was expected to have type "       ^ nli () ^
+                code ppr_expected                 ^ nl  () ^
+               "but has type"                     ^ nli () ^
+                code ppr_actual                   ^ nl  () ^
+               "instead.")
 end
 
 type context = Types.typing_environment = {
@@ -2785,6 +2800,27 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * Usage.t =
               `Table (read_row, write_row, needed_row, md),
               Usage.combine (usages tname) (usages db)
         | TableLit _ -> assert false
+        | TemporalOp (op, target, replacement) ->
+            let data_ty =  `Record (Types.make_empty_open_row (lin_any, res_base)) in
+            let target = tc target in
+            let replacement = opt_map tc replacement in
+            let check_transaction_time () =
+              let expected = Types.transaction_absty data_ty in
+              unify ~handle:(Gripers.transaction_accessor op) (pos_and_typ target, no_pos expected) in
+            let result_ty =
+              begin
+                let open TemporalOperation in
+                match op with
+                  | TransactionData ->
+                      check_transaction_time ();
+                      data_ty
+                  | TransactionFrom | TransactionTo ->
+                      check_transaction_time ();
+                      `Primitive (Primitive.DateTime)
+              end in
+            let replacement_usages = OptionUtils.opt_app (usages) (Usage.empty) replacement in
+            TemporalOp (op, erase target, opt_map erase replacement), result_ty,
+            (Usage.combine (usages target) replacement_usages)
         | LensLit (table, _) ->
            relational_lenses_guard pos;
            let open Lens in

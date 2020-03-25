@@ -360,6 +360,10 @@ class map =
       let _x_i4 = o#phrase _x_i4 in
         TableLit ({ name = _x; record_type = (y, z); field_constraints = _x_i2;
           keys = _x_i3; temporal_metadata; database = _x_i4 })
+      | TemporalOp (op, p, p_opt) ->
+          let p = o#phrase p in
+          let p_opt = o#option (fun o -> o#phrase) p_opt in
+          TemporalOp (op, p, p_opt)
       | LensLit ((_x, _x_i1)) ->
           let _x = o#phrase _x in
           let _x_i1 = o#option (fun o -> o#unknown) _x_i1 in
@@ -1100,6 +1104,10 @@ class fold =
           let o = o#phrase _x_i3 in
       let o = o#phrase _x_i4 in
         o
+      | TemporalOp (_op, p, p_opt) ->
+          let o = o#phrase p in
+          let o = o#option (fun o -> o#phrase) p_opt in
+          o
       | LensLit ((_x, _x_i1)) ->
           let o = o#phrase _x in
           let o = o#option (fun o -> o#unknown) _x_i1 in
@@ -1870,6 +1878,10 @@ class fold_map =
           in (o, (TableLit ({ name = _x; record_type = _x_i1;
             field_constraints = _x_i2;
             keys = _x_i3; temporal_metadata; database = _x_i4 })))
+      | TemporalOp (op, p, p_opt) ->
+          let (o, p) = o#phrase p in
+          let (o, p_opt) = o#option (fun o -> o#phrase) p_opt in
+          (o, TemporalOp (op, p, p_opt))
       | LensLit ((_x, _x_i1)) ->
           let (o, _x) = o#phrase _x in
           let (o, _x_i1) = o#option (fun o -> o#unknown) _x_i1 in

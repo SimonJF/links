@@ -319,3 +319,16 @@ module TemporalMetadata = struct
     let to_field = "!ttto"
   end
 end
+
+module TemporalOperation = struct
+  type t =
+    | TransactionData
+    | TransactionFrom
+    | TransactionTo
+    [@@deriving show]
+
+  let name = function
+    | TransactionData -> "ttData"
+    | TransactionFrom -> "ttFrom"
+    | TransactionTo   -> "ttTo"
+end
