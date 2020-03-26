@@ -26,10 +26,12 @@ class desugar_metadata env =
 object (o: 'self_type)
   inherit (TransformSugar.transform env) as super
 
+  (*
   method! datatype : Types.datatype -> ('self_type * Types.datatype) = fun dt ->
     let visitor = new DesugarMetadataTypes.visitor in
     let (t, _) = visitor#typ dt in
     (o, t)
+    *)
 
   method! phrasenode : phrasenode -> ('self_type * phrasenode * Types.datatype) =
     function

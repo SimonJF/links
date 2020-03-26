@@ -88,14 +88,6 @@ let rec split_variant_type name t = match concrete_type t with
   | t ->
       error ("Attempt to split non-variant type "^string_of_datatype t)
 
-let rec project_type ?(overstep_quantifiers=true) name t = match (concrete_type t, overstep_quantifiers) with
-  | (`ForAll (_, t), true) -> project_type name t
-  | (`Record row, _) ->
-      let t, _ = split_row name row in
-        t
-  | (t, _) ->
-      error ("Attempt to project non-record type "^string_of_datatype t)
-
 let rec select_type name t = match concrete_type t with
   | `ForAll (_, t) -> select_type name t
   | `Select row ->
@@ -139,6 +131,23 @@ let metadata_operation_type op t =
   match op with
     | TransactionData -> metadata_payload_type t
     | TransactionTo | TransactionFrom -> `Primitive (Primitive.DateTime)
+
+let rec project_type ?(overstep_quantifiers=true) name t = match (concrete_type t, overstep_quantifiers) with
+  | (`ForAll (_, t), true) -> project_type name t
+  | (`Record row, _) ->
+      let t, _ = split_row name row in
+        t
+  | (`Application (absty, [`Type typ]), _) when
+      (Abstype.name absty) = "TransactionTime" ->
+        if name = TemporalMetadata.Transaction.data_field then typ
+        else if
+          name = TemporalMetadata.Transaction.from_field ||
+          name = TemporalMetadata.Transaction.to_field then
+          `Primitive (Primitive.DateTime)
+        else
+          error ("Bad temporal metadata: " ^ string_of_datatype t)
+  | (t, _) ->
+      error ("Attempt to project non-record type "^string_of_datatype t)
 
 (*
   This returns the type obtained by removing a set of
