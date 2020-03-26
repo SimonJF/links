@@ -1,5 +1,6 @@
 open Utility
 open CommonTypes
+open Sugartypes
 
 module DesugarMetadataTypes : Types.TYPE_VISITOR =
 struct
@@ -23,12 +24,24 @@ end
 
 class desugar_metadata env =
 object (o: 'self_type)
-  inherit (TransformSugar.transform env) (* as super *)
+  inherit (TransformSugar.transform env) as super
 
   method! datatype : Types.datatype -> ('self_type * Types.datatype) = fun dt ->
     let visitor = new DesugarMetadataTypes.visitor in
     let (t, _) = visitor#typ dt in
     (o, t)
+
+  method! phrasenode : phrasenode -> ('self_type * phrasenode * Types.datatype) =
+    function
+      | TemporalOp (op, phr, _replacement) as phrn ->
+          (* Translation is type-preserving, so it's safe to defer to the
+           * supertype's computation of the type *)
+          let (_, _, ty) = super#phrasenode phrn in
+          let (o, ty) = o#datatype ty in
+          let (o, phr, _) = o#phrase phr in
+          let field = TemporalOperation.field op in
+          (o, Projection (phr, field), ty)
+      | pn -> super#phrasenode pn
 end
 
 let desugar_temporal_metadata env =

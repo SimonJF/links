@@ -40,3 +40,7 @@ val record_without : Types.datatype -> Utility.StringSet.t -> Types.datatype
 val select_type : string -> Types.datatype -> Types.datatype
 val split_choice_type : string -> Types.datatype -> (Types.datatype * Types.datatype)
 val choice_at : string -> Types.datatype -> Types.datatype
+
+(* Temporal stuff *)
+val metadata_payload_type : Types.datatype -> Types.datatype
+val metadata_operation_type : TemporalOperation.t -> Types.datatype -> Types.datatype

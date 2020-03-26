@@ -1096,25 +1096,6 @@ let env : (string * (located_primitive * Types.datatype * pure)) list = [
   "dateMinutes", project_datetime (fun dt -> DateTime.minute dt);
   "dateSeconds", project_datetime (fun dt -> DateTime.second dt);
 
-  (* Temporal metadata stuff *)
-  "ttData",
-    (p1 (fun r ->
-      Value.unbox_record r |> List.assoc TemporalMetadata.Transaction.data_field),
-    datatype "(TransactionTime((|r))) -> (|r)",
-    PURE);
-
-  "ttFrom",
-    (p1 (fun r ->
-      Value.unbox_record r |> List.assoc TemporalMetadata.Transaction.from_field),
-    datatype "(TransactionTime((|r))) -> DateTime",
-    PURE);
-
-  "ttTo",
-    (p1 (fun r ->
-      Value.unbox_record r |> List.assoc TemporalMetadata.Transaction.to_field),
-    datatype "(TransactionTime((|r))) -> DateTime",
-    PURE);
-
   (* Testing *)
   "unsafeCoerce",
   (p1 (fun x -> x),

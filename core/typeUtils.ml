@@ -118,6 +118,27 @@ let rec choice_at name t = match concrete_type t with
   | t ->
       error ("Attempt to deconstruct non-choice type "^string_of_datatype t)
 
+(* Given a temporal metadata type, returns the result type *)
+(* Works on both sugared and desugared forms. *)
+let rec metadata_payload_type t =
+  match concrete_type t with
+    | `ForAll (_, t) -> metadata_payload_type t
+    | `Application (absty, [`Type typ]) when
+        (Abstype.name absty) = "TransactionTime" -> typ
+    | `Record (fields, _, _) ->
+        begin
+          match StringMap.lookup (TemporalMetadata.Transaction.data_field) fields with
+            | Some (`Present typ) -> typ
+            | _ -> error ("Attempt to deconstruct non-metadata type "^string_of_datatype t)
+        end
+    | t ->
+        error ("Attempt to deconstruct non-metadata type "^string_of_datatype t)
+
+let metadata_operation_type op t =
+  let open TemporalOperation in
+  match op with
+    | TransactionData -> metadata_payload_type t
+    | TransactionTo | TransactionFrom -> `Primitive (Primitive.DateTime)
 
 (*
   This returns the type obtained by removing a set of

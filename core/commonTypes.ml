@@ -331,4 +331,9 @@ module TemporalOperation = struct
     | TransactionData -> "ttData"
     | TransactionFrom -> "ttFrom"
     | TransactionTo   -> "ttTo"
+
+  let field = function
+    | TransactionData -> TemporalMetadata.Transaction.data_field
+    | TransactionFrom -> TemporalMetadata.Transaction.from_field
+    | TransactionTo   -> TemporalMetadata.Transaction.to_field
 end
