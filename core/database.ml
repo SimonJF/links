@@ -79,7 +79,8 @@ let value_of_db_string (value:string) t =
         (* Discard milliseconds and use Calendar parser *)
         begin
           match String.split_on_char '.' value with
-            | [datetime; _ms] ->
+            | [datetime]
+            | [datetime; _] ->
                 Printer.CalendarPrinter.from_string datetime
                 |> Value.box_datetime
             | _ -> raise bad_date
