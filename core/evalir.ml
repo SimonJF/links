@@ -846,15 +846,16 @@ struct
         begin
         let open Value in
         match source with
-          | `Table { database = (db, _); name = table; row = (fields, _, _); _ } ->
+          | `Table { database = (db, _); name = table; row = (fields, _, _); temporal_metadata; _ } ->
               Lwt.return
-            (db, table, (StringMap.map (function
+            (db, table, temporal_metadata, (StringMap.map (function
                                         | `Present t -> t
                                         | _ -> assert false) fields))
           | _ -> assert false
-        end >>= fun (db, table, field_types) ->
+        end >>= fun (db, table, md, field_types) ->
       let delete_query =
-        Query.compile_delete db env ((Var.var_of_binder xb, table, field_types), where) in
+        Query.compile_delete md db env
+          ((Var.var_of_binder xb, table, field_types), where) in
       let () = ignore (Database.execute_command delete_query db) in
         apply_cont cont env (`Record [])
     | CallCC f ->

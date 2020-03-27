@@ -1244,6 +1244,22 @@ let delete : Value.database -> ((Ir.var * string) * Q.t option) -> string =
   in
     "delete from "^table^where
 
+(* Little hacky. It'd be nice to encode the additional constraint in the
+ * "where" construct... *)
+let transaction_time_delete : Value.database -> ((Ir.var * string) * Q.t option) -> string -> string =
+  fun db ((_, table), where) tt_to ->
+    let open CalendarLib in
+    Sql.reset_dummy_counter ();
+    let base = base [] ->- (Sql.string_of_base db true) in
+    let is_current = (db#quote_field tt_to) ^ " = " ^ db#forever in
+    let where =
+      match where with
+        | None -> is_current
+        | Some where -> (base where) ^ " and " ^ is_current in
+    let now = "'" ^ (Calendar.now () |> Printer.Calendar.to_string) ^ "'" in
+    Printf.sprintf "update %s set %s = %s where (%s)"
+      table (db#quote_field tt_to) now where
+
 let compile_update : Value.database -> Value.env ->
   ((Ir.var * string * Types.datatype StringMap.t) * Ir.computation option * Ir.computation) -> string =
   fun db env ((x, table, field_types), where, body) ->
@@ -1256,14 +1272,21 @@ let compile_update : Value.database -> Value.env ->
       Debug.print ("Generated update query: "^q);
       q
 
-let compile_delete : Value.database -> Value.env ->
+let compile_delete : TemporalMetadata.t -> Value.database -> Value.env ->
   ((Ir.var * string * Types.datatype StringMap.t) * Ir.computation option) -> string =
-  fun db env ((x, table, field_types), where) ->
+  fun md db env ((x, table, field_types), where) ->
+    let open TemporalMetadata in
     let env = Eval.bind (Eval.env_of_value_env QueryPolicy.Default env) (x, Q.Var (x, field_types)) in
     let where = opt_map (Eval.norm_comp env) where in
-    let q = delete db ((x, table), where) in
-      Debug.print ("Generated update query: "^q);
-      q
+    let q =
+      match md with
+        | Current -> delete db ((x, table), where)
+        | TransactionTime { tt_to_field; _ } ->
+            transaction_time_delete db
+              ((x, table), where) tt_to_field
+        | _ -> raise (internal_error "Valid / Bitemporal data not yet supported") in
+    Debug.print ("Generated delete query: "^q);
+    q
 
 let is_list = Q.is_list
 let table_field_types = Q.table_field_types
