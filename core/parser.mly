@@ -312,7 +312,7 @@ let parse_foreign_language pos lang =
 %token LRARROW
 %token COMMA VBAR DOT DOTDOT COLON COLONCOLON
 %token TABLE TABLEHANDLE TABLEKEYS FROM DATABASE QUERY WITH YIELDS ORDERBY
-%token UPDATE DELETE INSERT VALUES SET RETURNING
+%token UPDATE DELETE TTINSERT INSERT VALUES SET RETURNING
 %token LENS LENSDROP LENSSELECT LENSJOIN DETERMINED BY ON DELETE_LEFT
 %token LENSPUT LENSGET LENSCHECK LENSSERIAL
 %token READONLY DEFAULT
@@ -826,13 +826,17 @@ exp:
 | table_expression
 | typed_expression                                             { $1 }
 
+insert_keyword:
+| TTINSERT                                                     { TableMode.transaction }
+| INSERT                                                       { TableMode.current }
+
 database_expression:
-| INSERT exp VALUES LPAREN record_labels RPAREN exp            { db_insert ~ppos:$loc (TableMode.current) $2 $5 $7 None }
-| INSERT exp VALUES LBRACKET LPAREN loption(labeled_exps)
-  RPAREN RBRACKET preceded(RETURNING, VARIABLE)?               { db_insert ~ppos:$loc (TableMode.current) $2 (labels $6) (db_exps ~ppos:$loc($6) $6) $9  }
-| INSERT exp VALUES LPAREN record_labels RPAREN typed_expression
-  RETURNING VARIABLE                                           { db_insert ~ppos:$loc (TableMode.current) $2 $5 $7 (Some $9) }
-| DATABASE atomic_expression perhaps_db_driver                 { with_pos $loc (DatabaseLit ($2, $3))           }
+| insert_keyword exp VALUES LPAREN record_labels RPAREN exp    { db_insert ~ppos:$loc $1 $2 $5 $7 None }
+| insert_keyword exp VALUES LBRACKET LPAREN loption(labeled_exps)
+  RPAREN RBRACKET preceded(RETURNING, VARIABLE)?               { db_insert ~ppos:$loc $1 $2 (labels $6) (db_exps ~ppos:$loc($6) $6) $9  }
+| insert_keyword exp VALUES LPAREN record_labels RPAREN typed_expression
+  RETURNING VARIABLE                                           { db_insert ~ppos:$loc $1 $2 $5 $7 (Some $9) }
+| DATABASE atomic_expression perhaps_db_driver                 { with_pos $loc (DatabaseLit ($2, $3)) }
 
 fn_dep_cols:
 | field_label+                                                 { $1 }

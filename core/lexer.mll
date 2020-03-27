@@ -94,6 +94,7 @@ let keywords = [
  "yields"   , YIELDS;
  "import"   , IMPORT;
  "insert"   , INSERT;
+ "tt_insert", TTINSERT;
  "linfun"   , LINFUN;
  "module"   , MODULE;
  "mu"       , MU;
