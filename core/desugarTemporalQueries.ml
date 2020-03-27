@@ -158,6 +158,21 @@ object (o : 'self_type)
               [("1", tbl_ty); ("2", accessor_ty)]))
             in
           (o, phr, pair_ty)
+      | DBInsert (mode, into, labels, values, id) ->
+          let (o, into, _) = o#phrase into in
+          let (o, values, _) = o#phrase values in
+          let (o, id, _) = TransformSugar.option o (fun o -> o#phrase) id in
+          (o, DBInsert (mode, project_handle into, labels, values, id), Types.unit_type)
+      | DBUpdate (mode, pat, from, where, set) ->
+          let (o, from, _) = o#phrase from in
+          let (o, pat) = o#pattern pat in
+          let (o, where, _) = TransformSugar.option o (fun o -> o#phrase) where in
+          let (o, set) =
+            TransformSugar.listu o
+              (fun o (name, value) ->
+                 let (o, value, _) = o#phrase value in (o, (name, value))) set
+          in
+            (o, DBUpdate (mode, pat, project_handle from, where, set), Types.unit_type)
       | DBDelete (mode, pat, phr, where) ->
           let (o, pat) = o#pattern pat in
           let (o, phr, _) = o#phrase phr in
