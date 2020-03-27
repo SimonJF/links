@@ -29,6 +29,8 @@ class virtual database :
     method virtual escape_string : string -> string
     method virtual quote_field : string -> string
     method virtual exec : string -> dbvalue
+    method forever : string
+    method make_transaction_time_insert_query : (string * string list * string * string * string list list) -> string
     method make_insert_query : (string * string list * string list list) -> string
     method make_insert_returning_query : (string * string list * string list list * string) -> string list
     method virtual supports_shredding : unit -> bool

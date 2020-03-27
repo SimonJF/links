@@ -781,10 +781,19 @@ struct
           let open Value in
           match source, rows with
           | `Table _, `List [] ->  apply_cont cont env (`Record [])
-          | `Table { database = (db, _); name = table_name; _ }, rows ->
+          | `Table { database = (db, _); name = table_name; temporal_metadata; _ }, rows ->
               let (field_names,vss) = Value.row_columns_values db rows in
-              Debug.print ("RUNNING INSERT QUERY:\n" ^ (db#make_insert_query(table_name, field_names, vss)));
-              let () = ignore (Database.execute_insert (table_name, field_names, vss) db) in
+              let query =
+                begin
+                  let open TemporalMetadata in
+                  match temporal_metadata with
+                    | Current -> db#make_insert_query (table_name, field_names, vss)
+                    | TransactionTime { tt_from_field; tt_to_field } ->
+                        db#make_transaction_time_insert_query (table_name, field_names, tt_from_field, tt_to_field, vss)
+                    | _ -> raise (internal_error "Valid time / Bitemporal inserts not yet supported")
+                end in
+              Debug.print ("RUNNING INSERT QUERY:\n" ^ query);
+              let () = ignore (Database.execute_command query db) in
               apply_cont cont env (`Record [])
           | _ -> raise (internal_error "insert row into non-database")
         end
