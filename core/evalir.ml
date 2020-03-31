@@ -154,7 +154,8 @@ struct
       | Constant.Int    n -> `Int n
       | Constant.Char   c -> `Char c
       | Constant.String s -> Value.box_string s
-      | Constant.Float  f -> `Float f in
+      | Constant.Float  f -> `Float f
+      | Constant.DateTime dt -> Value.box_datetime dt in
 
     match v with
     | Constant c -> Lwt.return (constant c)
@@ -830,17 +831,46 @@ struct
         let open Value in
         value env source >>= fun source ->
         match source with
-          | `Table { database = (db, _); name = table; row = (fields, _, _); _ } ->
+          | `Table { database = (db, _); name = table; row = (fields, _, _); temporal_metadata; _ } ->
               Lwt.return
-            (db, table, (StringMap.map (function
+            (db, temporal_metadata, table, (StringMap.map (function
                                         | `Present t -> t
                                         | _ -> assert false) fields))
           | _ -> assert false
-      end >>= fun (db, table, field_types) ->
-      let update_query =
-        Query.compile_update db env ((Var.var_of_binder xb, table, field_types), where, body) in
-      let () = ignore (Database.execute_command update_query db) in
-        apply_cont cont env (`Record [])
+      end >>= fun (db, md, table, field_types) ->
+      begin
+        let open TemporalMetadata in
+        match md with
+          | Current ->
+              let update_query =
+                Query.compile_update db env ((Var.var_of_binder xb, table, field_types), where, body) in
+              let () = ignore (Database.execute_command update_query db) in
+              apply_cont cont env (`Record [])
+          | TransactionTime { tt_to_field; _ } ->
+              let (select_q, update_q) =
+                Query.compile_transaction_time_update db env
+                  ((Var.var_of_binder xb, table, field_types), where, body) tt_to_field in
+
+              (* Evaluate the selection to get the rows to insert *)
+              let field_types = StringMap.bindings field_types in
+              let field_names = List.map (fst) field_types in
+              (* List of records. *)
+              Debug.print ("(TT UPDATE(1)) SELECT: " ^ select_q);
+              let results = Database.execute_select field_types select_q db in
+              (* We need to first unbox the list. Then, we need to map over each record in order
+               * to get only the values, and convert them to a string. *)
+              let str_results =
+                Value.unbox_list results
+                  |> List.map (Value.unbox_record ->- List.map (snd ->- Value.string_of_value)) in
+              let insert_q = db#make_insert_query (table, field_names, str_results) in
+              Debug.print ("(TT UPDATE(2)) INSERT: " ^ insert_q);
+              let () = ignore (Database.execute_command insert_q db) in
+              (* Finally, execute the update query, and that should be us. *)
+              Debug.print ("(TT UPDATE(3)) UPDATE: " ^ update_q);
+              let () = ignore (Database.execute_command update_q db) in
+              apply_cont cont env (`Record [])
+          | _ -> raise (internal_error "Valid / Bitemporal data not yet supported")
+      end
     | Delete ((xb, source), where) ->
         value env source >>= fun source ->
         begin

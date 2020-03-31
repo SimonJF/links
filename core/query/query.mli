@@ -67,6 +67,12 @@ sig
   val eval : QueryPolicy.t -> Value.t Value.Env.t -> Ir.computation -> Lang.t
 end
 
+val compile_transaction_time_update:
+  Value.database -> Value.env ->
+    ((Ir.var * string * Types.datatype StringMap.t) * Ir.computation option * Ir.computation) ->
+    string -> (* transaction time to field *)
+    (string * string)
+
 val compile_update : Value.database -> Value.env ->
   ((Ir.var * string * Types.datatype StringMap.t) * Ir.computation option * Ir.computation) -> string
 

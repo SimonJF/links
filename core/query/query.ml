@@ -1,6 +1,7 @@
 open Utility
 open CommonTypes
 open Var
+open CalendarLib
 
 exception DbEvaluationError of string
 
@@ -844,7 +845,7 @@ struct
       in
         project (norm env r, label)
     | Q.Erase (r, labels) ->
-	let rec erase (r, labels) =
+      let rec erase (r, labels) =
           match r with
           | Q.Record fields ->
             assert (StringSet.for_all
@@ -1212,6 +1213,8 @@ let sql_of_let_query : let_query -> Sql.query =
   fun cs ->
     Sql.UnionAll (List.map (let_clause) cs, 0)
 
+(* SJF: It would be nice to use the SQL query DSL rather than string mangling here. *)
+
 let update : Value.database -> ((Ir.var * string) * Q.t option * Q.t) -> string =
   fun db ((_, table), where, body) ->
     Sql.reset_dummy_counter ();
@@ -1232,6 +1235,107 @@ let update : Value.database -> ((Ir.var * string) * Q.t option * Q.t) -> string 
     in
       "update "^table^" set "^fields^where
 
+let transaction_time_update :
+    Value.database ->
+    Types.datatype StringMap.t ->
+    ((Ir.var * string) * Q.t option * Q.t) ->
+    string ->
+    (string * string) =
+  fun db table_types ((_, table), where, body) tt_to ->
+    let base = (base []) ->- (Sql.string_of_base db true) in
+    let is_current = (db#quote_field tt_to) ^ " = " ^ db#forever in
+    let now = Q.Constant (Constant.DateTime (Calendar.now ())) in
+    (* "'" ^ (Calendar.now () |> Printer.Calendar.to_string) ^ "'" in *)
+
+    (* Construct query which applies predicate, returning updated results. *)
+    let record_fields =
+      match body with
+        | Q.Record fields ->
+            fields
+            |> StringMap.add tt_to now
+        | _ -> assert false in
+    let record_fields_list = StringMap.to_alist record_fields in
+    (* let field_names = List.map fst record_fields_list in *)
+
+    (* Select either the field name if unspecified, or the updated value
+     * if it is. *)
+    let select_fields =
+      StringMap.mapi
+        (fun k _ ->
+          OptionUtils.opt_map (base) (StringMap.lookup k record_fields)
+          |> OptionUtils.from_option k) table_types
+      |> StringMap.to_alist
+      |> List.map snd
+      |> String.concat ", " in
+
+    let select_where_body =
+      match where with
+        | None -> is_current
+        | Some where -> (base where) ^ " && " ^ is_current in
+
+    (* We need to be a little careful here -- the select query needs to
+     * select the field values for the fields not specified in the update
+     * map, but select the updated values otherwise. *)
+    let select_q =
+      Printf.sprintf
+        "select %s from %s where (%s)" select_fields table select_where_body in
+
+    let update_q =
+      let fields_neq =
+        let values =
+          String.concat " && "
+            (List.map
+              (fun (label, v) -> db#quote_field label ^ " = " ^ base v)
+              record_fields_list) in
+        "not(" ^ values ^ ")" in
+
+      (* Carry out an update query to close off the previous rows. *)
+      let set_stop_time = (db#quote_field tt_to) ^ " = " ^ (base now) in
+      let update_where_body =
+        match where with
+          | None -> is_current ^ " && " ^ fields_neq
+          | Some where -> base where ^ " && " ^ is_current ^ " && " ^ fields_neq in
+
+      Printf.sprintf "update %s set %s where (%s)" table set_stop_time update_where_body in
+    (select_q, update_q)
+
+(*
+  let affected =
+    for (x <- asList tbl)
+    where (M' && isCurrent(x))
+      [ (N' with start = x.start, end = now) ] in
+  insert tbl values affected;
+  update (x <- tbl)
+    where (M' && isCurrent(x) && x ≠ (N' with start = x .start, end = now))
+    set (x with end = now)
+*)
+
+(*
+ * It's probably possible to do the above using plain SQL.
+ * But is this what we're really wanting?
+ * An issue is that these aren't queries per se -- they're IR
+ * constructs.
+ * There are a couple of approaches:
+ *  1. Compile this as a stub like the retrieval. The issue would be
+ *     that the `set` clause is not a term in its own right, so it's unclear
+ *     how we'd pass the parameters (other than perhaps compiling to a record,
+ *     then expanding out again?)
+ *
+ *  2. Do the raw SQL mangling. It may be that this is the best way to go (it
+ *     worked nicely for insert and delete) -- but it feels a little ugly still.
+ *
+ *  3. See if we can write the query language directly. I'm hoping that normalisation
+ *     is idempotent (as writing non-normalised code is horrendous!).
+ *     Currently it looks like "For"s are ignored by the norm, so let's see...
+ *
+ * The issue here is that this isn't *one* query: it's 3. Select gets the affected
+ * rows, updated with the new values. Insert inserts these, with the end value set to `forever`.
+ * The final update closes off the previous rows, setting the value to `now`.
+ *
+ * So I guess the best thing to do would probably be to do the "raw" approach. Writing
+ * in the query language directly wouldn't buy us much.
+*)
+
 let delete : Value.database -> ((Ir.var * string) * Q.t option) -> string =
   fun db ((_, table), where) ->
   Sql.reset_dummy_counter ();
@@ -1245,7 +1349,7 @@ let delete : Value.database -> ((Ir.var * string) * Q.t option) -> string =
     "delete from "^table^where
 
 (* Little hacky. It'd be nice to encode the additional constraint in the
- * "where" construct... *)
+ * "where" construct in the query language rather than mangling strings... *)
 let transaction_time_delete : Value.database -> ((Ir.var * string) * Q.t option) -> string -> string =
   fun db ((_, table), where) tt_to ->
     let open CalendarLib in
@@ -1271,6 +1375,18 @@ let compile_update : Value.database -> Value.env ->
     let q = update db ((x, table), where, body) in
       Debug.print ("Generated update query: "^q);
       q
+
+let compile_transaction_time_update :
+  Value.database -> Value.env ->
+  ((Ir.var * string * Types.datatype StringMap.t) * Ir.computation option * Ir.computation) ->
+  string -> (* transaction time to field *)
+  (string * string) =
+  fun db env ((x, table, field_types), where, body) tt_to ->
+    let env = Eval.bind (Eval.env_of_value_env QueryPolicy.Default env) (x, Q.Var (x, field_types)) in
+    let where = opt_map (Eval.norm_comp env) where in
+    let body = Eval.norm_comp env body in
+    transaction_time_update db field_types ((x, table), where, body) tt_to
+
 
 let compile_delete : TemporalMetadata.t -> Value.database -> Value.env ->
   ((Ir.var * string * Types.datatype StringMap.t) * Ir.computation option) -> string =

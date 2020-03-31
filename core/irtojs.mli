@@ -21,6 +21,7 @@ type code = | Var    of string
             | Case   of (string * (string * code) stringmap * (string * code) option)
             | Dict   of ((string * code) list)
             | Arr    of (code list)
+            | New    of (string * (code list))
 
             | Bind   of (string * code * code)
             | Return of code

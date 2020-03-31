@@ -745,6 +745,7 @@ class transform (env : Types.typing_environment) =
         | Constant.String v -> (o, Constant.String v, Types.string_type)
         | Constant.Bool v   -> (o, Constant.Bool v  , Types.bool_type  )
         | Constant.Char v   -> (o, Constant.Char v  , Types.char_type  )
+        | Constant.DateTime v   -> (o, Constant.DateTime v  , Types.datetime_type  )
 
     method quantifiers : Quantifier.t list -> ('self_type * Quantifier.t list) =
       fun qs -> (o, qs)

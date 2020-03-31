@@ -2,6 +2,7 @@
    (Sugartypes) and typechecker (Types). *)
 
 open Utility
+open CalendarLib
 
 module Linearity = struct
   type t = Any | Unl
@@ -228,6 +229,7 @@ module Constant = struct
     | Bool   of bool
     | String of string
     | Char   of char
+    | DateTime of DateTime.t
       [@@deriving show, ord]
 
   let type_of = function
@@ -236,6 +238,7 @@ module Constant = struct
     | Bool   _ -> Primitive.Bool
     | Char   _ -> Primitive.Char
     | String _ -> Primitive.String
+    | DateTime _ -> Primitive.DateTime
 
   (* SQL standard for escaping single quotes in a string *)
   let escape_string s =
@@ -249,6 +252,7 @@ module Constant = struct
     | Char c      -> "'"^ Char.escaped c ^"'"
     | String s    -> "'" ^ escape_string s ^ "'"
     | Float value -> string_of_float' value
+    | DateTime dt -> "'" ^ (Printer.Calendar.to_string dt) ^ "'"
 end
 
 module QueryPolicy = struct

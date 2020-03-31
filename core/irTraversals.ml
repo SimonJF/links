@@ -91,6 +91,7 @@ struct
         | Constant.Char   _ -> c, char_type  , o
         | Constant.String _ -> c, string_type, o
         | Constant.Float  _ -> c, float_type , o
+        | Constant.DateTime _ -> c, datetime_type, o
 
     method optionu :
       'a.

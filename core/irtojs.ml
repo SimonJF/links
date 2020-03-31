@@ -30,6 +30,7 @@ type code = | Var    of string
             | Case   of (string * (string * code) stringmap * (string * code) option)
             | Dict   of ((string * code) list)
             | Arr    of (code list)
+            | New    of (string * (code list))
 
             | Bind   of (string * code * code)
             | Return of code
@@ -77,6 +78,7 @@ module VariableInspection = struct
         | If (i, t, e) -> List.iter (go) [i;t;e]
         | Dict xs -> List.iter (go -<- snd) xs
         | Arr xs -> List.iter (go) xs
+        | New (_, xs) -> List.iter (go) xs
         | Bind (bnd, c1, c2) -> add_binder bnd; go c1; go c2
         | Return c -> go c
         | Case (bnd, sm, sc_opt) ->
@@ -165,6 +167,7 @@ module Js_CodeGen : JS_CODEGEN = struct
             | Call _
             | Dict _
             | Arr _
+            | New _
             | Bind _
             | Die _
             | Return _
@@ -216,6 +219,8 @@ module Js_CodeGen : JS_CODEGEN = struct
              | [] -> PP.text (Json.nil_literal |> Json.json_to_string)
              | x :: xs -> PP.braces (PP.text "\"_head\":" ^+^ (show x) ^^ (PP.text ",") ^|  PP.nest 1 (PP.text "\"_tail\":" ^+^  (show_list xs))) in
            show_list elems
+        | New (constr, xs) ->
+           PP.text "new" ^+^ PP.text constr ^+^ parens (hsep (punctuate ", " (List.map show xs)))
         | Bind (name, value, body) ->
            PP.text "var" ^+^ PP.text name ^+^ PP.text "=" ^+^ show value ^^ PP.text ";" ^^
              break ^^ show body
@@ -624,6 +629,7 @@ end = functor (K : CONTINUATION) -> struct
          | Constant.Bool v   -> Lit (string_of_bool v)
          | Constant.Char v   -> chrlit v
          | Constant.String v -> chrlistlit v
+         | Constant.DateTime dt -> New ("Date", [Lit (DateTime.show dt) ])
        end
     | Variable var ->
           (* HACK *)

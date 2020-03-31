@@ -3,6 +3,9 @@ open Lens.Utility
 module V = Value
 module LPV = Lens.Phrase.Value
 
+let internal_error message =
+  Errors.internal_error ~filename:"lens_value_conv.ml" ~message
+
 let lens_phrase_value_of_constant c =
   match c with
   | Constant.Bool b -> LPV.Bool b
@@ -10,6 +13,7 @@ let lens_phrase_value_of_constant c =
   | Constant.Char c -> LPV.Char c
   | Constant.Float f -> LPV.Float f
   | Constant.String s -> LPV.String s
+  | Constant.DateTime _dt -> raise (internal_error "DateTime lens serialisation not yet supported")
 
 let rec lens_phrase_value_of_value t =
   match t with
