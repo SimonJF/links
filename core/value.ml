@@ -75,7 +75,7 @@ class virtual database = object(self)
   method virtual quote_field : string -> string
   method virtual exec : string -> dbvalue
   (* Textual representation of DateTime used as the 'forever' value. *)
-  method forever : string = "'9999-12-30 00:00:00'"
+  method forever : string = "2999-01-30 00:00:00"
   (* Add transaction time information to inserted values *)
   method make_transaction_time_insert_query : (string * string list * string * string * string list list) -> string =
     fun (table_name, field_names, tt_from, tt_to, vss) ->
@@ -83,7 +83,8 @@ class virtual database = object(self)
       (* From value: current time. To value: forever. *)
       let field_names = field_names @ [tt_from; tt_to] in
       let from_time = "'" ^ (Calendar.now () |> Printer.Calendar.to_string) ^ "'" in
-      let vss = List.map (fun vs -> vs @ [from_time; self#forever]) vss in
+      let forever_time = "'" ^ self#forever ^ "'" in
+      let vss = List.map (fun vs -> vs @ [from_time; forever_time]) vss in
       self#make_insert_query (table_name, field_names, vss)
   method make_insert_query : (string * string list * string list list) -> string =
     fun (table_name, field_names, vss) ->
@@ -831,7 +832,7 @@ let rec p_value (ppf : formatter) : t -> 'a = function
   | `Pid (`ServerPid i) -> fprintf ppf "Pid Server (%s)" (ProcessID.to_string i)
   | `Pid (`ClientPid (cid, i)) -> fprintf ppf "Pid Client num %s, process %s" (ClientID.to_string cid) (ProcessID.to_string i)
   | `Alien -> fprintf ppf "alien"
-  | `DateTime dt -> DateTime.pp ppf dt
+  | `DateTime dt -> fprintf ppf "\"%s\"" (DateTime.show dt)
 and p_record_fields ppf = function
   | [] -> fprintf ppf ""
   | [(l, v)] -> fprintf ppf "@[@{<recordlabel>%a@} = %a@]"

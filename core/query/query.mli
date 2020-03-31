@@ -39,12 +39,14 @@ val unbox_xml : Lang.t -> Value.xmlitem
 val used_database : Lang.t -> Value.database option
 
 val string_of_t : Lang.t -> string
+val show_base :   Value.database -> Lang.t -> string
 
 val type_of_expression : Lang.t -> Types.datatype
 
 val default_of_base_type : Primitive.t -> Lang.t
 
 val value_of_expression : Lang.t -> Value.t
+val expression_of_base_value : Value.t -> Lang.t
 
 val labels_of_field_types : 'a Utility.StringMap.t -> Utility.StringSet.t
 val record_field_types : Types.datatype -> Types.datatype StringMap.t
@@ -70,6 +72,7 @@ end
 val compile_transaction_time_update:
   Value.database -> Value.env ->
     ((Ir.var * string * Types.datatype StringMap.t) * Ir.computation option * Ir.computation) ->
+    string -> (* transaction time from field *)
     string -> (* transaction time to field *)
     (string * string)
 

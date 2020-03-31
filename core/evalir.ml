@@ -846,29 +846,41 @@ struct
                 Query.compile_update db env ((Var.var_of_binder xb, table, field_types), where, body) in
               let () = ignore (Database.execute_command update_query db) in
               apply_cont cont env (`Record [])
-          | TransactionTime { tt_to_field; _ } ->
+          | TransactionTime { tt_from_field; tt_to_field } ->
               let (select_q, update_q) =
                 Query.compile_transaction_time_update db env
-                  ((Var.var_of_binder xb, table, field_types), where, body) tt_to_field in
+                  ((Var.var_of_binder xb, table, field_types), where, body) tt_from_field tt_to_field in
 
               (* Evaluate the selection to get the rows to insert *)
-              let field_types = StringMap.bindings field_types in
-              let field_names = List.map (fst) field_types in
+              let dt = `Primitive Primitive.DateTime in
+              let field_types = StringMap.bindings field_types @ [(tt_from_field, dt); (tt_to_field, dt)]  in
               (* List of records. *)
               Debug.print ("(TT UPDATE(1)) SELECT: " ^ select_q);
               let results = Database.execute_select field_types select_q db in
               (* We need to first unbox the list. Then, we need to map over each record in order
                * to get only the values, and convert them to a string. *)
-              let str_results =
-                Value.unbox_list results
-                  |> List.map (Value.unbox_record ->- List.map (snd ->- Value.string_of_value)) in
-              let insert_q = db#make_insert_query (table, field_names, str_results) in
-              Debug.print ("(TT UPDATE(2)) INSERT: " ^ insert_q);
-              let () = ignore (Database.execute_command insert_q db) in
-              (* Finally, execute the update query, and that should be us. *)
-              Debug.print ("(TT UPDATE(3)) UPDATE: " ^ update_q);
-              let () = ignore (Database.execute_command update_q db) in
-              apply_cont cont env (`Record [])
+
+              begin
+                match Value.unbox_list results with
+                  | [] ->
+                      (* Nothing to update. *)
+                      Debug.print "Empty result set";
+                      apply_cont cont env (`Record [])
+                  | x :: _ as results ->
+                      (* We need the ordering of the field names to be consistent with the results
+                       * in the insert query *)
+                      let field_names = Value.unbox_record x |> List.map fst in
+                      let values =
+                        List.map (Value.unbox_record ->- List.map
+                          (snd ->- Query.expression_of_base_value ->- Query.show_base db)) results in
+                      let insert_q = db#make_insert_query (table, field_names, values) in
+                      Debug.print ("(TT UPDATE(2)) INSERT: " ^ insert_q);
+                      let () = ignore (Database.execute_command insert_q db) in
+                      (* Finally, execute the update query, and that should be us. *)
+                      Debug.print ("(TT UPDATE(3)) UPDATE: " ^ update_q);
+                      let () = ignore (Database.execute_command update_q db) in
+                      apply_cont cont env (`Record [])
+              end
           | _ -> raise (internal_error "Valid / Bitemporal data not yet supported")
       end
     | Delete ((xb, source), where) ->

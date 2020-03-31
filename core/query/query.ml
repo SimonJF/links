@@ -169,6 +169,17 @@ struct
                                  fields []))
         | _ -> assert false
 
+  let expression_of_base_value : Value.t -> t = function
+    | `DateTime dt -> Constant (Constant.DateTime dt)
+    | `Bool b -> Constant (Constant.Bool b)
+    | `Char c -> Constant (Constant.Char c)
+    | `Float f -> Constant (Constant.Float f)
+    | `Int i -> Constant (Constant.Int i)
+    | `String s -> Constant (Constant.String s)
+    | other ->
+        raise (internal_error ("expression_of_base_value undefined for " ^
+          Value.string_of_value other))
+
   let rec freshen_for_bindings : Var.var Env.Int.t -> t -> t =
     fun env v ->
       let ffb = freshen_for_bindings env in
@@ -1240,19 +1251,28 @@ let transaction_time_update :
     Types.datatype StringMap.t ->
     ((Ir.var * string) * Q.t option * Q.t) ->
     string ->
+    string ->
     (string * string) =
-  fun db table_types ((_, table), where, body) tt_to ->
+  fun db table_types ((_, table), where, body) tt_from tt_to ->
     let base = (base []) ->- (Sql.string_of_base db true) in
-    let is_current = (db#quote_field tt_to) ^ " = " ^ db#forever in
+    let is_current = "(" ^ (db#quote_field tt_to) ^ " = '" ^ db#forever ^ "')" in
     let now = Q.Constant (Constant.DateTime (Calendar.now ())) in
+    (* Bit of a hack. I'm not sure we entirely want forever to be part of DB... *)
+    let forever = Q.Constant (Constant.String (db#forever)) in
+    let table_types =
+      table_types
+        |> StringMap.add tt_from (`Primitive Primitive.DateTime)
+        |> StringMap.add tt_to (`Primitive Primitive.DateTime) in
     (* "'" ^ (Calendar.now () |> Printer.Calendar.to_string) ^ "'" in *)
-
+    let () = Debug.print @@ "TTUpd: Table types: " ^
+      (ListUtils.print_list (StringMap.bindings table_types |> (List.map fst))) in
     (* Construct query which applies predicate, returning updated results. *)
     let record_fields =
       match body with
         | Q.Record fields ->
             fields
-            |> StringMap.add tt_to now
+            |> StringMap.add tt_from now
+            |> StringMap.add tt_to forever
         | _ -> assert false in
     let record_fields_list = StringMap.to_alist record_fields in
     (* let field_names = List.map fst record_fields_list in *)
@@ -1262,7 +1282,7 @@ let transaction_time_update :
     let select_fields =
       StringMap.mapi
         (fun k _ ->
-          OptionUtils.opt_map (base) (StringMap.lookup k record_fields)
+          OptionUtils.opt_map (fun x -> (base x) ^ " as " ^ k) (StringMap.lookup k record_fields)
           |> OptionUtils.from_option k) table_types
       |> StringMap.to_alist
       |> List.map snd
@@ -1271,7 +1291,7 @@ let transaction_time_update :
     let select_where_body =
       match where with
         | None -> is_current
-        | Some where -> (base where) ^ " && " ^ is_current in
+        | Some where -> (base where) ^ " and " ^ is_current in
 
     (* We need to be a little careful here -- the select query needs to
      * select the field values for the fields not specified in the update
@@ -1283,9 +1303,9 @@ let transaction_time_update :
     let update_q =
       let fields_neq =
         let values =
-          String.concat " && "
+          String.concat " and "
             (List.map
-              (fun (label, v) -> db#quote_field label ^ " = " ^ base v)
+              (fun (label, v) -> "(" ^ db#quote_field label ^ " = " ^ base v ^ ")")
               record_fields_list) in
         "not(" ^ values ^ ")" in
 
@@ -1293,8 +1313,8 @@ let transaction_time_update :
       let set_stop_time = (db#quote_field tt_to) ^ " = " ^ (base now) in
       let update_where_body =
         match where with
-          | None -> is_current ^ " && " ^ fields_neq
-          | Some where -> base where ^ " && " ^ is_current ^ " && " ^ fields_neq in
+          | None -> is_current ^ " and " ^ fields_neq
+          | Some where -> "(" ^ base where ^ ") and " ^ is_current ^ " and " ^ fields_neq in
 
       Printf.sprintf "update %s set %s where (%s)" table set_stop_time update_where_body in
     (select_q, update_q)
@@ -1355,7 +1375,7 @@ let transaction_time_delete : Value.database -> ((Ir.var * string) * Q.t option)
     let open CalendarLib in
     Sql.reset_dummy_counter ();
     let base = base [] ->- (Sql.string_of_base db true) in
-    let is_current = (db#quote_field tt_to) ^ " = " ^ db#forever in
+    let is_current = (db#quote_field tt_to) ^ " = '" ^ db#forever ^ "'" in
     let where =
       match where with
         | None -> is_current
@@ -1379,13 +1399,14 @@ let compile_update : Value.database -> Value.env ->
 let compile_transaction_time_update :
   Value.database -> Value.env ->
   ((Ir.var * string * Types.datatype StringMap.t) * Ir.computation option * Ir.computation) ->
+  string -> (* transaction time from field *)
   string -> (* transaction time to field *)
   (string * string) =
-  fun db env ((x, table, field_types), where, body) tt_to ->
+  fun db env ((x, table, field_types), where, body) tt_from tt_to ->
     let env = Eval.bind (Eval.env_of_value_env QueryPolicy.Default env) (x, Q.Var (x, field_types)) in
     let where = opt_map (Eval.norm_comp env) where in
     let body = Eval.norm_comp env body in
-    transaction_time_update db field_types ((x, table), where, body) tt_to
+    transaction_time_update db field_types ((x, table), where, body) tt_from tt_to
 
 
 let compile_delete : TemporalMetadata.t -> Value.database -> Value.env ->
@@ -1404,9 +1425,13 @@ let compile_delete : TemporalMetadata.t -> Value.database -> Value.env ->
     Debug.print ("Generated delete query: "^q);
     q
 
+let show_base db =
+  (base []) ->- (Sql.string_of_base db true)
+
 let is_list = Q.is_list
 let table_field_types = Q.table_field_types
 let value_of_expression = Q.value_of_expression
+let expression_of_base_value = Q.expression_of_base_value
 let default_of_base_type = Q.default_of_base_type
 let type_of_expression = Q.type_of_expression
 let unbox_xml = Q.unbox_xml
