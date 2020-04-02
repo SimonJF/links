@@ -34,6 +34,30 @@ sig
   val reduce_and : t * t -> t
 end
 
+module type QUERY_VISITOR =
+sig
+  class visitor :
+  object ('self_type)
+    method query : Lang.t -> ('self_type * Lang.t)
+    method tag : Lang.tag -> ('self_type * Lang.tag)
+    method binder : Var.binder -> ('self_type * Var.binder)
+
+    method option :
+      'a.
+        ('self_type -> 'a -> ('self_type * 'a)) ->
+        'a option ->
+        ('self_type * ('a option))
+
+    method list :
+      'a.
+        ('self_type -> 'a -> ('self_type * 'a)) ->
+        'a list ->
+        ('self_type * ('a list))
+  end
+end
+
+module Transform : QUERY_VISITOR
+
 val unbox_xml : Lang.t -> Value.xmlitem
 
 val used_database : Lang.t -> Value.database option
