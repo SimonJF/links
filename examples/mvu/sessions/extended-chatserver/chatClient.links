@@ -119,7 +119,7 @@ mutual {
 
   sig emptySubs : forall
       model :: Type(Unl, Any),
-      message :: Type(Any, Any) . (model) ~%~> LinearMvuSubscriptions.Sub(message)
+      message :: Type(Any, Any) . (model) {}~> LinearMvuSubscriptions.Sub(message)
   fun emptySubs(_) { LinearMvuSubscriptions.empty }
 
 # sig waitingTransition : forall model :: Type(Any, Any), msg :: Type(Any, Any) .
@@ -130,7 +130,7 @@ mutual {
 
   sig waitForRooms :
     forall model :: Type(Any, Any), msg :: Type(Any, Any).
-    () ~%~> Transition(model, msg)
+    () {}~> Transition(model, msg)
   fun waitForRooms() {
     fun wait() {
       var cs = request(wap);

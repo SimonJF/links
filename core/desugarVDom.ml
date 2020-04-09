@@ -18,7 +18,7 @@ open Utility
  *)
 
 let (attrs_module, html_module) =
-  if (Settings.get_value Basicsettings.Sessions.exceptions_enabled) then
+  if (Settings.get Basicsettings.Sessions.exceptions_enabled) then
     ("LinearMvuAttrs", "LinearMvuHTML")
   else
     ("MvuAttrs", "MvuHTML")
@@ -140,6 +140,8 @@ let desugar =
         | p -> super#phrase p
   end
 
-
-
-
+module Untyped
+  = Transform.Untyped.Make.Transformer(struct
+        let name = "desugar_vdom"
+        let obj = desugar
+      end)

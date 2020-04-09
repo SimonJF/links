@@ -49,9 +49,12 @@ module Sessions = struct
 end
 
 module MVU = struct
-  let desugar_vdom = Settings.add_bool ("desugar_vdom", false, `User)
-end
-
-module MVU = struct
-  let desugar_vdom = Settings.add_bool ("desugar_vdom", false, `User)
+  let desugar_vdom
+    = Settings.(flag "desugar_vdom"
+                |> synopsis "Enables desugaring of vdom elements"
+                |> depends Handlers.enabled
+                |> privilege `System
+                |> convert parse_bool
+                |> CLI.(add (long "desugar_vdom"))
+                |> sync)
 end
