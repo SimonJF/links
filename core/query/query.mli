@@ -30,6 +30,7 @@ sig
   and env = { venv: Value.env; qenv: t Env.Int.t; policy: QueryPolicy.t }
       [@@deriving show]
 
+  val eta_expand_var : Var.var * Types.datatype StringMap.t -> t
   val reduce_where_then : t * t -> t
   val reduce_and : t * t -> t
 end
@@ -88,7 +89,6 @@ module Eval :
 sig
   val env_of_value_env : QueryPolicy.t -> Value.env -> Lang.env
   val bind : Lang.env -> Env.Int.name * Lang.t -> Lang.env
-  val eta_expand_var : Var.var * Types.datatype StringMap.t -> Lang.t
   val computation : Lang.env -> Ir.computation -> Lang.t
   val eval : QueryPolicy.t -> Value.t Value.Env.t -> Ir.computation -> Lang.t
 end

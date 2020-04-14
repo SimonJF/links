@@ -291,6 +291,20 @@ struct
       | If (_, _, Concat []) -> true
       | _ -> false
 
+  (* Eta-expansion *)
+  let eta_expand_var (x, field_types) =
+    Record
+      (StringMap.fold
+         (fun name _t fields ->
+            StringMap.add name (Project (Var (x, field_types), name)) fields)
+         field_types
+         StringMap.empty)
+
+  let eta_expand_list xs =
+    let x = Var.fresh_raw_var () in
+    let field_types = field_types_of_list xs in
+      ([x, xs], [], Singleton (eta_expand_var (x, field_types)))
+
 
   (* simple optimisations *)
   let reduce_and (a, b) =
@@ -419,28 +433,15 @@ struct
                       let table_var = Var (table_raw_var, field_types) in
 
                       (* Second, generate a fresh variable for the metadata *)
-                      let metadata_field_types =
-                        StringMap.from_alist [
-                          (Transaction.data_field, Types.make_record_type field_types);
-                          (Transaction.from_field, `Primitive Primitive.DateTime );
-                          (Transaction.to_field, `Primitive Primitive.DateTime )
-                      ] in
-
                       let metadata_record =
                         StringMap.from_alist [
-                          (Transaction.data_field, table_var);
+                          (Transaction.data_field, eta_expand_var (table_raw_var, field_types));
                           (Transaction.from_field, Project (table_var, tt_from_field) );
                           (Transaction.to_field, Project (table_var, tt_to_field))
                         ] in
-                      let metadata_raw_var = Var.fresh_raw_var () in
-                      let metadata_var = Var (metadata_raw_var, metadata_field_types) in
-                      let generators =
-                        [
-                          (table_raw_var, source);
-                          (metadata_raw_var, Singleton (Record metadata_record));
-                        ] in
+                      let generators = [ (table_raw_var, source) ] in
 
-                      reduce_for_body (generators, [], body metadata_var)
+                      reduce_for_body (generators, [], body (Record metadata_record))
                   | ValidTime _ | Bitemporal _ ->
                       raise (internal_error
                         "Valid time / bitemporal tables not yet supported")
@@ -769,19 +770,6 @@ struct
           end
       end
 
-  let eta_expand_var (x, field_types) =
-    Q.Record
-      (StringMap.fold
-         (fun name _t fields ->
-            StringMap.add name (Q.Project (Q.Var (x, field_types), name)) fields)
-         field_types
-         StringMap.empty)
-
-  let eta_expand_list xs =
-    let x = Var.fresh_raw_var () in
-    let field_types = Q.field_types_of_list xs in
-      ([x, xs], [], Q.Singleton (eta_expand_var (x, field_types)))
-
   let reduce_artifacts = function
   | Q.Apply (Q.Primitive "stringToXml", [u]) ->
     Q.Singleton (Q.XML (Value.Text (Q.unbox_string u)))
@@ -811,7 +799,7 @@ struct
           match lookup env var with
             | Q.Var (x, field_types) ->
                 (* eta-expand record variables *)
-                eta_expand_var (x, field_types)
+                Q.eta_expand_var (x, field_types)
             | Q.Primitive "Nil" -> Q.nil
             (* We could consider detecting and eta-expand tables here.
                The only other possible sources of table values would
@@ -1102,7 +1090,7 @@ struct
                         (* I think we can omit the `Table case as it
                            can never occur *)
                         (* eta-expand *)
-                        eta_expand_list xs
+                        Q.eta_expand_list xs
                     | _ -> assert false in
                 let xs = Q.For (None, gs, os', body) in
                   begin
@@ -1339,7 +1327,9 @@ let gens_index (gs : (Var.var * Q.t) list)   =
       | _       -> all_fields t
   in
   let table_index get_fields (x, source) =
-    let t = match source with Q.Table t -> t | _ -> assert false in
+    let t = match source with
+      | Q.Table t -> t
+      | x -> Printf.printf "Bad source: %s %!\n" (Q.string_of_t x); assert false in
     let labels = get_fields t in
       List.rev
         (StringSet.fold

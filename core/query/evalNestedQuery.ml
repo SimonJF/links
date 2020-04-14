@@ -436,7 +436,7 @@ struct
                (fun (x, source) ->
                  match source with
                    | QL.Table t ->
-                     Q.Eval.eta_expand_var (x, Q.table_field_types t)
+                     QL.eta_expand_var (x, Q.table_field_types t)
                    | _ -> assert false)
                gs_out) in
     let r_out_type =
