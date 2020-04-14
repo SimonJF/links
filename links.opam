@@ -37,4 +37,5 @@ depends: [
   "result"
   "ocamlfind"
   "menhir"
+  "calendar"
 ]

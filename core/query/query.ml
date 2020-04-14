@@ -399,12 +399,52 @@ struct
             *)
             reduce_for_body (gs, os, rs v)
           | Table table ->
-            let field_types = table_field_types table in
-            (* we need to generate a fresh variable in order to
-               correctly handle self joins *)
-            let x = Var.fresh_raw_var () in
-              (* Debug.print ("fresh variable: " ^ string_of_int x); *)
-              reduce_for_body ([(x, source)], [], body (Var (x, field_types)))
+              begin
+                let open Value in
+                let open TemporalMetadata in
+                (* TODO: We will also need to handle "demotion" ops such
+                 * as time-slicing here *)
+                match table.temporal_metadata with
+                  | Current ->
+                      let field_types = table_field_types table in
+                      (* we need to generate a fresh variable in order to
+                         correctly handle self joins *)
+                      let x = Var.fresh_raw_var () in
+                      reduce_for_body ([(x, source)], [], body (Var (x, field_types)))
+                  | TransactionTime { tt_from_field; tt_to_field } ->
+                      (* TT Tables: Ensure we add transaction-time metadata *)
+                      (* First, generate a fresh variable for the table *)
+                      let field_types = table_field_types table in
+                      let table_raw_var = Var.fresh_raw_var () in
+                      let table_var = Var (table_raw_var, field_types) in
+
+                      (* Second, generate a fresh variable for the metadata *)
+                      let metadata_field_types =
+                        StringMap.from_alist [
+                          (Transaction.data_field, Types.make_record_type field_types);
+                          (Transaction.from_field, `Primitive Primitive.DateTime );
+                          (Transaction.to_field, `Primitive Primitive.DateTime )
+                      ] in
+
+                      let metadata_record =
+                        StringMap.from_alist [
+                          (Transaction.data_field, table_var);
+                          (Transaction.from_field, Project (table_var, tt_from_field) );
+                          (Transaction.to_field, Project (table_var, tt_to_field))
+                        ] in
+                      let metadata_raw_var = Var.fresh_raw_var () in
+                      let metadata_var = Var (metadata_raw_var, metadata_field_types) in
+                      let generators =
+                        [
+                          (table_raw_var, source);
+                          (metadata_raw_var, Singleton (Record metadata_record));
+                        ] in
+
+                      reduce_for_body (generators, [], body metadata_var)
+                  | ValidTime _ | Bitemporal _ ->
+                      raise (internal_error
+                        "Valid time / bitemporal tables not yet supported")
+              end
           | v -> query_error "Bad source in for comprehension: %s" (string_of_t v)
 
   let rec reduce_if_body (c, t, e) =
@@ -570,60 +610,6 @@ struct
       | Constant c -> (o, Constant c)
   end
 end
-
-module PerformTemporalRewrites =
-struct
-  class visitor =
-    object (o)
-      inherit (Transform.visitor) as super
-
-      method rewrite_for_source = function
-        | Q.Table table ->
-            (* If the table is a transaction-time table, then
-             * we need to rewrite the query to add the transaction-time
-             * metadata. *)
-            (* Later on, we might want to add things like support for
-             * nonsequenced queries, current-time snapshots, and so on. *)
-            begin
-              let open Value in
-              let open TemporalMetadata in
-              match table.temporal_metadata with
-                | Current -> (o, Q.Table table)
-                | TransactionTime { tt_from_field; tt_to_field } ->
-                    let open Transaction in
-                    let fresh_var = Var.fresh_raw_var () in
-                    let q_var = Q.Var (fresh_var, Q.table_field_types table) in
-
-                    (* Construct transaction-time metadata record. *)
-                    let record = StringMap.from_alist (
-                      [ (data_field, q_var);
-                        (from_field, Q.Project (q_var, tt_from_field));
-                        (to_field, Q.Project (q_var, tt_to_field))]) in
-                    let metadata_record = Q.Singleton (Q.Record record) in
-
-                    (o, Q.For (None, [(fresh_var, Q.Table table)], [], metadata_record))
-                | _ ->
-                    raise (internal_error "Valid time / bitemporal data not yet supported")
-            end
-        | x -> o#query x
-
-      method! query = function
-        | Q.For (tag, gs, os, body) ->
-            (* Rewrite the generators of the for-comprehensions to provide
-             * the correct metadata. *)
-            let (o, tag) = o#option (fun o -> o#tag) tag in
-            let (o, gs) = o#list (fun o (bnd, g) ->
-              let (o, g) = o#rewrite_for_source g in
-              (o, (bnd, g))) gs in
-            let (o, os) = o#list (fun o -> o#query) os in
-            let (o, body) = o#query body in
-            (o, Q.For (tag, gs, os, body))
-        | q -> super#query q
-    end
-end
-
-let perform_temporal_rewrites x =
-  (new PerformTemporalRewrites.visitor)#query x |> snd
 
 (** Returns which database was used if any.
 
@@ -1004,7 +990,6 @@ struct
 
   let rec norm env : Q.t -> Q.t =
     function
-    | (Q.For _) as qfor -> Q.reduce_for_source (qfor, fun x -> x)
     | Q.Record fl -> Q.Record (StringMap.map (norm env) fl)
     | Q.Concat xs -> Q.reduce_concat (List.map (norm env) xs)
     | Q.Project (r, label) ->
@@ -1151,16 +1136,7 @@ struct
         apply env (f, args @ args')
     | t, _ -> query_error "Application of non-function: %s" (string_of_t t)
   and norm_comp env c =
-    (* Translate from IR *)
-    computation env c
-    (* Normalise. Need to do this before rewriting so that the entire term
-     * is translated properly. *)
-    |> norm env
-    (* Add temporal metadata to queries *)
-    |> perform_temporal_rewrites
-    (* Normalise again, in case temporal rewrites introduced non-normal forms.
-     * Should be safe since normalisation is idempotent. *)
-    |> norm env
+      norm env (computation env c)
 
   let eval policy env e =
 (*    Debug.print ("e: "^Ir.show_computation e); *)
