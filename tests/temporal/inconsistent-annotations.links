@@ -1,0 +1,6 @@
+var db = database "timedb";
+
+sig timetbl : TableHandle((foo: String), (foo: String), (foo: String), Current)
+var timetbl = table "timetbl"
+  with (foo: String)
+  using transaction_time(tt_from, tt_to) from db;

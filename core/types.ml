@@ -42,7 +42,12 @@ type 't meta_presence_var_basis = 't meta_type_var_non_rec_basis
       [@@deriving show]
 
 type meta_md_var_basis = [
-  | `Undefined | `Metadata of TemporalMetadata.t
+  | `Undefined
+  | `Current
+  | `Transaction
+  | `Valid
+  | `Bitemporal
+  | `Metadata of TemporalMetadata.t
 ]
   [@@deriving show]
 
@@ -1937,6 +1942,10 @@ struct
       let show_md_var var =
         match Unionfind.find var with
           | `Undefined -> "?"
+          | `Current -> "?c"
+          | `Valid -> "?v"
+          | `Transaction -> "?t"
+          | `Bitemporal -> "?b"
           | `Metadata md -> TemporalMetadata.show md in
 
       let unwrap = fst -<- unwrap_row in

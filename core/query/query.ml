@@ -944,8 +944,8 @@ struct
         let temporal_metadata =
           begin
             match Unionfind.find md with
-              | `Undefined -> raise (internal_error "Unresolved temporal metadata")
               | `Metadata md -> md
+              | _ -> raise (internal_error "Unresolved temporal metadata")
           end in
 
             Q.Table (Value.make_table

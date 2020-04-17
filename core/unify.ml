@@ -232,15 +232,36 @@ type unify_env =
   }
 
 let unify_metadata p1 p2 =
+  let fail x y =
+    raise (Failure (`Msg ("Temporal metadatas " ^
+      (Types.show_meta_md_var_basis x) ^
+      " and " ^ (Types.show_meta_md_var_basis y) ^ " are incompatible."))) in
+
   match (Unionfind.find p1, Unionfind.find p2) with
-    | `Undefined, `Undefined -> Unionfind.union p1 p2
-    | `Metadata _, `Undefined -> Unionfind.union p2 p1
-    | `Undefined, `Metadata _ -> Unionfind.union p1 p2
-    | `Metadata md1, `Metadata md2 ->
-        if md1 <> md2 then
-          raise (Failure (`Msg ("Temporal metadatas " ^ (TemporalMetadata.show md1) ^
-          " and " ^ (TemporalMetadata.show md2) ^ " are incompatible.")))
-        else Unionfind.union p1 p2
+    | `Undefined, _ -> Unionfind.union p1 p2
+    | _, `Undefined -> Unionfind.union p2 p1
+    | x, y when x = y -> Unionfind.union p1 p2
+    | x, ((`Metadata md) as y) ->
+        begin
+          let open TemporalMetadata in
+          match x, md with
+            | `Current, Current
+            | `Valid, ValidTime _
+            | `Transaction, TransactionTime _
+            | `Bitemporal, Bitemporal _ -> Unionfind.union p1 p2
+            | _, _ -> fail x y
+        end
+    | ((`Metadata md) as x), y ->
+        begin
+          let open TemporalMetadata in
+          match y, md with
+            | `Current, Current
+            | `Valid, ValidTime _
+            | `Transaction, TransactionTime _
+            | `Bitemporal, Bitemporal _ -> Unionfind.union p2 p1
+            | _, _ -> fail x y
+        end
+    | x, y -> fail x y
 
 let check_subkind var (lin, res) typ =
   if Linearity.is_nonlinear lin then

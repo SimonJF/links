@@ -269,6 +269,7 @@ sig
   val table_name : griper
   val table_db : griper
   val table_keys : griper
+  val table_annotation : griper
 
   val delete_table : griper
   val delete_pattern : griper
@@ -768,6 +769,13 @@ end
     let table_keys ~pos ~t1:l ~t2:(_,t) ~error:_ =
       build_tyvar_names [snd l; t];
       fixed_type pos "Database keys" t l
+
+    let table_annotation ~pos ~t1:(_,lt) ~t2:(_,rt) ~error:_ =
+      build_tyvar_names [lt;rt];
+      die pos ("The type of table " ^ nl() ^
+                  tab() ^ code (show_type lt) ^ nl() ^
+                  "is inconsistent with its annotation" ^ nl() ^
+                  tab() ^ code (show_type rt) ^ nl())
 
     let delete_table ~pos ~t1:l ~t2:(_,t) ~error:_ =
       build_tyvar_names [snd l; t];
@@ -2193,17 +2201,6 @@ let check_unsafe_signature context unify inner = function
      unsafe
   | Some (_, None) -> raise (internal_error "Sugartypes.datatype' without a Types.typ instance")
 
-let check_metadata pos annotation term_md =
-    match Unionfind.find annotation with
-      | `Undefined -> Unionfind.change annotation (`Metadata term_md)
-      | `Metadata md ->
-          if md = term_md then
-            ()
-          else
-            Gripers.die pos
-              (Printf.sprintf "Temporal metadata %s is inconsistent with its annotation %s."
-                (TemporalMetadata.show_term term_md) (TemporalMetadata.show md))
-
 let rec pattern_env : Pattern.with_pos -> Types.datatype Env.t =
   fun { node = p; _} -> let open Pattern in
   match p with
@@ -2789,15 +2786,21 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * Usage.t =
             let tname = tc tname
             and db = tc db
             and keys = tc keys in
-            let () = unify ~handle:Gripers.table_name (pos_and_typ tname, no_pos Types.string_type)
-            and () = unify ~handle:Gripers.table_db (pos_and_typ db, no_pos Types.database_type)
-            and () = unify ~handle:Gripers.table_keys (pos_and_typ keys, no_pos Types.keys_type) in
-            let () = check_metadata pos md temporal_metadata in
+            let () = unify ~handle:Gripers.table_name (pos_and_typ tname, no_pos Types.string_type) in
+            let () = unify ~handle:Gripers.table_db (pos_and_typ db, no_pos Types.database_type) in
+            let () = unify ~handle:Gripers.table_keys (pos_and_typ keys, no_pos Types.keys_type) in
+
+            (* Check whether the metadata matches *)
+            let table_ty = `Table (read_row, write_row, needed_row, md) in
+            let target_ty = `Table (read_row, write_row, needed_row,
+              Types.make_table_metadata_var temporal_metadata) in
+            let () = unify ~handle:Gripers.table_annotation (no_pos table_ty, no_pos target_ty) in
+
             TableLit { name = erase tname;
                 record_type = (dtype, Some (read_row, write_row, needed_row, md));
                 field_constraints = constraints; keys = erase keys; temporal_metadata;
                 database = erase db },
-              `Table (read_row, write_row, needed_row, md),
+              table_ty,
               Usage.combine (usages tname) (usages db)
         | TableLit _ -> assert false
         | TemporalOp (op, target, replacement) ->

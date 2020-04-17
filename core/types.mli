@@ -33,8 +33,14 @@ type 't meta_row_var_basis =
 type 't meta_presence_var_basis = 't meta_type_var_non_rec_basis
 
 type meta_md_var_basis = [
-  | `Undefined | `Metadata of TemporalMetadata.t
+  | `Undefined
+  | `Current
+  | `Transaction
+  | `Valid
+  | `Bitemporal
+  | `Metadata of TemporalMetadata.t
 ]
+  [@@deriving show]
 
 type 't meta_max_basis = 't meta_row_var_basis
 

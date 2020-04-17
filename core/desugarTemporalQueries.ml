@@ -90,11 +90,10 @@ struct
         inherit Types.Transform.visitor as super
         method! typ = function
           | `Table (_read, _write, _needed, md) as tbl_ty ->
-              (* TODO: I imagine this will cause problems. *)
               let md =
                 match Unionfind.find md with
-                  | `Undefined -> TemporalMetadata.current
-                  | `Metadata md -> md in
+                  | `Metadata md -> md
+                  | _ -> assert false in
               (* Table types need to be translated to the new pair representations *)
               let ty = StringMap.from_alist [("1", tbl_ty);
                 ("2", Types.make_pure_thunk_type (accessor_result_ty tbl_ty md))]
