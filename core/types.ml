@@ -124,6 +124,7 @@ let transaction_absty typ =
   `Application (transaction_time_metadata, [`Type typ])
 
 let make_empty_table_metadata () = Unionfind.fresh `Undefined
+let make_table_metadata_unifier = Unionfind.fresh
 let make_table_metadata_var md = Unionfind.fresh (`Metadata md)
 
 type ('t, 'r) session_type_basis =

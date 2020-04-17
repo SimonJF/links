@@ -2939,8 +2939,18 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * Usage.t =
             let read  = `Record (Types.make_empty_open_row (lin_any, res_base)) in
             let write = `Record (Types.make_empty_open_row (lin_any, res_base)) in
             let needed = `Record (Types.make_empty_open_row (lin_any, res_base)) in
-            let () = unify ~handle:Gripers.delete_table
-              (pos_and_typ from, no_pos (`Table (read, write, needed, Types.make_empty_table_metadata ()))) in
+
+            let basis =
+                let open CommonTypes.TableMode in
+                match mode with
+                  | Current -> `Current
+                  | Transaction -> `Transaction
+                  | Valid -> `Valid
+                  | Bitemporal -> `Bitemporal in
+            let md = Types.make_table_metadata_unifier basis in
+            let tt = `Table (read, write, needed, md) in
+
+            let () = unify ~handle:Gripers.delete_table (pos_and_typ from, no_pos tt) in
             let () = unify ~handle:Gripers.delete_pattern (ppos_and_typ pat, no_pos read) in
 
             let hide =
@@ -2972,8 +2982,19 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * Usage.t =
             let read  = `Record (Types.make_empty_open_row (lin_any, res_base)) in
             let write = `Record (Types.make_empty_open_row (lin_any, res_base)) in
             let needed = `Record (Types.make_empty_open_row (lin_any, res_base)) in
+
+            let basis =
+                let open CommonTypes.TableMode in
+                match mode with
+                  | Current -> `Current
+                  | Transaction -> `Transaction
+                  | Valid -> `Valid
+                  | Bitemporal -> `Bitemporal in
+            let md = Types.make_table_metadata_unifier basis in
+            let tt = `Table (read, write, needed, md) in
+
             let () = unify ~handle:Gripers.insert_table
-              (pos_and_typ into, no_pos (`Table (read, write, needed, Types.make_empty_table_metadata ()))) in
+              (pos_and_typ into, no_pos tt) in
 
             let field_env =
               List.fold_right
@@ -3044,8 +3065,19 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * Usage.t =
             let read =  `Record (Types.make_empty_open_row (lin_any, res_base)) in
             let write = `Record (Types.make_empty_open_row (lin_any, res_base)) in
             let needed = `Record (Types.make_empty_open_row (lin_any, res_base)) in
+
+            let basis =
+                let open CommonTypes.TableMode in
+                match mode with
+                  | Current -> `Current
+                  | Transaction -> `Transaction
+                  | Valid -> `Valid
+                  | Bitemporal -> `Bitemporal in
+            let md = Types.make_table_metadata_unifier basis in
+            let tt = `Table (read, write, needed, md) in
+
             let () = unify ~handle:Gripers.update_table
-              (pos_and_typ from, no_pos (`Table (read, write, needed, Types.make_empty_table_metadata ()))) in
+              (pos_and_typ from, no_pos tt) in
 
             let hide =
               let bs = Env.domain (pattern_env pat) in
@@ -3505,23 +3537,22 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * Usage.t =
                             usages e :: generator_usages,
                             pattern_env pattern :: environments)
                      | Table (mode, pattern, e) ->
+                         let open CommonTypes.TableMode in
                          let a = `Record (Types.make_empty_open_row (lin_unl, res_base)) in
                          let b = `Record (Types.make_empty_open_row (lin_unl, res_base)) in
                          let c = `Record (Types.make_empty_open_row (lin_unl, res_base)) in
-                         let d = Types.make_empty_table_metadata () in
+                         (* TODO: Will need to update this for ValidTime and Bitemporal *)
+                         let (pattern_type, basis) =
+                             match mode with
+                               | Current -> (a, `Current)
+                               | Transaction -> (Types.transaction_absty a, `Transaction)
+                               | Valid -> (a, `Valid)
+                               | Bitemporal -> (a, `Bitemporal) in
+                         let d = Types.make_table_metadata_unifier basis in
                          let pattern = tpc pattern in
                          let e = tc e in
                          let tt = `Table (a, b, c, d) in
                          let () = unify ~handle:Gripers.iteration_table_body (pos_and_typ e, no_pos tt) in
-                         (* Iteration pattern types bind metadata types in the case of temporal tables. *)
-                         (* TODO: Will need to update this for ValidTime and Bitemporal *)
-                         let pattern_type =
-                           let open CommonTypes.TableMode in
-                           match mode with
-                             | Current -> a
-                             | Transaction -> Types.transaction_absty a
-                             | Valid | Bitemporal ->
-                                raise (internal_error "ValidTime / Bitemporal metadata not yet supported") in
                          let () = unify ~handle:Gripers.iteration_table_pattern (ppos_and_typ pattern, (exp_pos e, pattern_type)) in
                            (Table (mode, erase_pat pattern, erase e) :: generators,
                             usages e :: generator_usages,
