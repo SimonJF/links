@@ -1459,7 +1459,7 @@ struct
         Lwt.return (x :: xs)
 end
 
-module DateTime = struct
+module CalendarShow = struct
   include CalendarLib.Calendar
 
   let show = CalendarLib.Printer.Calendar.to_string

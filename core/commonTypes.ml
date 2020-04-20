@@ -229,7 +229,7 @@ module Constant = struct
     | Bool   of bool
     | String of string
     | Char   of char
-    | DateTime of DateTime.t
+    | DateTime of CalendarShow.t
       [@@deriving show, ord]
 
   let type_of = function
@@ -253,6 +253,16 @@ module Constant = struct
     | String s    -> "'" ^ escape_string s ^ "'"
     | Float value -> string_of_float' value
     | DateTime dt -> "'" ^ (Printer.Calendar.to_string dt) ^ "'"
+
+  (* SJF: I'm not entirely sure whether this is the best place for this
+   * module. *)
+  module DateTime = struct
+    let now () = DateTime (CalendarShow.now ())
+    let from_string str = DateTime (Printer.Calendar.from_string str)
+    (* SJF: HACK -- remove this when we do inserts properly *)
+    let forever_string = "2999-01-30 00:00:00"
+    let forever = from_string forever_string
+  end
 end
 
 module QueryPolicy = struct

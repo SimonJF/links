@@ -629,7 +629,7 @@ end = functor (K : CONTINUATION) -> struct
          | Constant.Bool v   -> Lit (string_of_bool v)
          | Constant.Char v   -> chrlit v
          | Constant.String v -> chrlistlit v
-         | Constant.DateTime dt -> New ("Date", [Lit (DateTime.show dt) ])
+         | Constant.DateTime dt -> New ("Date", [Lit (CalendarShow.show dt) ])
        end
     | Variable var ->
           (* HACK *)

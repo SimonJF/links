@@ -29,7 +29,6 @@ class virtual database :
     method virtual escape_string : string -> string
     method virtual quote_field : string -> string
     method virtual exec : string -> dbvalue
-    method forever : string
     method make_transaction_time_insert_query : (string * string list * string * string * string list list) -> string
     method make_insert_query : (string * string list * string list list) -> string
     method make_insert_returning_query : (string * string list * string list list * string) -> string list
@@ -85,7 +84,7 @@ type primitive_value = [
   | primitive_value_basis
   | `Database of (database * string)
   | `Table of table
-  | `DateTime of DateTime.t ]
+  | `DateTime of CalendarShow.t ]
   [@@deriving show]
 
 type spawn_location = [
@@ -292,8 +291,8 @@ val box_channel : chan -> t
 val unbox_channel : t -> chan
 val box_access_point : access_point -> t
 val unbox_access_point : t -> access_point
-val box_datetime : DateTime.t-> t
-val unbox_datetime : t -> DateTime.t
+val box_datetime : CalendarShow.t -> t
+val unbox_datetime : t -> CalendarShow.t
 
 val intmap_of_record : t -> t Utility.intmap option
 

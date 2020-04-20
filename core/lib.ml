@@ -179,7 +179,7 @@ let add_attribute : Value.t * Value.t -> Value.t -> Value.t =
 let add_attributes : (Value.t * Value.t) list -> Value.t -> Value.t =
   List.fold_right add_attribute
 
-let project_datetime (f: DateTime.t -> int) : located_primitive * Types.datatype * pure =
+let project_datetime (f: CalendarShow.t -> int) : located_primitive * Types.datatype * pure =
   (p1 (fun dt -> Value.box_int (f (Value.unbox_datetime dt))),
   datatype "(DateTime) -> Int",
   PURE)
@@ -1060,12 +1060,12 @@ let env : (string * (located_primitive * Types.datatype * pure)) list = [
          match r with
            | `DateTime dt ->
                let tm = {
-                Unix.tm_sec = DateTime.second dt;
-                Unix.tm_min = DateTime.minute dt;
-                Unix.tm_hour = DateTime.hour dt;
-                Unix.tm_mday = DateTime.day_of_month dt;
-                Unix.tm_mon = (DateTime.month dt |> CalendarLib.Date.int_of_month) - 1;
-                Unix.tm_year = (DateTime.year dt) - 1900;
+                Unix.tm_sec = CalendarShow.second dt;
+                Unix.tm_min = CalendarShow.minute dt;
+                Unix.tm_hour = CalendarShow.hour dt;
+                Unix.tm_mday = CalendarShow.day_of_month dt;
+                Unix.tm_mon = (CalendarShow.month dt |> CalendarLib.Date.int_of_month) - 1;
+                Unix.tm_year = (CalendarShow.year dt) - 1900;
                 Unix.tm_wday = 0; (* ignored *)
                 Unix.tm_yday =  0; (* ignored *)
                 Unix.tm_isdst = false } in
@@ -1078,7 +1078,7 @@ let env : (string * (located_primitive * Types.datatype * pure)) list = [
   "intToDate",
   (p1 (fun t ->
          let tm = Unix.localtime(float_of_int (Value.unbox_int t)) in
-           (DateTime.lmake
+           (CalendarShow.lmake
              ~year:(tm.Unix.tm_year + 1900)
              ~month:(tm.Unix.tm_mon + 1)
              ~day:tm.Unix.tm_mday
@@ -1089,12 +1089,12 @@ let env : (string * (located_primitive * Types.datatype * pure)) list = [
   datatype "(Int) ~> DateTime",
   IMPURE);
 
-  "dateYear", (project_datetime (fun dt -> DateTime.year dt));
-  "dateDay", project_datetime (fun dt -> DateTime.day_of_month dt);
-  "dateMonth", project_datetime (fun dt -> DateTime.month dt |> CalendarLib.Date.int_of_month);
-  "dateHours", project_datetime (fun dt -> DateTime.hour dt);
-  "dateMinutes", project_datetime (fun dt -> DateTime.minute dt);
-  "dateSeconds", project_datetime (fun dt -> DateTime.second dt);
+  "dateYear", (project_datetime (fun dt -> CalendarShow.year dt));
+  "dateDay", project_datetime (fun dt -> CalendarShow.day_of_month dt);
+  "dateMonth", project_datetime (fun dt -> CalendarShow.month dt |> CalendarLib.Date.int_of_month);
+  "dateHours", project_datetime (fun dt -> CalendarShow.hour dt);
+  "dateMinutes", project_datetime (fun dt -> CalendarShow.minute dt);
+  "dateSeconds", project_datetime (fun dt -> CalendarShow.second dt);
 
   (* Testing *)
   "unsafeCoerce",

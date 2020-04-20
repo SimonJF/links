@@ -1,7 +1,6 @@
 open Utility
 open CommonTypes
 open Var
-open CalendarLib
 
 exception DbEvaluationError of string
 
@@ -1405,6 +1404,7 @@ let update : ((Ir.var * string) * Q.t option * Q.t) -> Sql.query =
       |> StringMap.to_alist in
     Update { upd_table = table; upd_fields; upd_where }
 
+(*
 let transaction_time_update :
     Value.database ->
     Types.datatype StringMap.t ->
@@ -1477,6 +1477,7 @@ let transaction_time_update :
 
       Printf.sprintf "update %s set %s where (%s)" table set_stop_time update_where_body in
     (select_q, update_q)
+    *)
 
 (*
   let affected =
@@ -1509,12 +1510,28 @@ let delete : ((Ir.var * string) * Q.t option) -> Sql.query =
     Delete { del_table = table; del_where }
 
 
+let transaction_time_update = failwith "TODO"
 
 (* Little hacky. It'd be nice to encode the additional constraint in the
  * "where" construct in the query language rather than mangling strings... *)
-let transaction_time_delete : Value.database -> ((Ir.var * string) * Q.t option) -> string -> string =
-  fun db ((_, table), where) tt_to ->
-    let open CalendarLib in
+let transaction_time_delete :
+  ((Ir.var * string) * Q.t option) ->
+  string -> (* tt_to field *)
+  Sql.query =
+  fun ((tbl_var, table), where) tt_to ->
+    let now = Sql.Constant (Constant.DateTime.now ()) in
+    let forever = Sql.Constant (Constant.DateTime.forever) in
+    let open Sql in
+    let is_current =  Apply ("==", [Project (tbl_var, tt_to); forever]) in
+
+    (* where x --> where (x && is_current) *)
+    let upd_where =
+      OptionUtils.opt_map (fun q -> Apply ("&&", [base [] q; is_current])) where in
+
+    let upd_fields = [(tt_to, now)] in
+    Update { upd_table = table; upd_fields; upd_where }
+
+    (*
     Sql.reset_dummy_counter ();
     let base = base [] ->- (Sql.string_of_base db true) in
     let is_current = (db#quote_field tt_to) ^ " = '" ^ db#forever ^ "'" in
@@ -1525,6 +1542,8 @@ let transaction_time_delete : Value.database -> ((Ir.var * string) * Q.t option)
     let now = "'" ^ (Calendar.now () |> Printer.Calendar.to_string) ^ "'" in
     Printf.sprintf "update %s set %s = %s where (%s)"
       table (db#quote_field tt_to) now where
+      *)
+
 
 let compile_update :
     Value.database ->
@@ -1572,11 +1591,9 @@ let compile_delete :
     let q =
       match md with
         | Current -> delete ((x, table), where)
-        (* For now: need to get basics going first
         | TransactionTime { tt_to_field; _ } ->
-            transaction_time_delete db
+            transaction_time_delete
               ((x, table), where) tt_to_field
-              *)
         | _ -> raise (internal_error "Valid / Bitemporal data not yet supported") in
     Debug.print ("Generated delete query: " ^ (Sql.string_of_query db None q));
     q

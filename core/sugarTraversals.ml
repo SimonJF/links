@@ -38,7 +38,7 @@ class map =
 
     method char : char -> char = o#unknown
 
-    method datetime : DateTime.t -> DateTime.t = o#unknown
+    method datetime : CalendarShow.t -> CalendarShow.t = o#unknown
 
     method bool : bool -> bool = function | false -> false | true -> true
 
@@ -833,7 +833,7 @@ class fold =
 
     method char : char -> 'self_type = o#unknown
 
-    method datetime : DateTime.t -> 'self_type = o#unknown
+    method datetime : CalendarShow.t -> 'self_type = o#unknown
 
     method bool : bool -> 'self_type = function | false -> o | true -> o
 
@@ -1546,7 +1546,7 @@ class fold_map =
 
     method char : char -> ('self_type * char) = o#unknown
 
-    method datetime : DateTime.t -> ('self_type * DateTime.t) = o#unknown
+    method datetime : CalendarShow.t -> ('self_type * CalendarShow.t) = o#unknown
 
     method bool : bool -> ('self_type * bool) =
       function | false -> (o, false) | true -> (o, true)
