@@ -94,11 +94,11 @@ sig
 end
 
 val compile_transaction_time_update:
-  Value.database -> Value.env ->
+  Value.env ->
     ((Ir.var * string * Types.datatype StringMap.t) * Ir.computation option * Ir.computation) ->
     string -> (* transaction time from field *)
     string -> (* transaction time to field *)
-    (string * string)
+    (Sql.query * Sql.query)
 
 val compile_update :
   Value.database ->

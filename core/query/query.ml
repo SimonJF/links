@@ -1371,28 +1371,6 @@ let sql_of_let_query : let_query -> Sql.query =
 
 (* SJF: It would be nice to use the SQL query DSL rather than string mangling here. *)
 
-(*
-let update : Value.database -> ((Ir.var * string) * Q.t option * Q.t) -> string =
-  fun db ((_, table), where, body) ->
-    Sql.reset_dummy_counter ();
-    let base = (base []) ->- (Sql.string_of_base db true) in
-    let where =
-      match where with
-        | None -> ""
-        | Some where ->
-            " where (" ^ base where ^ ")" in
-    let fields =
-      match body with
-        | Q.Record fields ->
-            String.concat ","
-              (List.map
-                (fun (label, v) -> db#quote_field label ^ " = " ^ base v)
-                (StringMap.to_alist fields))
-        | _ -> assert false
-    in
-      "update "^table^" set "^fields^where
-*)
-
 let update : ((Ir.var * string) * Q.t option * Q.t) -> Sql.query =
   fun ((_, table), where, body) ->
     let open Sql in
@@ -1404,15 +1382,94 @@ let update : ((Ir.var * string) * Q.t option * Q.t) -> Sql.query =
       |> StringMap.to_alist in
     Update { upd_table = table; upd_fields; upd_where }
 
-(*
 let transaction_time_update :
-    Value.database ->
     Types.datatype StringMap.t ->
     ((Ir.var * string) * Q.t option * Q.t) ->
     string ->
     string ->
-    (string * string) =
-  fun db table_types ((_, table), where, body) tt_from tt_to ->
+    (Sql.query * Sql.query) =
+  fun table_types ((tbl_var, table), where, body) tt_from tt_to ->
+
+    let now_const = Constant.DateTime.now () in
+    let sql_now = Sql.Constant now_const in
+    let forever_const = Constant.DateTime.forever in
+    let sql_forever = Sql.Constant forever_const in
+
+    let open Sql in
+    let is_current = Apply ("==", [Project (tbl_var, tt_to); sql_forever]) in
+
+    (* Begin by constructing a select query, which gets our affected rows. *)
+
+    (* We need to augment table_types with the period-stamping columns. *)
+    let table_types =
+      table_types
+        |> StringMap.add tt_from (`Primitive Primitive.DateTime)
+        |> StringMap.add tt_to (`Primitive Primitive.DateTime) in
+
+    (* The select query should either select the updated field if specified,
+     * otherwise it should select a the field projection. *)
+
+    (* Begin by getting the update fields, augmented with the period stamp [now, forever) *)
+    let record_fields =
+      match body with
+        | Q.Record fields ->
+            fields
+            |> StringMap.add tt_from (Q.Constant now_const)
+            |> StringMap.add tt_to (Q.Constant forever_const)
+        | _ -> assert false in
+    let record_fields_list = StringMap.to_alist record_fields in
+
+    (* Select either the field name if unspecified, or the updated value
+     * if it is. *)
+    let select_fields =
+      StringMap.mapi (fun k _ ->
+        OptionUtils.opt_map (base []) (StringMap.lookup k record_fields)
+        |> OptionUtils.from_option (Project (tbl_var, k))) table_types
+      |> StringMap.to_alist
+      (* Need to swap (col, val) pairs to (val, col) to fit select_clause AST,
+       * which mirrors "SELECT V as K" form in SQL *)
+      |> List.map (fun (k, v) -> (v, k)) in
+
+    (* We need to add an "is_current" clause to the selection predicate. *)
+    let sel_where =
+      match where with
+        | Some where -> Apply ("&&", [base [] where; is_current])
+        | None -> is_current in
+
+    (* And here's the selection query: *)
+    let sel_query =
+      Sql.Select (select_fields, [(table, tbl_var)], sel_where, []) in
+
+    (* Next, we need an update query which closes off the previous rows. *)
+    (* The update predicate is the records which satisfy the selection predicate,
+     * but do *not* have the updated fields *)
+    let const_true = Sql.Constant (Constant.Bool true) in
+    let fields_neq =
+      let fields_eq =
+        List.fold_left (fun acc (label, v) ->
+          let proj = Project (tbl_var, label) in
+          let eq = Apply ("==", [proj; base [] v]) in
+          Apply ("&&", [eq; acc])) const_true record_fields_list in
+      Apply ("not", [fields_eq]) in
+
+    let update_predicate =
+      let basic_clauses = [is_current; fields_neq] in
+      let clauses =
+        match where with
+          | None -> basic_clauses
+          | Some pred -> (base [] pred) :: basic_clauses in
+      List.fold_left (fun acc x -> Apply ("&&", [x; acc])) const_true clauses in
+
+    let upd_query =
+      Sql.Update {
+        upd_table = table;
+        upd_fields = [("tt_to", sql_now)];
+        upd_where = Some update_predicate
+      } in
+
+    (sel_query, upd_query)
+
+(*
     let base = (base []) ->- (Sql.string_of_base db true) in
     let is_current = "(" ^ (db#quote_field tt_to) ^ " = '" ^ db#forever ^ "')" in
     let now = Q.Constant (Constant.DateTime (Calendar.now ())) in
@@ -1477,8 +1534,7 @@ let transaction_time_update :
 
       Printf.sprintf "update %s set %s where (%s)" table set_stop_time update_where_body in
     (select_q, update_q)
-    *)
-
+*)
 (*
   let affected =
     for (x <- asList tbl)
@@ -1508,9 +1564,6 @@ let delete : ((Ir.var * string) * Q.t option) -> Sql.query =
     let open Sql in
     let del_where = OptionUtils.opt_map (base []) where in
     Delete { del_table = table; del_where }
-
-
-let transaction_time_update = failwith "TODO"
 
 let transaction_time_delete :
   ((Ir.var * string) * Q.t option) ->
@@ -1547,16 +1600,16 @@ let compile_update :
     q
 
 let compile_transaction_time_update :
-  Value.database -> Value.env ->
+  Value.env ->
   ((Ir.var * string * Types.datatype StringMap.t) * Ir.computation option * Ir.computation) ->
   string -> (* transaction time from field *)
   string -> (* transaction time to field *)
-  (string * string) =
-  fun db env ((x, table, field_types), where, body) tt_from tt_to ->
+  (Sql.query * Sql.query) =
+  fun env ((x, table, field_types), where, body) tt_from tt_to ->
     let env = Eval.bind (Eval.env_of_value_env QueryPolicy.Default env) (x, Q.Var (x, field_types)) in
     let where = opt_map (Eval.norm_comp env) where in
     let body = Eval.norm_comp env body in
-    transaction_time_update db field_types ((x, table), where, body) tt_from tt_to
+    transaction_time_update field_types ((x, table), where, body) tt_from tt_to
 
 
 let compile_delete :

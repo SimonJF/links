@@ -849,21 +849,32 @@ struct
                 |> Sql.string_of_query db None in
               let () = ignore (Database.execute_command update_query db) in
               apply_cont cont env (`Record [])
-              (*
           | TransactionTime { tt_from_field; tt_to_field } ->
+              (* SJF TODO: This requires a transactional semantics, which we
+               * do not have at present. Ideally, the select, insert, and update
+               * would all be done in a single transaction.
+               *
+               * As a first step, it would be good to at least expose the transaction
+               * primitives and have the insert and update statements execute
+               * transactionally -- but we'd do well to have the whole thing
+               * as SQL rather than having the extra marshalling step. *)
               let (select_q, update_q) =
-                Query.compile_transaction_time_update db env
-                  ((Var.var_of_binder xb, table, field_types), where, body) tt_from_field tt_to_field in
+                Query.compile_transaction_time_update env
+                  ((Var.var_of_binder xb, table, field_types), where, body)
+                  tt_from_field tt_to_field in
+              let (select_q, update_q) =
+                Sql.string_of_query db None select_q,
+                Sql.string_of_query db None update_q in
 
               (* Evaluate the selection to get the rows to insert *)
               let dt = `Primitive Primitive.DateTime in
-              let field_types = StringMap.bindings field_types @ [(tt_from_field, dt); (tt_to_field, dt)]  in
-              (* List of records. *)
+              let field_types =
+                StringMap.bindings field_types @ [(tt_from_field, dt); (tt_to_field, dt)]  in
+
               Debug.print ("(TT UPDATE(1)) SELECT: " ^ select_q);
               let results = Database.execute_select field_types select_q db in
               (* We need to first unbox the list. Then, we need to map over each record in order
                * to get only the values, and convert them to a string. *)
-
               begin
                 match Value.unbox_list results with
                   | [] ->
@@ -885,7 +896,6 @@ struct
                       let () = ignore (Database.execute_command update_q db) in
                       apply_cont cont env (`Record [])
               end
-      *)
           | _ -> raise (internal_error "Valid / Bitemporal data not yet supported")
       end
     | Delete ((xb, source), where) ->
