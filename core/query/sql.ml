@@ -6,8 +6,16 @@ type index = (Var.var * string) list
 type query =
   | UnionAll  of query list * int
   | Select    of select_clause
+  | Update    of update_query
+  | Delete    of delete_query
   | With      of Var.var * query * Var.var * query
 and select_clause = (base * string) list * (string * Var.var) list * base * base list
+and update_query  = {
+  upd_table: string;
+  upd_fields: (string * base) list;
+  upd_where: base option
+}
+and delete_query  = { del_table: string; del_where: base option }
 and base =
   | Case      of base * base * base
   | Constant  of Constant.t
@@ -128,6 +136,7 @@ let order_by_clause n =
 let rec string_of_query db ignore_fields q =
   let sq = string_of_query db ignore_fields in
   let sb = string_of_base db false in
+  let sbt = string_of_base db true in
   let string_of_fields fields =
     if ignore_fields then
       "0 as \"@unit@\"" (* SQL doesn't support empty records! *)
@@ -154,6 +163,22 @@ let rec string_of_query db ignore_fields q =
     in
       "select " ^ fields ^ " from " ^ tables ^ where ^ orderby
   in
+  let string_of_delete table where =
+    let where =
+      OptionUtils.opt_app
+        (fun x -> "where (" ^ sbt x ^ ")") "" where in
+    Printf.sprintf "delete from %s %s" table where
+  in
+  let string_of_update table fields where =
+    let fields =
+      List.map (fun (k, v) -> db#quote_field k ^ " = " ^ sbt v) fields
+      |> String.concat ", " in
+
+    let where =
+      OptionUtils.opt_app
+        (fun x -> "where (" ^ sbt x ^ ")") "" where in
+    Printf.sprintf "update %s set %s %s" table fields where
+  in
     match q with
       | UnionAll ([], _) -> "select 42 as \"@unit@\" where false"
       | UnionAll ([q], n) -> sq q ^ order_by_clause n
@@ -169,6 +194,10 @@ let rec string_of_query db ignore_fields q =
           (* using quote_field assumes tables contains table names (not nested queries) *)
           let tables = List.map (fun (t, x) -> db#quote_field t ^ " as " ^ (string_of_table_var x)) tables
           in string_of_select fields tables condition os
+      | Delete { del_table; del_where } ->
+          string_of_delete del_table del_where
+      | Update { upd_table; upd_fields; upd_where } ->
+          string_of_update upd_table upd_fields upd_where
       | With (_, q, z, q') ->
           match q' with
           | Select (fields, tables, condition, os) ->

@@ -843,9 +843,13 @@ struct
         match md with
           | Current ->
               let update_query =
-                Query.compile_update db env ((Var.var_of_binder xb, table, field_types), where, body) in
+                Query.compile_update
+                  db env
+                  ((Var.var_of_binder xb, table, field_types), where, body)
+                |> Sql.string_of_query db None in
               let () = ignore (Database.execute_command update_query db) in
               apply_cont cont env (`Record [])
+              (*
           | TransactionTime { tt_from_field; tt_to_field } ->
               let (select_q, update_q) =
                 Query.compile_transaction_time_update db env
@@ -881,6 +885,7 @@ struct
                       let () = ignore (Database.execute_command update_q db) in
                       apply_cont cont env (`Record [])
               end
+      *)
           | _ -> raise (internal_error "Valid / Bitemporal data not yet supported")
       end
     | Delete ((xb, source), where) ->
@@ -897,7 +902,8 @@ struct
         end >>= fun (db, table, md, field_types) ->
       let delete_query =
         Query.compile_delete md db env
-          ((Var.var_of_binder xb, table, field_types), where) in
+          ((Var.var_of_binder xb, table, field_types), where)
+        |> Sql.string_of_query db None in
       let () = ignore (Database.execute_command delete_query db) in
         apply_cont cont env (`Record [])
     | CallCC f ->

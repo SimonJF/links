@@ -100,8 +100,13 @@ val compile_transaction_time_update:
     string -> (* transaction time to field *)
     (string * string)
 
-val compile_update : Value.database -> Value.env ->
-  ((Ir.var * string * Types.datatype StringMap.t) * Ir.computation option * Ir.computation) -> string
+val compile_update :
+  Value.database ->
+  Value.env ->
+  ((Ir.var * string * Types.datatype StringMap.t) *
+    Ir.computation option * Ir.computation) ->
+  Sql.query
 
 val compile_delete : TemporalMetadata.t -> Value.database -> Value.env ->
-  ((Ir.var * string * Types.datatype StringMap.t) * Ir.computation option) -> string
+  ((Ir.var * string * Types.datatype StringMap.t) * Ir.computation option) ->
+  Sql.query

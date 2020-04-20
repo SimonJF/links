@@ -248,6 +248,11 @@ struct
       | XML xmlitem -> xmlitem
       | _ -> raise (runtime_type_error "failed to unbox XML")
 
+  let unbox_record =
+    function
+      | Record fields -> fields
+      | _ -> raise (runtime_type_error "failed to unbox pair")
+
   let unbox_pair =
     function
       | Record fields ->
@@ -1367,6 +1372,7 @@ let sql_of_let_query : let_query -> Sql.query =
 
 (* SJF: It would be nice to use the SQL query DSL rather than string mangling here. *)
 
+(*
 let update : Value.database -> ((Ir.var * string) * Q.t option * Q.t) -> string =
   fun db ((_, table), where, body) ->
     Sql.reset_dummy_counter ();
@@ -1386,6 +1392,18 @@ let update : Value.database -> ((Ir.var * string) * Q.t option * Q.t) -> string 
         | _ -> assert false
     in
       "update "^table^" set "^fields^where
+*)
+
+let update : ((Ir.var * string) * Q.t option * Q.t) -> Sql.query =
+  fun ((_, table), where, body) ->
+    let open Sql in
+    let upd_where =
+      OptionUtils.opt_map (base []) where in
+    let upd_fields =
+      Q.unbox_record body
+      |> StringMap.map (base [])
+      |> StringMap.to_alist in
+    Update { upd_table = table; upd_fields; upd_where }
 
 let transaction_time_update :
     Value.database ->
@@ -1471,6 +1489,7 @@ let transaction_time_update :
     set (x with end = now)
 *)
 
+(*
 let delete : Value.database -> ((Ir.var * string) * Q.t option) -> string =
   fun db ((_, table), where) ->
   Sql.reset_dummy_counter ();
@@ -1482,6 +1501,14 @@ let delete : Value.database -> ((Ir.var * string) * Q.t option) -> string =
           " where (" ^ base where ^ ")"
   in
     "delete from "^table^where
+*)
+let delete : ((Ir.var * string) * Q.t option) -> Sql.query =
+  fun ((_, table), where) ->
+    let open Sql in
+    let del_where = OptionUtils.opt_map (base []) where in
+    Delete { del_table = table; del_where }
+
+
 
 (* Little hacky. It'd be nice to encode the additional constraint in the
  * "where" construct in the query language rather than mangling strings... *)
@@ -1499,15 +1526,22 @@ let transaction_time_delete : Value.database -> ((Ir.var * string) * Q.t option)
     Printf.sprintf "update %s set %s = %s where (%s)"
       table (db#quote_field tt_to) now where
 
-let compile_update : Value.database -> Value.env ->
-  ((Ir.var * string * Types.datatype StringMap.t) * Ir.computation option * Ir.computation) -> string =
+let compile_update :
+    Value.database ->
+    Value.env ->
+    ((Ir.var * string * Types.datatype StringMap.t) *
+      Ir.computation option * Ir.computation) ->
+    Sql.query =
   fun db env ((x, table, field_types), where, body) ->
-    let env = Eval.bind (Eval.env_of_value_env QueryPolicy.Default env) (x, Q.Var (x, field_types)) in
+    let env =
+      Eval.bind
+        (Eval.env_of_value_env QueryPolicy.Default env)
+        (x, Q.Var (x, field_types)) in
     let where = opt_map (Eval.norm_comp env) where in
     let body = Eval.norm_comp env body in
-    let q = update db ((x, table), where, body) in
-      Debug.print ("Generated update query: "^q);
-      q
+    let q = update ((x, table), where, body) in
+    Debug.print ("Generated update query: " ^ (Sql.string_of_query db None q));
+    q
 
 let compile_transaction_time_update :
   Value.database -> Value.env ->
@@ -1522,20 +1556,29 @@ let compile_transaction_time_update :
     transaction_time_update db field_types ((x, table), where, body) tt_from tt_to
 
 
-let compile_delete : TemporalMetadata.t -> Value.database -> Value.env ->
-  ((Ir.var * string * Types.datatype StringMap.t) * Ir.computation option) -> string =
+let compile_delete :
+  TemporalMetadata.t ->
+  Value.database ->
+  Value.env ->
+ ((Ir.var * string * Types.datatype StringMap.t) * Ir.computation option) ->
+  Sql.query =
   fun md db env ((x, table, field_types), where) ->
     let open TemporalMetadata in
-    let env = Eval.bind (Eval.env_of_value_env QueryPolicy.Default env) (x, Q.Var (x, field_types)) in
+    let env =
+      Eval.bind
+        (Eval.env_of_value_env QueryPolicy.Default env)
+        (x, Q.Var (x, field_types)) in
     let where = opt_map (Eval.norm_comp env) where in
     let q =
       match md with
-        | Current -> delete db ((x, table), where)
+        | Current -> delete ((x, table), where)
+        (* For now: need to get basics going first
         | TransactionTime { tt_to_field; _ } ->
             transaction_time_delete db
               ((x, table), where) tt_to_field
+              *)
         | _ -> raise (internal_error "Valid / Bitemporal data not yet supported") in
-    Debug.print ("Generated delete query: "^q);
+    Debug.print ("Generated delete query: " ^ (Sql.string_of_query db None q));
     q
 
 let show_base db =
