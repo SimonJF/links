@@ -1512,8 +1512,6 @@ let delete : ((Ir.var * string) * Q.t option) -> Sql.query =
 
 let transaction_time_update = failwith "TODO"
 
-(* Little hacky. It'd be nice to encode the additional constraint in the
- * "where" construct in the query language rather than mangling strings... *)
 let transaction_time_delete :
   ((Ir.var * string) * Q.t option) ->
   string -> (* tt_to field *)
@@ -1530,20 +1528,6 @@ let transaction_time_delete :
 
     let upd_fields = [(tt_to, now)] in
     Update { upd_table = table; upd_fields; upd_where }
-
-    (*
-    Sql.reset_dummy_counter ();
-    let base = base [] ->- (Sql.string_of_base db true) in
-    let is_current = (db#quote_field tt_to) ^ " = '" ^ db#forever ^ "'" in
-    let where =
-      match where with
-        | None -> is_current
-        | Some where -> (base where) ^ " and " ^ is_current in
-    let now = "'" ^ (Calendar.now () |> Printer.Calendar.to_string) ^ "'" in
-    Printf.sprintf "update %s set %s = %s where (%s)"
-      table (db#quote_field tt_to) now where
-      *)
-
 
 let compile_update :
     Value.database ->
