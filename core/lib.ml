@@ -1096,6 +1096,14 @@ let env : (string * (located_primitive * Types.datatype * pure)) list = [
   "dateMinutes", project_datetime (fun dt -> CalendarShow.minute dt);
   "dateSeconds", project_datetime (fun dt -> CalendarShow.second dt);
 
+  "parseDate",
+  (p1 (fun str ->
+        Value.unbox_string str
+         |> CalendarLib.Printer.Calendar.from_string
+         |> Value.box_datetime),
+  datatype "(String) ~> DateTime",
+  IMPURE);
+
   (* Testing *)
   "unsafeCoerce",
   (p1 (fun x -> x),
