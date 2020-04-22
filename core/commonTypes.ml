@@ -259,7 +259,6 @@ module Constant = struct
   module DateTime = struct
     let now () = DateTime (CalendarShow.now ())
     let from_string str = DateTime (Printer.Calendar.from_string str)
-    (* SJF: HACK -- remove this when we do inserts properly *)
     let forever_string = "2999-01-30 00:00:00"
     let forever = from_string forever_string
   end

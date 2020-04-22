@@ -168,13 +168,19 @@ struct
                                  fields []))
         | _ -> assert false
 
-  let expression_of_base_value : Value.t -> t = function
+  let rec expression_of_base_value : Value.t -> t = function
     | `DateTime dt -> Constant (Constant.DateTime dt)
     | `Bool b -> Constant (Constant.Bool b)
     | `Char c -> Constant (Constant.Char c)
     | `Float f -> Constant (Constant.Float f)
     | `Int i -> Constant (Constant.Int i)
     | `String s -> Constant (Constant.String s)
+    | `Record fields ->
+        let fields =
+          fields
+          |> List.map (fun (k, v) -> (k, expression_of_base_value v))
+          |> StringMap.from_alist in
+        Record fields
     | other ->
         raise (internal_error ("expression_of_base_value undefined for " ^
           Value.string_of_value other))
@@ -1469,96 +1475,6 @@ let transaction_time_update :
 
     (sel_query, upd_query)
 
-(*
-    let base = (base []) ->- (Sql.string_of_base db true) in
-    let is_current = "(" ^ (db#quote_field tt_to) ^ " = '" ^ db#forever ^ "')" in
-    let now = Q.Constant (Constant.DateTime (Calendar.now ())) in
-    (* Bit of a hack. I'm not sure we entirely want forever to be part of DB... *)
-    let forever = Q.Constant (Constant.String (db#forever)) in
-    let table_types =
-      table_types
-        |> StringMap.add tt_from (`Primitive Primitive.DateTime)
-        |> StringMap.add tt_to (`Primitive Primitive.DateTime) in
-    (* "'" ^ (Calendar.now () |> Printer.Calendar.to_string) ^ "'" in *)
-    let () = Debug.print @@ "TTUpd: Table types: " ^
-      (ListUtils.print_list (StringMap.bindings table_types |> (List.map fst))) in
-    (* Construct query which applies predicate, returning updated results. *)
-    let record_fields =
-      match body with
-        | Q.Record fields ->
-            fields
-            |> StringMap.add tt_from now
-            |> StringMap.add tt_to forever
-        | _ -> assert false in
-    let record_fields_list = StringMap.to_alist record_fields in
-    (* let field_names = List.map fst record_fields_list in *)
-
-    (* Select either the field name if unspecified, or the updated value
-     * if it is. *)
-    let select_fields =
-      StringMap.mapi
-        (fun k _ ->
-          OptionUtils.opt_map (fun x -> (base x) ^ " as " ^ k) (StringMap.lookup k record_fields)
-          |> OptionUtils.from_option k) table_types
-      |> StringMap.to_alist
-      |> List.map snd
-      |> String.concat ", " in
-
-    let select_where_body =
-      match where with
-        | None -> is_current
-        | Some where -> (base where) ^ " and " ^ is_current in
-
-    (* We need to be a little careful here -- the select query needs to
-     * select the field values for the fields not specified in the update
-     * map, but select the updated values otherwise. *)
-    let select_q =
-      Printf.sprintf
-        "select %s from %s where (%s)" select_fields table select_where_body in
-
-    let update_q =
-      let fields_neq =
-        let values =
-          String.concat " and "
-            (List.map
-              (fun (label, v) -> "(" ^ db#quote_field label ^ " = " ^ base v ^ ")")
-              record_fields_list) in
-        "not(" ^ values ^ ")" in
-
-      (* Carry out an update query to close off the previous rows. *)
-      let set_stop_time = (db#quote_field tt_to) ^ " = " ^ (base now) in
-      let update_where_body =
-        match where with
-          | None -> is_current ^ " and " ^ fields_neq
-          | Some where -> "(" ^ base where ^ ") and " ^ is_current ^ " and " ^ fields_neq in
-
-      Printf.sprintf "update %s set %s where (%s)" table set_stop_time update_where_body in
-    (select_q, update_q)
-*)
-(*
-  let affected =
-    for (x <- asList tbl)
-    where (M' && isCurrent(x))
-      [ (N' with start = x.start, end = now) ] in
-  insert tbl values affected;
-  update (x <- tbl)
-    where (M' && isCurrent(x) && x ≠ (N' with start = x .start, end = now))
-    set (x with end = now)
-*)
-
-(*
-let delete : Value.database -> ((Ir.var * string) * Q.t option) -> string =
-  fun db ((_, table), where) ->
-  Sql.reset_dummy_counter ();
-  let base = base [] ->- (Sql.string_of_base db true) in
-  let where =
-    match where with
-      | None -> ""
-      | Some where ->
-          " where (" ^ base where ^ ")"
-  in
-    "delete from "^table^where
-*)
 let delete : ((Ir.var * string) * Q.t option) -> Sql.query =
   fun ((_, table), where) ->
     let open Sql in
@@ -1634,6 +1550,32 @@ let compile_delete :
         | _ -> raise (internal_error "Valid / Bitemporal data not yet supported") in
     Debug.print ("Generated delete query: " ^ (Sql.string_of_query db None q));
     q
+
+
+let rewrite_insert field_names rows md =
+  let open TemporalMetadata in
+  match md with
+    | Current -> (field_names, rows)
+    | TransactionTime { tt_from_field; tt_to_field } ->
+        (* TT insert: Add period-stamping fields.
+         * Values: (from = now, to = forever) *)
+        (* Other than that, straightforward insert. *)
+        let field_names = field_names @ [tt_from_field; tt_to_field] in
+        let forever = Constant.(DateTime.forever |> to_string) in
+        let now = Constant.(DateTime.now () |> to_string) in
+        let rows =
+          List.map (fun vs -> vs @ [now; forever]) rows in
+        (field_names, rows)
+    | _ -> raise (internal_error "Valid time / Bitemporal inserts not yet supported")
+
+let insert db table_name field_names rows md =
+  let field_names, rows = rewrite_insert field_names rows md in
+  db#make_insert_query (table_name, field_names, rows)
+
+let insert_returning db table_name field_names rows md returning =
+  let field_names, rows =  rewrite_insert field_names rows md in
+  db#make_insert_returning_query
+    (table_name, field_names, rows, returning)
 
 let show_base db =
   (base []) ->- (Sql.string_of_base db true)

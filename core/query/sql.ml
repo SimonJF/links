@@ -10,6 +10,11 @@ type query =
   | Delete    of delete_query
   | With      of Var.var * query * Var.var * query
 and select_clause = (base * string) list * (string * Var.var) list * base * base list
+and insert_query = {
+  ins_table: string;
+  ins_fields: string list;
+  ins_records: base list list
+}
 and update_query  = {
   upd_table: string;
   upd_fields: (string * base) list;

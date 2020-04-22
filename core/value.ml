@@ -75,20 +75,19 @@ class virtual database = object(self)
   method virtual quote_field : string -> string
   method virtual exec : string -> dbvalue
   (* Add transaction time information to inserted values *)
-  method make_transaction_time_insert_query : (string * string list * string * string * string list list) -> string =
-    fun (table_name, field_names, tt_from, tt_to, vss) ->
-      let open CalendarLib in
-      (* From value: current time. To value: forever. *)
-      let field_names = field_names @ [tt_from; tt_to] in
-      let from_time = "'" ^ (Calendar.now () |> Printer.Calendar.to_string) ^ "'" in
-      let forever_time = "'" ^ Constant.DateTime.forever_string ^ "'" in
-      let vss = List.map (fun vs -> vs @ [from_time; forever_time]) vss in
-      self#make_insert_query (table_name, field_names, vss)
+
   method make_insert_query : (string * string list * string list list) -> string =
     fun (table_name, field_names, vss) ->
-      "insert into " ^ table_name ^
-        "("^String.concat "," field_names ^") values "^
-        String.concat "," (List.map (fun vs -> "(" ^ String.concat "," vs ^")") vss)
+      let field_names = String.concat ", " field_names in
+      let values =
+        vss
+        (* Concatenate and bracket the values in each row *)
+        |> List.map (String.concat ", " ->- Printf.sprintf "(%s)")
+        (* Join all rows *)
+        |> String.concat ", " in
+      Printf.sprintf "insert into %s (%s) values %s"
+        table_name field_names values
+
   method make_insert_returning_query : (string * string list * string list list * string) -> string list =
     fun _ ->
     raise (raise (internal_error ("insert ... returning is not yet implemented for the database driver: "^self#driver_name())))

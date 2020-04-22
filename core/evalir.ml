@@ -784,15 +784,7 @@ struct
           | `Table _, `List [] ->  apply_cont cont env (`Record [])
           | `Table { database = (db, _); name = table_name; temporal_metadata; _ }, rows ->
               let (field_names,vss) = Value.row_columns_values db rows in
-              let query =
-                begin
-                  let open TemporalMetadata in
-                  match temporal_metadata with
-                    | Current -> db#make_insert_query (table_name, field_names, vss)
-                    | TransactionTime { tt_from_field; tt_to_field } ->
-                        db#make_transaction_time_insert_query (table_name, field_names, tt_from_field, tt_to_field, vss)
-                    | _ -> raise (internal_error "Valid time / Bitemporal inserts not yet supported")
-                end in
+              let query = Query.insert db table_name field_names vss temporal_metadata in
               Debug.print ("RUNNING INSERT QUERY:\n" ^ query);
               let () = ignore (Database.execute_command query db) in
               apply_cont cont env (`Record [])
@@ -817,13 +809,17 @@ struct
           match source, rows, returning with
           | `Table _, `List [], _ ->
               raise (internal_error "InsertReturning: undefined for empty list of rows")
-          | `Table { database = (db, _); name = table_name; _}, rows, returning ->
+          | `Table { database = (db, _); name = table_name;
+                temporal_metadata; _}, rows, returning ->
               let (field_names,vss) = Value.row_columns_values db rows in
               let returning = Value.unbox_string returning in
+              let queries =
+                Query.insert_returning db table_name field_names
+                  vss temporal_metadata returning in
               Debug.print ("RUNNING INSERT ... RETURNING QUERY:\n" ^
-                           String.concat "\n"
-                             (db#make_insert_returning_query(table_name, field_names, vss, returning)));
-              apply_cont cont env (Database.execute_insert_returning (table_name, field_names, vss, returning) db)
+                 String.concat "\n" queries);
+              apply_cont cont env
+                (Database.execute_insert_returning (table_name, field_names, vss, returning) db)
           | _ -> raise (internal_error "insert row into non-database")
         end
     | Update ((xb, source), where, body) ->
