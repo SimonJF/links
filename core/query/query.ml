@@ -439,13 +439,18 @@ struct
                       (* TT Tables: Ensure we add transaction-time metadata *)
                       (* First, generate a fresh variable for the table *)
                       let field_types = table_field_types table in
+                      let base_field_types =
+                        StringMap.filter
+                          (fun x _ -> x <> tt_from_field && x <> tt_to_field)
+                          field_types in
+
                       let table_raw_var = Var.fresh_raw_var () in
                       let table_var = Var (table_raw_var, field_types) in
 
                       (* Second, generate a fresh variable for the metadata *)
                       let metadata_record =
                         StringMap.from_alist [
-                          (Transaction.data_field, eta_expand_var (table_raw_var, field_types));
+                          (Transaction.data_field, eta_expand_var (table_raw_var, base_field_types));
                           (Transaction.from_field, Project (table_var, tt_from_field) );
                           (Transaction.to_field, Project (table_var, tt_to_field))
                         ] in
@@ -1553,7 +1558,7 @@ let compile_delete :
     q
 
 
-let rewrite_insert field_names rows md =
+let rewrite_insert db field_names rows md =
   let open TemporalMetadata in
   match md with
     | Current -> (field_names, rows)
@@ -1562,19 +1567,19 @@ let rewrite_insert field_names rows md =
          * Values: (from = now, to = forever) *)
         (* Other than that, straightforward insert. *)
         let field_names = field_names @ [tt_from_field; tt_to_field] in
-        let forever = Constant.(DateTime.forever |> to_string) in
-        let now = Constant.(DateTime.now () |> to_string) in
+        let now = db#show_constant (Constant.DateTime.now ()) in
+        let forever = db#show_constant Constant.DateTime.forever in
         let rows =
           List.map (fun vs -> vs @ [now; forever]) rows in
         (field_names, rows)
     | _ -> raise (internal_error "Valid time / Bitemporal inserts not yet supported")
 
 let insert db table_name field_names rows md =
-  let field_names, rows = rewrite_insert field_names rows md in
+  let field_names, rows = rewrite_insert db field_names rows md in
   db#make_insert_query (table_name, field_names, rows)
 
 let insert_returning db table_name field_names rows md returning =
-  let field_names, rows =  rewrite_insert field_names rows md in
+  let field_names, rows =  rewrite_insert db field_names rows md in
   db#make_insert_returning_query
     (table_name, field_names, rows, returning)
 

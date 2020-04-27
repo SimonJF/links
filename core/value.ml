@@ -74,8 +74,27 @@ class virtual database = object(self)
   method virtual escape_string : string -> string
   method virtual quote_field : string -> string
   method virtual exec : string -> dbvalue
-  (* Add transaction time information to inserted values *)
-
+  method show_constant =
+    let open Constant in
+    function
+    (* The OCaml Calendar library does not store times with an
+     * explicit timestamp, instead storing relative either to UTC or the local
+     * timestamp.
+     *
+     * On the other hand, I'm not sufficiently convinced of the "without time zone"
+     * variants of the server, so for now I'm going to say that dates and times should
+     * be stored in the DB as UTC.
+     *)
+    (* Slight hack: do *not* do a conversion on `forever`:
+     * instead, convert to "infinity". Note: this may be PSQL specific. *)
+    | (DateTime dt) as dt_const ->
+        let open CalendarLib in
+        let utc_dt =
+          if dt_const = Constant.DateTime.forever then "'infinity'"
+          else
+            CalendarShow.convert dt (Time_Zone.current ()) (Time_Zone.UTC) in
+          "'" ^ (Printer.Calendar.to_string utc_dt) ^ " UTC'"
+    | c -> to_string c
   method make_insert_query : (string * string list * string list list) -> string =
     fun (table_name, field_names, vss) ->
       let field_names = String.concat ", " field_names in

@@ -38,4 +38,5 @@ depends: [
   "ocamlfind"
   "menhir"
   "calendar"
+  "angstrom"
 ]

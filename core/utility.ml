@@ -1466,3 +1466,59 @@ module CalendarShow = struct
   let pp fmt x = Format.pp_print_string fmt (show x)
 end
 
+
+(** Angstrom, batteries included *)
+module AngstromExtended = struct
+  include Angstrom
+
+  let is_digit = function '0'..'9' -> true | _ -> false
+
+  let integer = take_while1 is_digit >>| int_of_string
+
+  let is_whitespace = function
+    | '\x20' | '\x0a' | '\x0d' | '\x09' -> true
+    | _ -> false
+
+  let whitespace = take_while is_whitespace
+
+  (** Parses timestamps of the form int-int-int int:int:int(.int)?(+|-)int  *)
+  (* This is a little less precise than ISO standard notation but is OK
+   * for our purposes: any errors would be caught in calendar construction. *)
+  let db_timestamp =
+    let sep3 chr =
+      integer >>= fun x ->
+      char chr *>
+      integer >>= fun y ->
+      char chr *>
+      integer >>= fun z ->
+      return (x, y, z) in
+
+    let date = sep3 '-' in
+    let time = sep3 ':' in
+
+    (* We discard the milliseconds, but still need to eat them *)
+    let millis = option () (char '.' *> integer *> return ()) in
+
+    let offset =
+      (char '+' *> integer) <|>
+      (char '-' *> integer >>= fun x -> return (-x)) in
+
+    let datetime =
+      date >>= fun (year, month, day) ->
+      whitespace *>
+      time >>=  fun (hour, minute, second) ->
+      millis *>
+      offset >>= fun offset ->
+      return (
+        let open CalendarLib in
+        let cal =
+          CalendarShow.lmake ~year ~month ~day ~hour ~minute ~second () in
+        (* Only do a timezone conversion for  *)
+        `Timestamp (CalendarShow.convert cal
+          (Time_Zone.UTC_Plus offset) (Time_Zone.current ()))
+      ) in
+
+    let infinity = string "infinity" *> (return `Forever) in
+
+    datetime <|> infinity
+end

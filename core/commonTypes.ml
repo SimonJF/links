@@ -222,6 +222,17 @@ module Primitive = struct
     | DateTime -> "DateTime"
 end
 
+module Timestamp = struct
+  type t = Timestamp of CalendarShow.t | Forever
+  [@@deriving show, ord]
+
+  let timestamp ts = Timestamp ts
+  let forever = Forever
+  let to_string = function
+    | Timestamp ts -> Printf.sprintf "'%s'" (Printer.Calendar.to_string ts)
+    | Forever -> "'infinity'"
+end
+
 module Constant = struct
   type t =
     | Float  of float
@@ -229,7 +240,7 @@ module Constant = struct
     | Bool   of bool
     | String of string
     | Char   of char
-    | DateTime of CalendarShow.t
+    | DateTime of Timestamp.t
       [@@deriving show, ord]
 
   let type_of = function
@@ -239,6 +250,11 @@ module Constant = struct
     | Char   _ -> Primitive.Char
     | String _ -> Primitive.String
     | DateTime _ -> Primitive.DateTime
+
+  module DateTime = struct
+    let now () = DateTime (Timestamp.timestamp (CalendarShow.now()))
+    let forever = DateTime (Timestamp.forever)
+  end
 
   (* SQL standard for escaping single quotes in a string *)
   let escape_string s =
@@ -252,16 +268,7 @@ module Constant = struct
     | Char c      -> "'"^ Char.escaped c ^"'"
     | String s    -> "'" ^ escape_string s ^ "'"
     | Float value -> string_of_float' value
-    | DateTime dt -> "'" ^ (Printer.Calendar.to_string dt) ^ "'"
-
-  (* SJF: I'm not entirely sure whether this is the best place for this
-   * module. *)
-  module DateTime = struct
-    let now () = DateTime (CalendarShow.now ())
-    let from_string str = DateTime (Printer.Calendar.from_string str)
-    let forever_string = "2999-01-30 00:00:00"
-    let forever = from_string forever_string
-  end
+    | DateTime ts -> Timestamp.to_string ts
 end
 
 module QueryPolicy = struct

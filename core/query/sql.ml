@@ -217,7 +217,7 @@ and string_of_base db one_table b =
     match b with
       | Case (c, t, e) ->
           "case when " ^ sb c ^ " then " ^sb t ^ " else "^ sb e ^ " end"
-      | Constant c -> Constant.to_string c
+      | Constant c -> db#show_constant c
       | Project (var, label) -> string_of_projection db one_table (var, label)
       | Apply (op, [l; r]) when Arithmetic.is op
           -> Arithmetic.gen (sb l, op, sb r)
