@@ -1490,3 +1490,8 @@ fun isNew(x) {
     case Key (x) -> false
   }
 }
+
+# Gets current timestamp
+fun now() {
+  intToDate(serverTime())
+}
