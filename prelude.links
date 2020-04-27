@@ -1495,3 +1495,5 @@ fun isNew(x) {
 fun now() {
   intToDate(serverTime())
 }
+
+var forever = parseDate("2999-01-30 00:00:00");
