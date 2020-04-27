@@ -118,6 +118,10 @@ let rec equal l r =
           List.for_all (one_equal_all rfields) lfields && List.for_all (one_equal_all lfields) rfields
     | `Variant (llabel, lvalue), `Variant (rlabel, rvalue) -> llabel = rlabel && equal lvalue rvalue
     | `List (l), `List (r) -> equal_lists l r
+    | `DateTime dt1, `DateTime dt2 ->
+        let f1 = CalendarShow.to_unixfloat dt1 in
+        let f2 = CalendarShow.to_unixfloat dt2 in
+        f1 = f2
     | l, r ->
         runtime_error
           (Printf.sprintf "Comparing %s with %s which either does not make sense or isn't implemented."
@@ -147,6 +151,10 @@ let rec less l r =
           | _::rest                -> compare_list rest in
           compare_list (combine lv rv)
     | `List (l), `List (r) -> less_lists (l,r)
+    | `DateTime dt1, `DateTime dt2 ->
+        let f1 = CalendarShow.to_unixfloat dt1 in
+        let f2 = CalendarShow.to_unixfloat dt2 in
+        f1 < f2
     | l, r ->  runtime_error ("Cannot yet compare "^ Value.string_of_value l ^" with "^ Value.string_of_value r)
 and less_lists = function
   | _, [] -> false
