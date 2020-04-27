@@ -85,15 +85,12 @@ class virtual database = object(self)
      * variants of the server, so for now I'm going to say that dates and times should
      * be stored in the DB as UTC.
      *)
-    (* Slight hack: do *not* do a conversion on `forever`:
-     * instead, convert to "infinity". Note: this may be PSQL specific. *)
-    | (DateTime dt) as dt_const ->
+    | DateTime (Timestamp.Forever) -> "'infinity'"
+    | DateTime (Timestamp.Timestamp ts) ->
         let open CalendarLib in
-        let utc_dt =
-          if dt_const = Constant.DateTime.forever then "'infinity'"
-          else
-            CalendarShow.convert dt (Time_Zone.current ()) (Time_Zone.UTC) in
-          "'" ^ (Printer.Calendar.to_string utc_dt) ^ " UTC'"
+        CalendarShow.convert ts (Time_Zone.current ()) (Time_Zone.UTC)
+        |> Printer.Calendar.to_string
+        |> Printf.sprintf "'%s UTC'"
     | c -> to_string c
   method make_insert_query : (string * string list * string list list) -> string =
     fun (table_name, field_names, vss) ->
@@ -245,7 +242,7 @@ type primitive_value = [
 | primitive_value_basis
 | `Database of (database * string)
 | `Table of table
-| `DateTime of CalendarShow.t
+| `DateTime of Timestamp.t
 ]
   [@@deriving show]
 
@@ -848,7 +845,8 @@ let rec p_value (ppf : formatter) : t -> 'a = function
   | `Pid (`ServerPid i) -> fprintf ppf "Pid Server (%s)" (ProcessID.to_string i)
   | `Pid (`ClientPid (cid, i)) -> fprintf ppf "Pid Client num %s, process %s" (ClientID.to_string cid) (ProcessID.to_string i)
   | `Alien -> fprintf ppf "alien"
-  | `DateTime dt -> fprintf ppf "\"%s\"" (CalendarShow.show dt)
+  | `DateTime (Timestamp.Timestamp ts) -> fprintf ppf "\"%s\"" (CalendarShow.show ts)
+  | `DateTime (Timestamp.Forever) -> fprintf ppf "forever"
 and p_record_fields ppf = function
   | [] -> fprintf ppf ""
   | [(l, v)] -> fprintf ppf "@[@{<recordlabel>%a@} = %a@]"

@@ -2,7 +2,6 @@
 open ProcessTypes
 open CommonTypes
 open Utility
-open CalendarLib
 
 (* Setting *)
 let show_json
@@ -117,7 +116,8 @@ and jsonize_primitive : Value.primitive_value -> Yojson.Basic.t  = function
   | `Table t -> json_of_table t
   | `XML xmlitem -> json_of_xmlitem xmlitem
   | `String s -> `String s
-  | `DateTime dt ->
+  | `DateTime _ -> raise (Errors.runtime_error "Can't jsonize datetime")
+      (* FIXME
       `Assoc
         [("_year",         `Int (Calendar.year dt));
          ("_month",        `Int (Calendar.month dt |> Date.int_of_month));
@@ -125,6 +125,7 @@ and jsonize_primitive : Value.primitive_value -> Yojson.Basic.t  = function
          ("_hours",        `Int (Calendar.hour dt));
          ("_minutes",      `Int (Calendar.minute dt));
          ("_seconds",      `Int (Calendar.second dt))]
+         *)
 and json_of_xmlitem = function
   | Value.Text s ->
       `Assoc [("type", `String "TEXT"); ("text", `String s)]

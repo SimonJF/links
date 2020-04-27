@@ -12,7 +12,6 @@ open Operators
 open CommonTypes
 open SourceCode
 open Sugartypes
-open Utility
 
 class map =
   object ((o : 'self_type))
@@ -38,7 +37,7 @@ class map =
 
     method char : char -> char = o#unknown
 
-    method datetime : CalendarShow.t -> CalendarShow.t = o#unknown
+    method datetime : Timestamp.t -> Timestamp.t = o#unknown
 
     method bool : bool -> bool = function | false -> false | true -> true
 
@@ -833,7 +832,7 @@ class fold =
 
     method char : char -> 'self_type = o#unknown
 
-    method datetime : CalendarShow.t -> 'self_type = o#unknown
+    method datetime : Timestamp.t -> 'self_type = o#unknown
 
     method bool : bool -> 'self_type = function | false -> o | true -> o
 
@@ -1546,7 +1545,7 @@ class fold_map =
 
     method char : char -> ('self_type * char) = o#unknown
 
-    method datetime : CalendarShow.t -> ('self_type * CalendarShow.t) = o#unknown
+    method datetime : Timestamp.t -> ('self_type * Timestamp.t) = o#unknown
 
     method bool : bool -> ('self_type * bool) =
       function | false -> (o, false) | true -> (o, true)

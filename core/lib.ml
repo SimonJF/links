@@ -118,7 +118,8 @@ let rec equal l r =
           List.for_all (one_equal_all rfields) lfields && List.for_all (one_equal_all lfields) rfields
     | `Variant (llabel, lvalue), `Variant (rlabel, rvalue) -> llabel = rlabel && equal lvalue rvalue
     | `List (l), `List (r) -> equal_lists l r
-    | `DateTime dt1, `DateTime dt2 ->
+    | `DateTime dt1, `DateTime dt2 when dt1 = dt2 -> true
+    | `DateTime (Timestamp.Timestamp dt1), `DateTime (Timestamp.Timestamp dt2) ->
         let f1 = CalendarShow.to_unixfloat dt1 in
         let f2 = CalendarShow.to_unixfloat dt2 in
         f1 = f2
@@ -151,7 +152,9 @@ let rec less l r =
           | _::rest                -> compare_list rest in
           compare_list (combine lv rv)
     | `List (l), `List (r) -> less_lists (l,r)
-    | `DateTime dt1, `DateTime dt2 ->
+    | `DateTime (Timestamp.Timestamp _), `DateTime (Timestamp.Forever) -> true
+    | `DateTime (Timestamp.Forever), `DateTime _ -> false
+    | `DateTime (Timestamp.Timestamp dt1), `DateTime (Timestamp.Timestamp dt2) ->
         let f1 = CalendarShow.to_unixfloat dt1 in
         let f2 = CalendarShow.to_unixfloat dt2 in
         f1 < f2
@@ -188,9 +191,13 @@ let add_attributes : (Value.t * Value.t) list -> Value.t -> Value.t =
   List.fold_right add_attribute
 
 let project_datetime (f: CalendarShow.t -> int) : located_primitive * Types.datatype * pure =
-  (p1 (fun dt -> Value.box_int (f (Value.unbox_datetime dt))),
+  (p1 (fun dt ->
+    match Value.unbox_datetime dt with
+      | Timestamp.Forever -> raise (runtime_error "Cannot project from 'forever'")
+      | Timestamp.Timestamp ts -> Value.box_int (f ts)),
   datatype "(DateTime) -> Int",
   PURE)
+
 
 let env : (string * (located_primitive * Types.datatype * pure)) list = [
   "+", int_op (+) PURE;
@@ -1066,7 +1073,11 @@ let env : (string * (located_primitive * Types.datatype * pure)) list = [
   "dateToInt",
   (p1 (fun r ->
          match r with
-           | `DateTime dt ->
+           | `DateTime (Timestamp.Forever) ->
+               (* SJF: Not sure what the semantics should be here...
+                * For now, just throwing a runtime exception. *)
+               raise (runtime_error "Cannot convert 'forever' into an integer")
+           | `DateTime (Timestamp.Timestamp dt) ->
                let tm = {
                 Unix.tm_sec = CalendarShow.second dt;
                 Unix.tm_min = CalendarShow.minute dt;
@@ -1093,6 +1104,7 @@ let env : (string * (located_primitive * Types.datatype * pure)) list = [
              ~hour:tm.Unix.tm_hour
              ~minute:tm.Unix.tm_min
              ~second:tm.Unix.tm_sec ())
+           |> Timestamp.timestamp
            |> Value.box_datetime),
   datatype "(Int) ~> DateTime",
   IMPURE);
@@ -1108,9 +1120,15 @@ let env : (string * (located_primitive * Types.datatype * pure)) list = [
   (p1 (fun str ->
         Value.unbox_string str
          |> CalendarLib.Printer.Calendar.from_string
+         |> Timestamp.timestamp
          |> Value.box_datetime),
   datatype "(String) ~> DateTime",
   IMPURE);
+
+  "forever",
+  (`PFun (fun _ _ -> Value.box_datetime Timestamp.forever),
+    datatype "() -> DateTime",
+    IMPURE);
 
   (* Testing *)
   "unsafeCoerce",

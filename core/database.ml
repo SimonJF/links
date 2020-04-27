@@ -78,8 +78,8 @@ let value_of_db_string (value:string) t =
         let open Buffered in
         let parsed =
           match parse db_timestamp with
-            | Done (_, `Timestamp x) -> Constant.DateTime.timestamp x
-            | Done (_, `Forever) -> Constant.DateTime.forever
+            | Done (_, `Timestamp x) -> Timestamp.timestamp x
+            | Done (_, `Forever) -> Timestamp.forever
             | _ -> raise bad_date in
         Value.box_datetime parsed
     | t -> raise (runtime_error

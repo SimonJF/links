@@ -629,7 +629,9 @@ end = functor (K : CONTINUATION) -> struct
          | Constant.Bool v   -> Lit (string_of_bool v)
          | Constant.Char v   -> chrlit v
          | Constant.String v -> chrlistlit v
-         | Constant.DateTime dt -> New ("Date", [Lit (CalendarShow.show dt) ])
+         (* TODO: We're going to have to add in a discriminated union for 'forever'. *)
+         | Constant.DateTime _ -> raise (internal_error "Serialisation of dates not yet supported")
+             (* New ("Date", [Lit (CalendarShow.show dt) ]) *)
        end
     | Variable var ->
           (* HACK *)
