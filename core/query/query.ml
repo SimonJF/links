@@ -710,6 +710,8 @@ struct
           Q.Primitive "Empty"
         | "sortByBase" ->
           Q.Primitive "SortBy"
+        | "forever" ->
+          Q.Primitive "Forever"
         | _ ->
           begin
             match location with
@@ -1124,6 +1126,7 @@ struct
                       | _ -> assert false
                   end
         end
+    | Q.Primitive "forever", _ -> Q.Constant (Constant.DateTime.forever)
     | Q.Primitive "not", [v] ->
       Q.reduce_not (v)
     | Q.Primitive "&&", [v; w] ->

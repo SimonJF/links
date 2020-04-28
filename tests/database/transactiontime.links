@@ -51,7 +51,7 @@ fun updateBobDean() {
   updateBob(); updateDean()
 }
 
-fun isCurrent(x) { ttTo(x) == forever }
+fun isCurrent(x) { ttTo(x) == forever() }
 
 fun currentLookup(p) {
   query {
