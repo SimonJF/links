@@ -1127,6 +1127,7 @@ struct
                   end
         end
     | Q.Primitive "forever", _ -> Q.Constant (Constant.DateTime.forever)
+    | Q.Primitive "now", _ -> Q.Constant (Constant.DateTime.now ())
     | Q.Primitive "not", [v] ->
       Q.reduce_not (v)
     | Q.Primitive "&&", [v; w] ->
@@ -1478,7 +1479,7 @@ let transaction_time_update :
     let upd_query =
       Sql.Update {
         upd_table = table;
-        upd_fields = [("tt_to", sql_now)];
+        upd_fields = [(tt_to, sql_now)];
         upd_where = Some update_predicate
       } in
 

@@ -73,15 +73,7 @@ let value_of_db_string (value:string) t =
        if value = "" then Value.box_float 0.00      (* HACK HACK *)
        else Value.box_float (float_of_string value)
     | `Primitive Primitive.DateTime ->
-        let bad_date = Errors.RuntimeError ("Ill-formed date: " ^ value) in
-        let open AngstromExtended in
-        let open Buffered in
-        let parsed =
-          match parse db_timestamp with
-            | Done (_, `Timestamp x) -> Timestamp.timestamp x
-            | Done (_, `Forever) -> Timestamp.forever
-            | _ -> raise bad_date in
-        Value.box_datetime parsed
+        Timestamp.from_string value |> Value.box_datetime
     | t -> raise (runtime_error
       ("value_of_db_string: unsupported datatype: '" ^
         Types.string_of_datatype t ^"'"))

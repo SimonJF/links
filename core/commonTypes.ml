@@ -2,7 +2,6 @@
    (Sugartypes) and typechecker (Types). *)
 
 open Utility
-open CalendarLib
 
 module Linearity = struct
   type t = Any | Unl
@@ -227,10 +226,21 @@ module Timestamp = struct
   [@@deriving show, ord]
 
   let timestamp ts = Timestamp ts
+  let now () = Timestamp (CalendarShow.now ())
   let forever = Forever
   let to_string = function
-    | Timestamp ts -> Printf.sprintf "'%s'" (Printer.Calendar.to_string ts)
+    | Timestamp ts -> Printf.sprintf "'%s'" (CalendarShow.show ts)
     | Forever -> "'infinity'"
+
+  let from_string str =
+    let bad_date msg = Errors.RuntimeError ("Ill-formed date: " ^ str ^ " ||| Message: " ^ msg) in
+    let open AngstromExtended in
+    (* The next Angstrom release will require the ~consume argument. *)
+    (* match parse_string ~consume:All db_timestamp str with *)
+    match parse_string db_timestamp str with
+      | Ok (`Timestamp x) -> timestamp x
+      | Ok (`Forever) -> forever
+      | Error msg -> raise (bad_date msg)
 end
 
 module Constant = struct

@@ -198,7 +198,6 @@ let project_datetime (f: CalendarShow.t -> int) : located_primitive * Types.data
   datatype "(DateTime) -> Int",
   PURE)
 
-
 let env : (string * (located_primitive * Types.datatype * pure)) list = [
   "+", int_op (+) PURE;
   "-", int_op (-) PURE;
@@ -1079,7 +1078,7 @@ let env : (string * (located_primitive * Types.datatype * pure)) list = [
                raise (runtime_error "Cannot convert 'forever' into an integer")
            | `DateTime (Timestamp.Timestamp dt) ->
                let tm = {
-                Unix.tm_sec = CalendarShow.second dt;
+                Unix.tm_sec = CalendarShow.second dt |> int_of_float;
                 Unix.tm_min = CalendarShow.minute dt;
                 Unix.tm_hour = CalendarShow.hour dt;
                 Unix.tm_mday = CalendarShow.day_of_month dt;
@@ -1103,7 +1102,7 @@ let env : (string * (located_primitive * Types.datatype * pure)) list = [
              ~day:tm.Unix.tm_mday
              ~hour:tm.Unix.tm_hour
              ~minute:tm.Unix.tm_min
-             ~second:tm.Unix.tm_sec ())
+             ~second:(float_of_int tm.Unix.tm_sec) ())
            |> Timestamp.timestamp
            |> Value.box_datetime),
   datatype "(Int) ~> DateTime",
@@ -1114,16 +1113,28 @@ let env : (string * (located_primitive * Types.datatype * pure)) list = [
   "dateMonth", project_datetime (fun dt -> CalendarShow.month dt |> CalendarLib.Date.int_of_month);
   "dateHours", project_datetime (fun dt -> CalendarShow.hour dt);
   "dateMinutes", project_datetime (fun dt -> CalendarShow.minute dt);
-  "dateSeconds", project_datetime (fun dt -> CalendarShow.second dt);
+
+  "dateSeconds",
+  (p1 (fun dt ->
+    match Value.unbox_datetime dt with
+      | Timestamp.Forever -> raise (runtime_error "Cannot project from 'forever'")
+      | Timestamp.Timestamp ts -> Value.box_float (CalendarShow.second ts)),
+  datatype "(DateTime) -> Float",
+  PURE);
+
 
   "parseDate",
   (p1 (fun str ->
         Value.unbox_string str
-         |> CalendarLib.Printer.Calendar.from_string
-         |> Timestamp.timestamp
+         |> Timestamp.from_string
          |> Value.box_datetime),
   datatype "(String) ~> DateTime",
   IMPURE);
+
+  "now",
+  (`PFun (fun _ _ -> Value.box_datetime (Timestamp.now ())),
+    datatype "() -> DateTime",
+    IMPURE);
 
   "forever",
   (`PFun (fun _ _ -> Value.box_datetime Timestamp.forever),

@@ -91,7 +91,7 @@ let main () =
   (* Attempt to synchronise all settings. If any setting commands are
      left unhandled, then error and exit. *)
   Settings.ensure_all_synchronised ();
-
+  CalendarLib.Time_Zone.(change Local);
   let file_list = Settings.get_anonymous_arguments () in
   let to_evaluate = Settings.get to_evaluate in
 
@@ -102,8 +102,6 @@ let main () =
   let context'' =
     for_each context' process_file file_list
   in
-  (* TODO: Find a better place for this *)
-  CalendarLib.Time_Zone.(change Local);
   match file_list, to_evaluate with
   | [], [] -> Repl.interact context''
   | _, _ -> ()

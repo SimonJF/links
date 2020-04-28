@@ -1460,9 +1460,13 @@ struct
 end
 
 module CalendarShow = struct
-  include CalendarLib.Calendar
+  include CalendarLib.Fcalendar.Precise
 
-  let show = CalendarLib.Printer.Calendar.to_string
+  let show x =
+    Printf.sprintf "%04d-%02d-%02d %02d:%02d:%f"
+      (year x) (month x |> CalendarLib.Date.int_of_month)
+      (day_of_month x) (hour x) (minute x) (second x)
+
   let pp fmt x = Format.pp_print_string fmt (show x)
 end
 
@@ -1473,7 +1477,14 @@ module AngstromExtended = struct
 
   let is_digit = function '0'..'9' -> true | _ -> false
 
-  let integer = take_while1 is_digit >>| int_of_string
+  let digits = take_while1 is_digit
+  let integer = digits >>| int_of_string
+
+  let float =
+    digits >>= fun x ->
+    option
+      (float_of_string x)
+      (char '.' *> digits >>= fun y -> return (float_of_string (x ^ "." ^ y)))
 
   let is_whitespace = function
     | '\x20' | '\x0a' | '\x0d' | '\x09' -> true
@@ -1494,10 +1505,15 @@ module AngstromExtended = struct
       return (x, y, z) in
 
     let date = sep3 '-' in
-    let time = sep3 ':' in
 
-    (* We discard the milliseconds, but still need to eat them *)
-    let millis = option () (char '.' *> integer *> return ()) in
+    (* TODO: abstract and tidy *)
+    let time =
+      integer >>= fun x ->
+      char ':' *>
+      integer >>= fun y ->
+      char ':' *>
+      float >>= fun z ->
+      return (x, y, z) in
 
     let offset =
       (char '+' *> integer) <|>
@@ -1507,15 +1523,16 @@ module AngstromExtended = struct
       date >>= fun (year, month, day) ->
       whitespace *>
       time >>=  fun (hour, minute, second) ->
-      millis *>
-      offset >>= fun offset ->
+      offset >>= fun _offset ->
       return (
-        let open CalendarLib in
-        let cal =
-          CalendarShow.lmake ~year ~month ~day ~hour ~minute ~second () in
-        (* Only do a timezone conversion for  *)
+        `Timestamp (CalendarShow.lmake ~year ~month ~day ~hour ~minute ~second ())
+        (* So, it turns out that we need to convert when putting things *into*
+         * the database, but the output of the DB query is actually in local time,
+         * and the offset is just informational. *)
+      (*
         `Timestamp (CalendarShow.convert cal
           (Time_Zone.UTC_Plus offset) (Time_Zone.current ()))
+          *)
       ) in
 
     let infinity = string "infinity" *> (return `Forever) in

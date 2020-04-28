@@ -89,8 +89,8 @@ class virtual database = object(self)
     | DateTime (Timestamp.Timestamp ts) ->
         let open CalendarLib in
         CalendarShow.convert ts (Time_Zone.current ()) (Time_Zone.UTC)
-        |> Printer.Calendar.to_string
-        |> Printf.sprintf "'%s UTC'"
+        |> CalendarShow.show
+        |> Printf.sprintf "'%s UTC' :: timestamp with time zone"
     | c -> to_string c
   method make_insert_query : (string * string list * string list list) -> string =
     fun (table_name, field_names, vss) ->
