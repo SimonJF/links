@@ -34,15 +34,16 @@ object (o: 'self_type)
     *)
 
   method! phrasenode : phrasenode -> ('self_type * phrasenode * Types.datatype) =
+    let open TemporalOperation in
     function
-      | TemporalOp (op, phr, _replacement) as phrn ->
+      | TemporalOp (Accessor (tbl, field), phr, _replacement) as phrn ->
           (* Translation is type-preserving, so it's safe to defer to the
            * supertype's computation of the type *)
           let (_, _, ty) = super#phrasenode phrn in
           let (o, ty) = o#datatype ty in
           let (o, phr, _) = o#phrase phr in
-          let field = TemporalOperation.field op in
-          (o, Projection (phr, field), ty)
+          let field_name = TemporalOperation.field (tbl, field) in
+          (o, Projection (phr, field_name), ty)
       | pn -> super#phrasenode pn
 end
 

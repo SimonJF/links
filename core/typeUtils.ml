@@ -128,9 +128,16 @@ let rec metadata_payload_type t =
 
 let metadata_operation_type op t =
   let open TemporalOperation in
+  let accessor_type tbl field =
+    match tbl with
+      | Transaction ->
+          begin
+            match field with
+              | Data -> metadata_payload_type t
+              | From | To -> `Primitive (Primitive.DateTime)
+          end in
   match op with
-    | TransactionData -> metadata_payload_type t
-    | TransactionTo | TransactionFrom -> `Primitive (Primitive.DateTime)
+    | Accessor (tbl, field) -> accessor_type tbl field
 
 let rec project_type ?(overstep_quantifiers=true) name t = match (concrete_type t, overstep_quantifiers) with
   | (`ForAll (_, t), true) -> project_type name t

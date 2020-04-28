@@ -341,7 +341,7 @@ let parse_foreign_language pos lang =
 %token TYPE ROW PRESENCE
 %token TRY OTHERWISE RAISE
 %token <string> OPERATOR
-%token USING TTFROM TTTO TTDATA
+%token USING TTFROM TTTO TTDATA TTCURRENT
 
 %start just_datatype
 %start interactive
@@ -629,9 +629,9 @@ postfix_expression:
 | postfix_expression AT                                        { with_pos $loc (Instantiate $1) }
 
 temporal_operation:
-| TTDATA LPAREN exp RPAREN                                     { with_pos $loc (TemporalOp (TemporalOperation.TransactionData, $3, None)  ) }
-| TTFROM LPAREN exp RPAREN                                     { with_pos $loc (TemporalOp (TemporalOperation.TransactionFrom, $3, None)  ) }
-| TTTO   LPAREN exp RPAREN                                     { with_pos $loc (TemporalOp (TemporalOperation.TransactionTo,   $3, None)  ) }
+| TTDATA LPAREN exp RPAREN                                     { with_pos $loc (TemporalOp (TemporalOperation.(Accessor (Transaction, Data)), $3, None)) }
+| TTFROM LPAREN exp RPAREN                                     { with_pos $loc (TemporalOp (TemporalOperation.(Accessor (Transaction, From)), $3, None)) }
+| TTTO   LPAREN exp RPAREN                                     { with_pos $loc (TemporalOp (TemporalOperation.(Accessor (Transaction, To)),   $3, None)) }
 
 arg_spec:
 | LPAREN perhaps_exps RPAREN                                   { $2 }

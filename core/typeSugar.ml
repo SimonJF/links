@@ -2804,23 +2804,28 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * Usage.t =
               Usage.combine (usages tname) (usages db)
         | TableLit _ -> assert false
         | TemporalOp (op, target, replacement) ->
+            let open TemporalOperation in
             let data_ty =  `Record (Types.make_empty_open_row (lin_any, res_base)) in
             let target = tc target in
             let replacement = opt_map tc replacement in
             let check_transaction_time () =
               let expected = Types.transaction_absty data_ty in
               unify ~handle:(Gripers.transaction_accessor op) (pos_and_typ target, no_pos expected) in
+
+            let accessor_ty tbl field =
+              match tbl with
+                | Transaction ->
+                    check_transaction_time ();
+                    begin
+                      match field with
+                        | Data -> data_ty
+                        | From | To -> `Primitive (Primitive.DateTime)
+                    end in
+
             let result_ty =
-              begin
-                let open TemporalOperation in
-                match op with
-                  | TransactionData ->
-                      check_transaction_time ();
-                      data_ty
-                  | TransactionFrom | TransactionTo ->
-                      check_transaction_time ();
-                      `Primitive (Primitive.DateTime)
-              end in
+              match op with
+                | Accessor (tbl, field) -> accessor_ty tbl field in
+
             let replacement_usages = OptionUtils.opt_app (usages) (Usage.empty) replacement in
             TemporalOp (op, erase target, opt_map erase replacement), result_ty,
             (Usage.combine (usages target) replacement_usages)

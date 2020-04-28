@@ -86,3 +86,32 @@ tests/temporal/tt-update-bad-2.links
 filemode : true
 exit : 1
 stderr : @.*Type error:.*
+
+Transaction time -> current time demotion (good)
+tests/temporal/tt-current-demotion.links
+filemode : true
+exit : 0
+
+Transaction time -> current time demotion (bad iterator)
+tests/temporal/tt-current-demotion-bad.links
+filemode : true
+exit : 1
+stderr : @.*Type error:.*
+
+Transaction time -> current time demotion (inserts disallowed)
+tests/temporal/tt-current-demotion-bad-insert.links
+filemode : true
+exit : 1
+stderr : @.*Type error:.*
+
+Transaction time -> current time demotion (updates disallowed)
+tests/temporal/tt-current-demotion-bad-update.links
+filemode : true
+exit : 1
+stderr : @.*Type error:.*
+
+Transaction time -> current time demotion (deletions disallowed)
+tests/temporal/tt-current-demotion-bad-deletion.links
+filemode : true
+exit : 1
+stderr : @.*Type error:.*

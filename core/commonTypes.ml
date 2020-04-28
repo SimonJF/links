@@ -351,19 +351,32 @@ module TemporalMetadata = struct
 end
 
 module TemporalOperation = struct
+  (* TODO: Expand when we implement valid time / bitemporal tables *)
+  type table_type = Transaction
+    [@@deriving show]
+
+  type field = Data | From | To
+    [@@deriving show]
+
   type t =
-    | TransactionData
-    | TransactionFrom
-    | TransactionTo
+    | Accessor of table_type * field
     [@@deriving show]
 
   let name = function
-    | TransactionData -> "ttData"
-    | TransactionFrom -> "ttFrom"
-    | TransactionTo   -> "ttTo"
+    | Accessor (Transaction, field) ->
+        begin
+          match field with
+            | From -> "ttFrom"
+            | To -> "ttTo"
+            | Data -> "ttData"
+        end
 
   let field = function
-    | TransactionData -> TemporalMetadata.Transaction.data_field
-    | TransactionFrom -> TemporalMetadata.Transaction.from_field
-    | TransactionTo   -> TemporalMetadata.Transaction.to_field
+    | (Transaction, field) ->
+        begin
+          match field with
+            | Data -> TemporalMetadata.Transaction.data_field
+            | From -> "ttFrom"
+            | To -> "ttTo"
+        end
 end
