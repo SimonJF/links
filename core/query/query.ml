@@ -1522,7 +1522,7 @@ let compile_update :
     let where = opt_map (Eval.norm_comp env) where in
     let body = Eval.norm_comp env body in
     let q = update ((x, table), where, body) in
-    Debug.print ("Generated update query: " ^ (Sql.string_of_query db None q));
+    Debug.print ("Generated update query: " ^ (Sql.string_of_query (db#quote_field) (db#show_constant) None q));
     q
 
 let compile_transaction_time_update :
@@ -1558,7 +1558,7 @@ let compile_delete :
             transaction_time_delete
               ((x, table), where) tt_to_field
         | _ -> raise (internal_error "Valid / Bitemporal data not yet supported") in
-    Debug.print ("Generated delete query: " ^ (Sql.string_of_query db None q));
+    Debug.print ("Generated delete query: " ^ (Sql.string_of_query (db#quote_field) (db#show_constant) None q));
     q
 
 
@@ -1588,7 +1588,7 @@ let insert_returning db table_name field_names rows md returning =
     (table_name, field_names, rows, returning)
 
 let show_base db =
-  (base []) ->- (Sql.string_of_base db true)
+  (base []) ->- (Sql.string_of_base (db#quote_field) (db#show_constant) true)
 
 let is_list = Q.is_list
 let table_field_types = Q.table_field_types

@@ -138,10 +138,11 @@ let order_by_clause n =
    returned. This allows these operators to take lists that have any
    element type at all. *)
 
-let rec string_of_query db ignore_fields q =
-  let sq = string_of_query db ignore_fields in
-  let sb = string_of_base db false in
-  let sbt = string_of_base db true in
+let rec string_of_query quote show_constant ignore_fields q =
+  let sq = string_of_query quote show_constant ignore_fields in
+  let sb = string_of_base quote show_constant false in
+  let sbt = string_of_base quote show_constant true in
+
   let string_of_fields fields =
     if ignore_fields then
       "0 as \"@unit@\"" (* SQL doesn't support empty records! *)
@@ -151,7 +152,7 @@ let rec string_of_query db ignore_fields q =
         | fields ->
           mapstrcat ","
             (fun (b, l) ->
-              "(" ^ sb b ^ ") as "^ db#quote_field l) (* string_of_label l) *)
+              "(" ^ sb b ^ ") as "^ (quote l))
             fields
   in
   let string_of_select fields tables condition os =
@@ -176,7 +177,7 @@ let rec string_of_query db ignore_fields q =
   in
   let string_of_update table fields where =
     let fields =
-      List.map (fun (k, v) -> db#quote_field k ^ " = " ^ sbt v) fields
+      List.map (fun (k, v) -> quote k ^ " = " ^ sbt v) fields
       |> String.concat ", " in
 
     let where =
@@ -197,7 +198,7 @@ let rec string_of_query db ignore_fields q =
             "select * from (select " ^ fields ^ ") as " ^ fresh_dummy_var () ^ " where " ^ sb condition
       | Select (fields, tables, condition, os) ->
           (* using quote_field assumes tables contains table names (not nested queries) *)
-          let tables = List.map (fun (t, x) -> db#quote_field t ^ " as " ^ (string_of_table_var x)) tables
+          let tables = List.map (fun (t, x) -> quote t ^ " as " ^ (string_of_table_var x)) tables
           in string_of_select fields tables condition os
       | Delete { del_table; del_where } ->
           string_of_delete del_table del_where
@@ -207,18 +208,19 @@ let rec string_of_query db ignore_fields q =
           match q' with
           | Select (fields, tables, condition, os) ->
               (* Inline the query *)
-              let tables = List.map (fun (t, x) -> db#quote_field t ^ " as " ^ (string_of_table_var x)) tables in
+              let tables = List.map (fun (t, x) -> quote t ^ " as " ^ (string_of_table_var x)) tables in
               let q = "(" ^ sq q ^ ") as " ^ string_of_table_var z in
               string_of_select fields (q::tables) condition os
           | _ -> assert false
 
-and string_of_base db one_table b =
-  let sb = string_of_base db one_table in
+and string_of_base quote show_constant one_table b =
+  let sb = string_of_base quote show_constant one_table in
+  let sqt = string_of_query quote show_constant true in
     match b with
       | Case (c, t, e) ->
           "case when " ^ sb c ^ " then " ^sb t ^ " else "^ sb e ^ " end"
-      | Constant c -> db#show_constant c
-      | Project (var, label) -> string_of_projection db one_table (var, label)
+      | Constant c -> show_constant c
+      | Project (var, label) -> string_of_projection quote one_table (var, label)
       | Apply (op, [l; r]) when Arithmetic.is op
           -> Arithmetic.gen (sb l, op, sb r)
       | Apply (("intToString" | "stringToInt" | "intToFloat" | "floatToString"
@@ -226,7 +228,7 @@ and string_of_base db one_table b =
       | Apply ("floatToInt", [v]) -> "floor("^sb v^")"
 
       (* optimisation *)
-      | Apply ("not", [Empty q]) -> "exists (" ^ string_of_query db true q ^ ")"
+      | Apply ("not", [Empty q]) -> "exists (" ^ sqt q ^ ")"
 
       | Apply ("not", [v]) -> "not (" ^ sb v ^ ")"
       | Apply (("negate" | "negatef"), [v]) -> "-(" ^ sb v ^ ")"
@@ -242,21 +244,21 @@ and string_of_base db one_table b =
       | Apply ("LIKE", [v; w]) -> "(" ^ sb v ^ ")" ^ " LIKE " ^ "(" ^ sb w ^ ")"
       | Apply (f, args) when SqlFuns.is f -> SqlFuns.name f ^ "(" ^ String.concat "," (List.map sb args) ^ ")"
       | Apply (f, args) -> f ^ "(" ^ String.concat "," (List.map sb args) ^ ")"
-      | Empty q -> "not exists (" ^ string_of_query db true q ^ ")"
-      | Length q -> "select count(*) from (" ^ string_of_query db true q ^ ") as " ^ fresh_dummy_var ()
+      | Empty q -> "not exists (" ^ sqt q ^ ")"
+      | Length q -> "select count(*) from (" ^ sqt q ^ ") as " ^ fresh_dummy_var ()
       | RowNumber [] -> "1"
       | RowNumber ps ->
-        "row_number() over (order by " ^ String.concat "," (List.map (string_of_projection db one_table) ps) ^ ")"
-and string_of_projection db one_table (var, label) =
+        "row_number() over (order by " ^ String.concat "," (List.map (string_of_projection quote one_table) ps) ^ ")"
+and string_of_projection quote one_table (var, label) =
   if one_table then
-    db#quote_field label
+    quote label
   else
-    string_of_table_var var ^ "." ^ (db#quote_field label)
+    string_of_table_var var ^ "." ^ (quote label)
 
-let string_of_query db range q =
+let string_of_query quote show_constant range q =
   let range =
     match range with
       | None -> ""
       | Some (limit, offset) -> " limit " ^string_of_int limit^" offset "^string_of_int offset
   in
-    string_of_query db false q ^ range
+    string_of_query quote show_constant false q ^ range

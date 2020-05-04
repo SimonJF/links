@@ -726,7 +726,7 @@ struct
          match EvalQuery.compile env (range, e) with
            | None -> computation env cont e
            | Some (db, q, t) ->
-               let q = Sql.string_of_query db range q in
+               let q = Sql.string_of_query (db#quote_field) (db#show_constant) range q in
                let (fieldMap, _, _), _ =
                Types.unwrap_row(TypeUtils.extract_row t) in
                let fields =
@@ -754,7 +754,7 @@ struct
                   | _ -> assert false
                 in
                 let execute_shredded_raw (q, t) =
-                  let q = Sql.string_of_query db range q in
+                  let q = Sql.string_of_query (db#quote_field) (db#show_constant) range q in
                   Database.execute_select_result (get_fields t) q db, t in
                 let raw_results =
                   EvalNestedQuery.Shred.pmap execute_shredded_raw p in
@@ -842,7 +842,7 @@ struct
                 Query.compile_update
                   db env
                   ((Var.var_of_binder xb, table, field_types), where, body)
-                |> Sql.string_of_query db None in
+                |> Sql.string_of_query (db#quote_field) (db#show_constant) None in
               let () = ignore (Database.execute_command update_query db) in
               apply_cont cont env (`Record [])
           | TransactionTime { tt_from_field; tt_to_field } ->
@@ -859,8 +859,8 @@ struct
                   ((Var.var_of_binder xb, table, field_types), where, body)
                   tt_from_field tt_to_field in
               let (select_q, update_q) =
-                Sql.string_of_query db None select_q,
-                Sql.string_of_query db None update_q in
+                Sql.string_of_query (db#quote_field) (db#show_constant) None select_q,
+                Sql.string_of_query (db#quote_field) (db#show_constant) None update_q in
 
               (* Evaluate the selection to get the rows to insert *)
               let dt = `Primitive Primitive.DateTime in
@@ -909,7 +909,7 @@ struct
       let delete_query =
         Query.compile_delete md db env
           ((Var.var_of_binder xb, table, field_types), where)
-        |> Sql.string_of_query db None in
+        |> Sql.string_of_query (db#quote_field) (db#show_constant) None in
       let () = ignore (Database.execute_command delete_query db) in
         apply_cont cont env (`Record [])
     | CallCC f ->
