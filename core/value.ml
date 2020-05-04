@@ -109,6 +109,12 @@ class virtual database = object(self)
     raise (raise (internal_error ("insert ... returning is not yet implemented for the database driver: "^self#driver_name())))
   method virtual supports_shredding : unit -> bool
 
+  method string_of_query range q =
+    Sql.string_of_query
+      self#quote_field
+      self#show_constant
+      range q
+
 end
 
 let equal_database db1 db2 = db1 == db2

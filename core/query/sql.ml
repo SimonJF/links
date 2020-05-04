@@ -2,6 +2,7 @@ open Utility
 open CommonTypes
 
 type index = (Var.var * string) list
+type range = (int * int) option
 
 type query =
   | UnionAll  of query list * int
