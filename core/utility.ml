@@ -1523,7 +1523,7 @@ module AngstromExtended = struct
       date >>= fun (year, month, day) ->
       whitespace *>
       time >>=  fun (hour, minute, second) ->
-      offset >>= fun _offset ->
+      (option 0 offset) >>= fun _offset ->
       return (
         `Timestamp (CalendarShow.lmake ~year ~month ~day ~hour ~minute ~second ())
         (* So, it turns out that we need to convert when putting things *into*

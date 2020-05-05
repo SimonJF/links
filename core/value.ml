@@ -854,7 +854,7 @@ let rec p_value (ppf : formatter) : t -> 'a = function
   | `Pid (`ServerPid i) -> fprintf ppf "Pid Server (%s)" (ProcessID.to_string i)
   | `Pid (`ClientPid (cid, i)) -> fprintf ppf "Pid Client num %s, process %s" (ClientID.to_string cid) (ProcessID.to_string i)
   | `Alien -> fprintf ppf "alien"
-  | `DateTime (Timestamp.Timestamp ts) -> fprintf ppf "\"%s\"" (CalendarShow.show ts)
+  | `DateTime (Timestamp.Timestamp ts) -> fprintf ppf "%s" (CalendarShow.show ts)
   | `DateTime (Timestamp.Forever) -> fprintf ppf "forever"
 and p_record_fields ppf = function
   | [] -> fprintf ppf ""

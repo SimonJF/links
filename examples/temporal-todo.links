@@ -32,6 +32,10 @@ fun deleteItem(id) server {
     where (x.id == id)
 }
 
+### Note: The following two functions work, but they're rather more
+### low-level than one might hope. I plan to address this using
+### "demotion" views, which allow us to take a temporal table,
+### and time-slice it down to a current-time table.
 fun getAt(date) {
   query {
     for (x <-t- todoTbl)
@@ -50,14 +54,14 @@ fun getCurrent() {
 
 # MVU Definitions
 
-typename Model = (items:[Item], newItem:String);
+typename Model = (items: [Item], newItem: String, timeBox: String);
 typename ID = Int;
 
 typename Message =
-  [| UpdateBox:String | Submit | ToggleDone:ID | Delete:ID |];
+  [| UpdateBox:String | Submit | ToggleDone:ID | Delete:ID | UpdateTime:String | SubmitTime | SubmitNow |];
 
 fun initialModel(items) {
-  (=items, newItem="")
+  (=items, newItem="", timeBox=show(now()))
 }
 
 fun updt(msg, model) {
@@ -79,6 +83,13 @@ fun updt(msg, model) {
     case Submit ->
       var item = newItem(model.newItem);
       (model with newItem = "", items = model.items ++ [item])
+    case UpdateTime(time) -> (model with timeBox = time)
+    case SubmitTime ->
+      redirect("/home?at=" ^^ model.timeBox);
+      model
+    case SubmitNow ->
+      redirect("/home");
+      model
   }
 }
 
@@ -98,11 +109,14 @@ fun view(model) {
         textNode(item.content)
       };
 
-    input(id("chk") +@
-        type("checkbox") +@
+    var deleteButton =
+      button(onClick(fun() { Delete(item.id) }), textNode("Delete"));
+
+    input(type("checkbox") +@
         checkedAttr +@
         onChange(fun(_) { ToggleDone(item.id) }), h0) +*
-    label(for_("chk"), text) +*
+    label(a0, text) +*
+    deleteButton +*
     br(a0, h0)
   }
 
@@ -110,16 +124,29 @@ fun view(model) {
 
   var newItemBox =
     div(a0,
-      input(type("text") +@ value(model.newItem), h0) +*
+      input(type("text") +@ onInput(fun(str) { UpdateBox(str) }) +@ value(model.newItem), h0) +*
       button(onClick(fun() { Submit }), textNode("New item")));
+
+  var timeTravelBox =
+    div(a0,
+      h1(a0, textNode("Time-travel")) +*
+      input(type("text") +@ onInput(fun(str) { UpdateTime(str) }) +@ value(model.timeBox), h0) +*
+      button(onClick(fun() { SubmitTime }), textNode("Time-travel!")) +*
+      button(onClick(fun() { SubmitNow }), textNode("Present day!"))
+    );
 
   h1(a0, textNode("To-do")) +*
   renderedItems +*
-  newItemBox
+  newItemBox +*
+  timeTravelBox
 }
 
 fun mainPage() {
-  var model = initialModel(getCurrent());
+  var model =
+    switch (lookup("at", environment())) {
+      case Just(date) -> initialModel(getAt(parseDate(date)))
+      case _ -> initialModel(getCurrent())
+    };
   Mvu.runSimple("placeholder", model, view, updt);
   page
     <html>
