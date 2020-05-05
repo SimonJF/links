@@ -29,8 +29,12 @@ class virtual database :
     method virtual quote_field : string -> string
     method virtual exec : string -> dbvalue
     method show_constant : Constant.t -> string
-    method make_insert_query : (string * string list * string list list) -> string
-    method make_insert_returning_query : (string * string list * string list list * string) -> string list
+    (* method make_insert_query : (string * string list * string list list) -> string *)
+    method make_insert_returning_query :
+      string (* "returning" column *) ->
+      Sql.query ->
+      string list
+    (* method make_insert_returning_query : (string * string list * string list list * string) -> string list *)
     method virtual supports_shredding : unit -> bool
     method string_of_query : Sql.range -> Sql.query -> string
   end
@@ -313,5 +317,3 @@ val split_html : xml -> xml * xml
 val is_channel : t -> bool
 
 val session_exception_operation : string
-
-val row_columns_values : database -> t -> string list * string list list

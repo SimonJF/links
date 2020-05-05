@@ -376,7 +376,7 @@ module TemporalOperation = struct
         begin
           match field with
             | Data -> TemporalMetadata.Transaction.data_field
-            | From -> "ttFrom"
-            | To -> "ttTo"
+            | From -> TemporalMetadata.Transaction.from_field
+            | To -> TemporalMetadata.Transaction.to_field
         end
 end

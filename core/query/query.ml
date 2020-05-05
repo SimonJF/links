@@ -1561,8 +1561,7 @@ let compile_delete :
     Debug.print ("Generated delete query: " ^ (db#string_of_query None q));
     q
 
-
-let rewrite_insert db field_names rows md =
+let rewrite_insert field_names rows md =
   let open TemporalMetadata in
   match md with
     | Current -> (field_names, rows)
@@ -1571,24 +1570,47 @@ let rewrite_insert db field_names rows md =
          * Values: (from = now, to = forever) *)
         (* Other than that, straightforward insert. *)
         let field_names = field_names @ [tt_from_field; tt_to_field] in
-        let now = db#show_constant (Constant.DateTime.now ()) in
-        let forever = db#show_constant Constant.DateTime.forever in
+        let now = Sql.Constant (Constant.DateTime.now ()) in
+        let forever = Sql.Constant (Constant.DateTime.forever) in
         let rows =
           List.map (fun vs -> vs @ [now; forever]) rows in
         (field_names, rows)
     | _ -> raise (internal_error "Valid time / Bitemporal inserts not yet supported")
 
-let insert db table_name field_names rows md =
-  let field_names, rows = rewrite_insert db field_names rows md in
-  db#make_insert_query (table_name, field_names, rows)
 
-let insert_returning db table_name field_names rows md returning =
-  let field_names, rows =  rewrite_insert db field_names rows md in
-  db#make_insert_returning_query
-    (table_name, field_names, rows, returning)
+let insert_internal table_name field_names rows md_opt =
+  let rows = List.map (List.map (Q.expression_of_base_value ->- base [])) rows in
+  let field_names, rows =
+    match md_opt with
+      | Some md -> rewrite_insert field_names rows md
+      | None -> field_names, rows in
+  Sql.(Insert {
+      ins_table = table_name;
+      ins_fields = field_names;
+      ins_records = rows })
+
+let temporal_insert table_name field_names rows md =
+  insert_internal table_name field_names rows (Some md)
+let insert table_name field_names rows =
+  insert_internal table_name field_names rows None
 
 let show_base db =
   (base []) ->- (Sql.string_of_base (db#quote_field) (db#show_constant) true)
+
+let row_columns_values v =
+  let row_columns : Value.t -> string list = function
+    | `List ((`Record fields)::_) -> List.map fst fields
+    | _ -> raise (runtime_type_error "tried to form query columns from something other than a list of records")
+  in
+  let row_values = function
+    | `List records ->
+    (List.map (function
+          | `Record fields ->
+              List.map (snd) fields
+          | _ -> raise (runtime_type_error "tried to form query field from non-record")) records)
+    | _ -> raise (runtime_type_error "tried to form query row from non-list")
+  in
+  (row_columns v, row_values v)
 
 let is_list = Q.is_list
 let table_field_types = Q.table_field_types

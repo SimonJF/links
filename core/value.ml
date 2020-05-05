@@ -92,6 +92,7 @@ class virtual database = object(self)
         |> CalendarShow.show
         |> Printf.sprintf "'%s UTC' :: timestamp with time zone"
     | c -> to_string c
+    (*
   method make_insert_query : (string * string list * string list list) -> string =
     fun (table_name, field_names, vss) ->
       let field_names = String.concat ", " field_names in
@@ -103,10 +104,12 @@ class virtual database = object(self)
         |> String.concat ", " in
       Printf.sprintf "insert into %s (%s) values %s"
         table_name field_names values
+        *)
 
-  method make_insert_returning_query : (string * string list * string list list * string) -> string list =
+  method make_insert_returning_query : string -> Sql.query -> string list =
     fun _ ->
     raise (raise (internal_error ("insert ... returning is not yet implemented for the database driver: "^self#driver_name())))
+
   method virtual supports_shredding : unit -> bool
 
   method string_of_query range q =
@@ -1139,26 +1142,3 @@ and xmlitem_of_variant =
         else NsNode(ns, name, xml_of_variants variant_children)
     | v ->
         raise (type_error ~action:"construct XML from" "variant" v)
-
-(* Some utility functions for databases used by insertion *)
-
-let row_columns_values db v =
-  let escaped_string_of_value db =
-    function
-      | `String s -> "\'" ^ db # escape_string s ^ "\'"
-      | v -> string_of_value v
-  in
-  let row_columns : t -> string list = function
-    | `List ((`Record fields)::_) -> List.map fst fields
-    | v -> raise (type_error ~action:"form query columns from" "a list of records" v)
-  in
-  let row_values db = function
-    | `List records ->
-    (List.map (function
-          | `Record fields -> List.map (escaped_string_of_value db -<- snd) fields
-          | v -> raise (type_error ~action:"form query field from" "record" v)) records)
-    | v -> raise (type_error ~action:"form query row from" "list" v)
-  in
-  (row_columns v, row_values db v)
-
-

@@ -88,13 +88,8 @@ let execute_command  (query:string) (db: database) : Value.t =
               ("An error occurred executing the query " ^ query ^ ": " ^ msg))
     end
 
-(* With temporal data, this is unused (we call `make_insert_query` earlier, and then
- * use execute_command *)
-let execute_insert (table_name, field_names, vss) db =
-  execute_command (db#make_insert_query (table_name, field_names, vss)) db
-
-let execute_insert_returning (table_name, field_names, vss, returning) db =
-  let qs = db#make_insert_returning_query (table_name, field_names, vss, returning) in
+let execute_insert_returning returning query db =
+  let qs = db#make_insert_returning_query returning query in
   let rec run =
     function
       | [] -> assert false
@@ -118,7 +113,6 @@ let execute_insert_returning (table_name, field_names, vss, returning) db =
         run qs
   in
     run qs
-
 
 let is_null name = (name = "null")
 

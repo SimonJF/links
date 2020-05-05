@@ -7,6 +7,7 @@ type range = (int * int) option
 type query =
   | UnionAll  of query list * int
   | Select    of select_clause
+  | Insert    of insert_query
   | Update    of update_query
   | Delete    of delete_query
   | With      of Var.var * query * Var.var * query
@@ -186,6 +187,17 @@ let rec string_of_query quote show_constant ignore_fields q =
         (fun x -> "where (" ^ sbt x ^ ")") "" where in
     Printf.sprintf "update %s set %s %s" table fields where
   in
+  let string_of_insert table fields values =
+    let fields = String.concat ", " fields in
+    let values =
+      values
+      (* Concatenate and bracket the values in each row *)
+      |> List.map ((List.map sbt) ->- String.concat ", " ->- Printf.sprintf "(%s)")
+      (* Join all rows *)
+      |> String.concat ", " in
+    Printf.sprintf "insert into %s (%s) values %s"
+      table fields values
+  in
     match q with
       | UnionAll ([], _) -> "select 42 as \"@unit@\" where false"
       | UnionAll ([q], n) -> sq q ^ order_by_clause n
@@ -205,6 +217,8 @@ let rec string_of_query quote show_constant ignore_fields q =
           string_of_delete del_table del_where
       | Update { upd_table; upd_fields; upd_where } ->
           string_of_update upd_table upd_fields upd_where
+      | Insert { ins_table; ins_fields; ins_records } ->
+          string_of_insert ins_table ins_fields ins_records
       | With (_, q, z, q') ->
           match q' with
           | Select (fields, tables, condition, os) ->
@@ -255,6 +269,9 @@ and string_of_projection quote one_table (var, label) =
     quote label
   else
     string_of_table_var var ^ "." ^ (quote label)
+
+let insert ins_table ins_fields ins_records =
+  Insert { ins_table; ins_fields; ins_records }
 
 let string_of_query quote show_constant range q =
   let range =

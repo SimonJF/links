@@ -111,19 +111,18 @@ val compile_delete : TemporalMetadata.t -> Value.database -> Value.env ->
   ((Ir.var * string * Types.datatype StringMap.t) * Ir.computation option) ->
   Sql.query
 
-val insert :
-  Value.database ->
+val temporal_insert :
   string -> (* Table name *)
   string list -> (* Field names *)
-  string list list -> (* Serialised values *)
+  Value.t list list -> (* Values *)
   TemporalMetadata.t ->
-  string
+  Sql.query
 
-val insert_returning :
-  Value.database ->
+val insert :
   string -> (* Table name *)
   string list -> (* Field names *)
-  string list list -> (* Serialised values *)
-  TemporalMetadata.t ->
-  string -> (* field to return *)
-  string list
+  Value.t list list -> (* Values *)
+  Sql.query
+
+val row_columns_values :
+  Value.t -> string list * Value.t list list

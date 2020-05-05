@@ -152,7 +152,7 @@ let rec project_type ?(overstep_quantifiers=true) name t = match (concrete_type 
           name = TemporalMetadata.Transaction.to_field then
           `Primitive (Primitive.DateTime)
         else
-          error ("Bad temporal metadata: " ^ string_of_datatype t)
+          error ("Trying to project " ^ name ^ " from temporal metadata: " ^ string_of_datatype t)
   | (t, _) ->
       error ("Attempt to project non-record type "^string_of_datatype t)
 

@@ -783,8 +783,10 @@ struct
           match source, rows with
           | `Table _, `List [] ->  apply_cont cont env (`Record [])
           | `Table { database = (db, _); name = table_name; temporal_metadata; _ }, rows ->
-              let (field_names,vss) = Value.row_columns_values db rows in
-              let query = Query.insert db table_name field_names vss temporal_metadata in
+              let (field_names,vss) = Query.row_columns_values rows in
+              let query =
+                Query.temporal_insert table_name field_names vss temporal_metadata
+                |> db#string_of_query None in
               Debug.print ("RUNNING INSERT QUERY:\n" ^ query);
               let () = ignore (Database.execute_command query db) in
               apply_cont cont env (`Record [])
@@ -811,15 +813,17 @@ struct
               raise (internal_error "InsertReturning: undefined for empty list of rows")
           | `Table { database = (db, _); name = table_name;
                 temporal_metadata; _}, rows, returning ->
-              let (field_names,vss) = Value.row_columns_values db rows in
+              let (field_names,vss) = Query.row_columns_values rows in
               let returning = Value.unbox_string returning in
-              let queries =
-                Query.insert_returning db table_name field_names
-                  vss temporal_metadata returning in
+              let insert_query =
+                Query.temporal_insert table_name field_names
+                  vss temporal_metadata in
+              let queries = db#make_insert_returning_query returning insert_query
+              in
               Debug.print ("RUNNING INSERT ... RETURNING QUERY:\n" ^
                  String.concat "\n" queries);
               apply_cont cont env
-                (Database.execute_insert_returning (table_name, field_names, vss, returning) db)
+                (Database.execute_insert_returning returning insert_query db)
           | _ -> raise (internal_error "insert row into non-database")
         end
     | Update ((xb, source), where, body) ->
@@ -882,9 +886,10 @@ struct
                        * in the insert query *)
                       let field_names = Value.unbox_record x |> List.map fst in
                       let values =
-                        List.map (Value.unbox_record ->- List.map
-                          (snd ->- Query.expression_of_base_value ->- Query.show_base db)) results in
-                      let insert_q = db#make_insert_query (table, field_names, values) in
+                        List.map (Value.unbox_record ->- List.map snd) results in
+                      let insert_q =
+                        Query.insert table field_names values
+                        |> db#string_of_query None in
                       Debug.print ("(TT UPDATE(2)) INSERT: " ^ insert_q);
                       let () = ignore (Database.execute_command insert_q db) in
                       (* Finally, execute the update query, and that should be us. *)
