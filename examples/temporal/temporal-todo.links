@@ -58,7 +58,8 @@ typename Model = (items: [Item], newItem: String, timeBox: String);
 typename ID = Int;
 
 typename Message =
-  [| UpdateBox:String | Submit | ToggleDone:ID | Delete:ID | UpdateTime:String | SubmitTime | SubmitNow |];
+  [| UpdateBox:String | Submit | ToggleDone:ID | Delete:ID
+   | UpdateTime:String | SubmitTime | SubmitNow |];
 
 fun initialModel(items) {
   (=items, newItem="", timeBox=show(now()))
@@ -110,30 +111,37 @@ fun view(model) {
       };
 
     var deleteButton =
-      button(onClick(fun() { Delete(item.id) }), textNode("Delete"));
+      button(type("button") +@ class("btn btn-danger") +@ onClick(fun() { Delete(item.id) }), textNode("Delete"));
 
-    input(type("checkbox") +@
-        checkedAttr +@
-        onChange(fun(_) { ToggleDone(item.id) }), h0) +*
-    label(a0, text) +*
-    deleteButton +*
-    br(a0, h0)
+    tr(a0,
+      td(a0,
+        input(type("checkbox") +@
+            checkedAttr +@
+            onChange(fun(_) { ToggleDone(item.id) }), h0)) +*
+      td(a0, label(a0, text)) +*
+      td(a0, deleteButton))
   }
 
-  var renderedItems = MvuHTML.concatMap(displayItem, model.items);
+  var renderedItems =
+    table_(class("table"),
+      MvuHTML.concatMap(displayItem, model.items));
 
   var newItemBox =
-    div(a0,
-      input(type("text") +@ onInput(fun(str) { UpdateBox(str) }) +@ value(model.newItem), h0) +*
-      button(onClick(fun() { Submit }), textNode("New item")));
+    div(class("form-inline"),
+      div(class("form-group mx-sm-8 mb-2"),
+        input(class("form-control") +@ type("text") +@ onInput(fun(str) { UpdateBox(str) }) +@ value(model.newItem), h0)) +*
+      div(class("form-group mx-sm-3 mb-2"),
+        button(type("button") +@ class("btn btn-primary") +@ onClick(fun() { Submit }), textNode("New item"))));
 
   var timeTravelBox =
-    div(a0,
       h1(a0, textNode("Time-travel")) +*
-      input(type("text") +@ onInput(fun(str) { UpdateTime(str) }) +@ value(model.timeBox), h0) +*
-      button(onClick(fun() { SubmitTime }), textNode("Time-travel!")) +*
-      button(onClick(fun() { SubmitNow }), textNode("Present day!"))
-    );
+      div(class("form-inline"),
+        div(class("form-group mx-sm-8 mb-4"),
+          input(type("text") +@ class("form-control") +@ onInput(fun(str) { UpdateTime(str) }) +@ value(model.timeBox), h0)) +*
+        div(class("form-group mx-sm-3 mb-2"),
+          button(type("button") +@ class("btn btn-primary") +@ onClick(fun() { SubmitTime }), textNode("Time-travel!"))) +*
+        div(class("form-group mx-sm-3 mb-2"),
+          button(type("button") +@ class("btn btn-primary") +@ onClick(fun() { SubmitNow }), textNode("Present day!"))));
 
   h1(a0, textNode("To-do")) +*
   renderedItems +*
@@ -150,7 +158,14 @@ fun mainPage() {
   Mvu.runSimple("placeholder", model, view, updt);
   page
     <html>
-      <div id="placeholder"></div>
+      <head>
+        <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/css/bootstrap.min.css" integrity="sha384-Vkoo8x4CGsO3+Hhxv8T/Q5PaXtkKtu6ug5TOeNV6gBiFeWPGFN9MuhOf23Q9Ifjh" crossorigin="anonymous"/>
+      </head>
+      <body>
+        <div class="container">
+          <div id="placeholder"></div>
+        </div>
+      </body>
     </html>
 }
 
