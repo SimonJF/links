@@ -1,0 +1,130 @@
+# Imports
+import Mvu;
+import MvuHTML;
+import MvuAttrs;
+
+# Database Definitions
+typename Item = (id: Int, done: Bool, content: String);
+
+var db = database "timedb";
+
+var todoTbl =
+  table "todo"        # Table name
+    with Item         # Type of items in the table 
+    where id readonly # ID is read only -- allows "insert returning"
+    using transaction_time(recorded_from, recorded_to)
+  from db; # TT Table, specifying fields
+
+# Server functions
+fun newItem(content) server {
+  var id = tt_insert todoTbl values [(=content, done = false)] returning id;
+  (=id, =content, done = false)
+}
+
+fun updateItem(id, done, content) server {
+  update (x <-t- todoTbl)
+    where (x.id == id)
+    set (=done, =content)
+}
+
+fun deleteItem(id) server {
+  delete (x <-t- todoTbl)
+    where (x.id == id)
+}
+
+fun getAt(date) {
+  query {
+    for (x <-t- todoTbl)
+      where (ttFrom(x) <= date && date < ttTo(x))
+      [ttData(x)]
+  }
+}
+
+fun getCurrent() {
+  query {
+    for (x <-t- todoTbl)
+      where (ttTo(x) == forever())
+      [ttData(x)]
+  }
+}
+
+# MVU Definitions
+
+typename Model = (items:[Item], newItem:String);
+typename ID = Int;
+
+typename Message =
+  [| UpdateBox:String | Submit | ToggleDone:ID | Delete:ID |];
+
+fun initialModel(items) {
+  (=items, newItem="")
+}
+
+fun updt(msg, model) {
+  switch (msg) {
+    case UpdateBox(str) -> (model with newItem=str)
+    case ToggleDone(id) ->
+      var items =
+        map(fun(x) {
+          if (x.id == id) {
+            updateItem(x.id, not(x.done), x.content);
+            (x with done = not(x.done))
+          } else { x }
+        }, model.items);
+      (model with =items)
+    case Delete(id) ->
+      var items = filter(fun(x) { x.id <> id }, model.items);
+      deleteItem(id);
+      (model with =items)
+    case Submit ->
+      var item = newItem(model.newItem);
+      (model with newItem = "", items = model.items ++ [item])
+  }
+}
+
+fun view(model) {
+  open MvuAttrs;
+  open MvuHTML;
+
+  var a0 = MvuAttrs.empty;
+  var h0 = MvuHTML.empty;
+
+  fun displayItem(item) {
+    var checkedAttr = checked(item.done);
+    var text =
+      if (item.done) {
+        s(a0, textNode(item.content))
+      } else {
+        textNode(item.content)
+      };
+
+    input(id("chk") +@
+        type("checkbox") +@
+        checkedAttr +@
+        onChange(fun(_) { ToggleDone(item.id) }), h0) +*
+    label(for_("chk"), text) +*
+    br(a0, h0)
+  }
+
+  var renderedItems = MvuHTML.concatMap(displayItem, model.items);
+
+  var newItemBox =
+    div(a0,
+      input(type("text") +@ value(model.newItem), h0) +*
+      button(onClick(fun() { Submit }), textNode("New item")));
+
+  h1(a0, textNode("To-do")) +*
+  renderedItems +*
+  newItemBox
+}
+
+fun mainPage() {
+  var model = initialModel(getCurrent());
+  Mvu.runSimple("placeholder", model, view, updt);
+  page
+    <html>
+      <div id="placeholder"></div>
+    </html>
+}
+
+serveThis(mainPage)
