@@ -1379,13 +1379,11 @@ let let_clause : let_clause -> Sql.query =
       Sql.With (q,
              clause (outer_index gs_out) false outer,
              z,
-             clause (inner_index z gs_in) false inner)
+             [clause (inner_index z gs_in) false inner])
 
 let sql_of_let_query : let_query -> Sql.query =
   fun cs ->
     Sql.UnionAll (List.map (let_clause) cs, 0)
-
-(* SJF: It would be nice to use the SQL query DSL rather than string mangling here. *)
 
 let update : ((Ir.var * string) * Q.t option * Q.t) -> Sql.query =
   fun ((_, table), where, body) ->
@@ -1403,7 +1401,7 @@ let transaction_time_update :
     ((Ir.var * string) * Q.t option * Q.t) ->
     string ->
     string ->
-    (Sql.query * Sql.query) =
+    Sql.query =
   fun table_types ((tbl_var, table), where, body) tt_from tt_to ->
 
     let now_const = Constant.DateTime.now () in
@@ -1421,6 +1419,8 @@ let transaction_time_update :
       table_types
         |> StringMap.add tt_from (`Primitive Primitive.DateTime)
         |> StringMap.add tt_to (`Primitive Primitive.DateTime) in
+    let field_names =
+      StringMap.to_alist table_types |> List.map fst in
 
     (* The select query should either select the updated field if specified,
      * otherwise it should select a the field projection. *)
@@ -1456,6 +1456,14 @@ let transaction_time_update :
     let sel_query =
       Sql.Select (select_fields, [(table, tbl_var)], sel_where, []) in
 
+    (* Generate fresh variable for selection result *)
+    let sel_var = Var.fresh_raw_var () in
+
+    (* Next, we need to insert the results *)
+    let ins_query =
+      Sql.Insert { ins_table = table; ins_fields = field_names;
+        ins_records = `Query sel_var } in
+
     (* Next, we need an update query which closes off the previous rows. *)
     (* The update predicate is the records which satisfy the selection predicate,
      * but do *not* have the updated fields *)
@@ -1483,7 +1491,11 @@ let transaction_time_update :
         upd_where = Some update_predicate
       } in
 
-    (sel_query, upd_query)
+    (* Finally, construct the transaction. *)
+    Sql.Transaction ([
+      (* First variable of "with" is unused? *)
+      With (0, sel_query, sel_var, [ins_query; upd_query])
+    ])
 
 let delete : ((Ir.var * string) * Q.t option) -> Sql.query =
   fun ((_, table), where) ->
@@ -1530,7 +1542,7 @@ let compile_transaction_time_update :
   ((Ir.var * string * Types.datatype StringMap.t) * Ir.computation option * Ir.computation) ->
   string -> (* transaction time from field *)
   string -> (* transaction time to field *)
-  (Sql.query * Sql.query) =
+  Sql.query =
   fun env ((x, table, field_types), where, body) tt_from tt_to ->
     let env = Eval.bind (Eval.env_of_value_env QueryPolicy.Default env) (x, Q.Var (x, field_types)) in
     let where = opt_map (Eval.norm_comp env) where in
@@ -1587,7 +1599,7 @@ let insert_internal table_name field_names rows md_opt =
   Sql.(Insert {
       ins_table = table_name;
       ins_fields = field_names;
-      ins_records = rows })
+      ins_records = `Values rows })
 
 let temporal_insert table_name field_names rows md =
   insert_internal table_name field_names rows (Some md)

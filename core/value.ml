@@ -85,26 +85,13 @@ class virtual database = object(self)
      * variants of the server, so for now I'm going to say that dates and times should
      * be stored in the DB as UTC.
      *)
-    | DateTime (Timestamp.Forever) -> "'infinity'"
+    | DateTime (Timestamp.Forever) -> "'infinity' :: timestamp with time zone"
     | DateTime (Timestamp.Timestamp ts) ->
         let open CalendarLib in
         CalendarShow.convert ts (Time_Zone.current ()) (Time_Zone.UTC)
         |> CalendarShow.show
         |> Printf.sprintf "'%s UTC' :: timestamp with time zone"
     | c -> to_string c
-    (*
-  method make_insert_query : (string * string list * string list list) -> string =
-    fun (table_name, field_names, vss) ->
-      let field_names = String.concat ", " field_names in
-      let values =
-        vss
-        (* Concatenate and bracket the values in each row *)
-        |> List.map (String.concat ", " ->- Printf.sprintf "(%s)")
-        (* Join all rows *)
-        |> String.concat ", " in
-      Printf.sprintf "insert into %s (%s) values %s"
-        table_name field_names values
-        *)
 
   method make_insert_returning_query : string -> Sql.query -> string list =
     fun _ ->

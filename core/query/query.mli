@@ -98,7 +98,7 @@ val compile_transaction_time_update:
     ((Ir.var * string * Types.datatype StringMap.t) * Ir.computation option * Ir.computation) ->
     string -> (* transaction time from field *)
     string -> (* transaction time to field *)
-    (Sql.query * Sql.query)
+    Sql.query
 
 val compile_update :
   Value.database ->

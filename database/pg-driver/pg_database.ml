@@ -160,11 +160,11 @@ class pg_database host port dbname user password = object(self)
 
     let open Sql in
     function
-      | Insert { ins_table; ins_fields; ins_records } ->
+      | Insert { ins_table; ins_fields; ins_records = `Values records } ->
           let vss =
             List.map
               (List.map (Sql.string_of_base self#quote_field self#show_constant true))
-              ins_records in
+              records in
           string_of_insert ins_table ins_fields vss
       | q -> super#string_of_query range q
 

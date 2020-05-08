@@ -6,16 +6,18 @@ type range = (int * int) option
 
 type query =
   | UnionAll  of query list * int
+  | Transaction of query list
   | Select    of select_clause
   | Insert    of insert_query
   | Update    of update_query
   | Delete    of delete_query
-  | With      of Var.var * query * Var.var * query
+  | With      of Var.var * query * Var.var * query list
 and select_clause = (base * string) list * (string * Var.var) list * base * base list
+and insert_records = [ `Values of (base list list) | `Query of Var.var ]
 and insert_query = {
   ins_table: string;
   ins_fields: string list;
-  ins_records: base list list
+  ins_records: insert_records
 }
 and update_query  = {
   upd_table: string;
@@ -187,22 +189,34 @@ let rec string_of_query quote show_constant ignore_fields q =
         (fun x -> "where (" ^ sbt x ^ ")") "" where in
     Printf.sprintf "update %s set %s %s" table fields where
   in
-  let string_of_insert table fields values =
+  let string_of_insert table fields body =
     let fields = String.concat ", " fields in
-    let values =
-      values
-      (* Concatenate and bracket the values in each row *)
-      |> List.map ((List.map sbt) ->- String.concat ", " ->- Printf.sprintf "(%s)")
-      (* Join all rows *)
-      |> String.concat ", " in
-    Printf.sprintf "insert into %s (%s) values %s"
-      table fields values
+
+    let insert_values values =
+      let values =
+        values
+        (* Concatenate and bracket the values in each row *)
+        |> List.map ((List.map sbt) ->- String.concat ", " ->- Printf.sprintf "(%s)")
+        (* Join all rows *)
+        |> String.concat ", " in
+      Printf.sprintf "insert into %s (%s) values %s"
+        table fields values in
+
+    match body with
+      | `Values vs -> insert_values vs
+      | `Query var ->
+          Printf.sprintf
+            "insert into %s (%s) (select * from %s)"
+            table fields (string_of_table_var var)
   in
     match q with
       | UnionAll ([], _) -> "select 42 as \"@unit@\" where false"
       | UnionAll ([q], n) -> sq q ^ order_by_clause n
       | UnionAll (qs, n) ->
         mapstrcat " union all " (fun q -> "(" ^ sq q ^ ")") qs ^ order_by_clause n
+      | Transaction qs ->
+          let qs = List.map sq qs in
+          (String.concat ";\n" (["BEGIN"] @ qs @ ["COMMIT"])) ^ ";"
       | Select (fields, [], Constant (Constant.Bool true), _os) ->
           let fields = string_of_fields fields in
             "select " ^ fields
@@ -219,14 +233,19 @@ let rec string_of_query quote show_constant ignore_fields q =
           string_of_update upd_table upd_fields upd_where
       | Insert { ins_table; ins_fields; ins_records } ->
           string_of_insert ins_table ins_fields ins_records
-      | With (_, q, z, q') ->
-          match q' with
-          | Select (fields, tables, condition, os) ->
+      | With (_, q, z, qs) ->
+          match qs with
+          | [Select (fields, tables, condition, os)] ->
               (* Inline the query *)
               let tables = List.map (fun (t, x) -> quote t ^ " as " ^ (string_of_table_var x)) tables in
               let q = "(" ^ sq q ^ ") as " ^ string_of_table_var z in
               string_of_select fields (q::tables) condition os
-          | _ -> assert false
+          | _ ->
+              (* Otherwise, compile to a standard "with" query *)
+              let outer = sq q in
+              let body = mapstrcat ";\n" (sq) qs in
+              Printf.sprintf "WITH %s AS (%s) %s"
+                (string_of_table_var z) outer body
 
 and string_of_base quote show_constant one_table b =
   let sb = string_of_base quote show_constant one_table in
@@ -271,7 +290,7 @@ and string_of_projection quote one_table (var, label) =
     string_of_table_var var ^ "." ^ (quote label)
 
 let insert ins_table ins_fields ins_records =
-  Insert { ins_table; ins_fields; ins_records }
+  Insert { ins_table; ins_fields; ins_records = `Values ins_records}
 
 let string_of_query quote show_constant range q =
   let range =

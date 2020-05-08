@@ -858,45 +858,13 @@ struct
                * primitives and have the insert and update statements execute
                * transactionally -- but we'd do well to have the whole thing
                * as SQL rather than having the extra marshalling step. *)
-              let (select_q, update_q) =
+              let query =
                 Query.compile_transaction_time_update env
                   ((Var.var_of_binder xb, table, field_types), where, body)
-                  tt_from_field tt_to_field in
-              let (select_q, update_q) =
-                db#string_of_query None select_q,
-                db#string_of_query None update_q in
-
-              (* Evaluate the selection to get the rows to insert *)
-              let dt = `Primitive Primitive.DateTime in
-              let field_types =
-                StringMap.bindings field_types @ [(tt_from_field, dt); (tt_to_field, dt)]  in
-
-              Debug.print ("(TT UPDATE(1)) SELECT: " ^ select_q);
-              let results = Database.execute_select field_types select_q db in
-              (* We need to first unbox the list. Then, we need to map over each record in order
-               * to get only the values, and convert them to a string. *)
-              begin
-                match Value.unbox_list results with
-                  | [] ->
-                      (* Nothing to update. *)
-                      Debug.print "Empty result set";
-                      apply_cont cont env (`Record [])
-                  | x :: _ as results ->
-                      (* We need the ordering of the field names to be consistent with the results
-                       * in the insert query *)
-                      let field_names = Value.unbox_record x |> List.map fst in
-                      let values =
-                        List.map (Value.unbox_record ->- List.map snd) results in
-                      let insert_q =
-                        Query.insert table field_names values
-                        |> db#string_of_query None in
-                      Debug.print ("(TT UPDATE(2)) INSERT: " ^ insert_q);
-                      let () = ignore (Database.execute_command insert_q db) in
-                      (* Finally, execute the update query, and that should be us. *)
-                      Debug.print ("(TT UPDATE(3)) UPDATE: " ^ update_q);
-                      let () = ignore (Database.execute_command update_q db) in
-                      apply_cont cont env (`Record [])
-              end
+                  tt_from_field tt_to_field
+                |> db#string_of_query None in
+              let () = ignore (Database.execute_command query db) in
+              apply_cont cont env (`Record [])
           | _ -> raise (internal_error "Valid / Bitemporal data not yet supported")
       end
     | Delete ((xb, source), where) ->
