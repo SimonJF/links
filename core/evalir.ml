@@ -841,7 +841,7 @@ struct
       begin
         let open TemporalMetadata in
         match md with
-          | Current ->
+          | Current _ ->
               let update_query =
                 Query.compile_update
                   db env

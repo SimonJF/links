@@ -77,7 +77,7 @@ let accessor_result_ty tbl_ty md =
   let open TemporalMetadata in
   let elem_ty =
     match md with
-      | Current -> read_row
+      | Current _ -> read_row
       | TransactionTime _ -> Types.transaction_absty read_row
       | _ -> raise (internal_error "Valid / Bitemporal metadata not yet supported") in
   Types.make_list_type elem_ty
@@ -142,7 +142,7 @@ object (o : 'self_type)
             begin
               let open TemporalMetadata in
               match temporal_metadata with
-                | Current -> current_accessor_fn tbl_phr read_row
+                | Current _ -> current_accessor_fn tbl_phr read_row
                 | TransactionTime { tt_from_field; tt_to_field } ->
                     transaction_accessor_fn tbl_phr read_row tt_from_field tt_to_field
                 | _ ->

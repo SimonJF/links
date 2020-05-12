@@ -35,6 +35,7 @@ type 't meta_presence_var_basis = 't meta_type_var_non_rec_basis
 type meta_md_var_basis = [
   | `Undefined
   | `Current
+  | `CurrentNotDemoted
   | `Transaction
   | `Valid
   | `Bitemporal

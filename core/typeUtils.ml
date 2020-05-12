@@ -145,7 +145,7 @@ let metadata_operation_type op t =
     `Table (row,
       `Record (Types.make_empty_closed_row ()),
       `Record (Types.make_empty_closed_row ()),
-      Types.make_table_metadata_var (TemporalMetadata.current)) in
+      Types.make_table_metadata_var (TemporalMetadata.current true)) in
   match op with
     | Accessor (tbl, field) -> accessor_type tbl field
     | Demotion _ -> demotion_type

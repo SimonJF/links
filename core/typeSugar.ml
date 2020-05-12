@@ -2843,7 +2843,7 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * Usage.t =
                 data_ty,
                 `Record (Types.make_empty_closed_row ()),
                 `Record (Types.make_empty_closed_row ()),
-                Types.make_table_metadata_var (TemporalMetadata.current))
+                Types.make_table_metadata_var (TemporalMetadata.current true))
             in
 
             let result_ty =
@@ -2997,7 +2997,7 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * Usage.t =
             let basis =
                 let open CommonTypes.TableMode in
                 match mode with
-                  | Current -> `Current
+                  | Current -> `CurrentNotDemoted
                   | Transaction -> `Transaction
                   | Valid -> `Valid
                   | Bitemporal -> `Bitemporal in
@@ -3040,7 +3040,7 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * Usage.t =
             let basis =
                 let open CommonTypes.TableMode in
                 match mode with
-                  | Current -> `Current
+                  | Current -> `CurrentNotDemoted
                   | Transaction -> `Transaction
                   | Valid -> `Valid
                   | Bitemporal -> `Bitemporal in
@@ -3123,7 +3123,7 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * Usage.t =
             let basis =
                 let open CommonTypes.TableMode in
                 match mode with
-                  | Current -> `Current
+                  | Current -> `CurrentNotDemoted
                   | Transaction -> `Transaction
                   | Valid -> `Valid
                   | Bitemporal -> `Bitemporal in

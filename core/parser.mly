@@ -87,7 +87,7 @@ let query_policy_of_string p =
 
 let parse_temporal_metadata label args_opt p : TemporalMetadata.t =
   match label, args_opt with
-    | `Current, None -> TemporalMetadata.current
+    | `Current, None -> TemporalMetadata.current false
     | `Current, _ ->
        raise (ConcreteSyntaxError (pos p,
         "Current time metadata does not take field arguments"))
@@ -1006,7 +1006,7 @@ temporal_metadata_type:
 
 table_handle:
 | TABLEHANDLE LPAREN datatype COMMA datatype
-    COMMA datatype RPAREN                                      { Datatype.Table ($3, $5, $7, TemporalMetadata.current) }
+    COMMA datatype RPAREN                                      { Datatype.Table ($3, $5, $7, TemporalMetadata.current false) }
 | TABLEHANDLE
     LPAREN datatype COMMA datatype COMMA datatype COMMA
     temporal_metadata_type RPAREN                              { Datatype.Table ($3, $5, $7, $9) }

@@ -298,14 +298,14 @@ end
 
 module TemporalMetadata = struct
   type t =
-    | Current
+    | Current of bool (* true if demoted *)
     | TransactionTime of { tt_from_field: string; tt_to_field: string }
     | ValidTime       of { vt_from_field: string; vt_to_field: string }
     | Bitemporal      of
       { tt_from_field: string; tt_to_field: string;
         vt_from_field: string; vt_to_field: string }
 
-  let current = Current
+  let current demoted = Current demoted
 
   let transaction_time tt_from_field tt_to_field =
     TransactionTime { tt_from_field; tt_to_field }
@@ -319,7 +319,11 @@ module TemporalMetadata = struct
   let show =
     let open Printf in
     function
-    | Current -> "Current"
+    | Current demoted ->
+        if demoted then
+          "Current(demoted)"
+        else
+          "Current"
     | TransactionTime { tt_from_field; tt_to_field } ->
         sprintf "Transaction(%s, %s)" tt_from_field tt_to_field
     | ValidTime { vt_from_field; vt_to_field } ->
@@ -331,7 +335,7 @@ module TemporalMetadata = struct
   let show_term =
     let open Printf in
     function
-    | Current -> "current"
+    | Current _ -> "current"
     | TransactionTime { tt_from_field; tt_to_field } ->
         sprintf "transaction_time(%s, %s)" tt_from_field tt_to_field
     | ValidTime { vt_from_field; vt_to_field } ->

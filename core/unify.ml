@@ -245,7 +245,8 @@ let unify_metadata p1 p2 =
         begin
           let open TemporalMetadata in
           match x, md with
-            | `Current, Current
+            | `Current, Current _
+            | `CurrentNotDemoted, Current false
             | `Valid, ValidTime _
             | `Transaction, TransactionTime _
             | `Bitemporal, Bitemporal _ -> Unionfind.union p1 p2
@@ -255,7 +256,8 @@ let unify_metadata p1 p2 =
         begin
           let open TemporalMetadata in
           match y, md with
-            | `Current, Current
+            | `Current, Current _
+            | `CurrentNotDemoted, Current false
             | `Valid, ValidTime _
             | `Transaction, TransactionTime _
             | `Bitemporal, Bitemporal _ -> Unionfind.union p2 p1

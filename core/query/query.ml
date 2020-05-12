@@ -230,7 +230,7 @@ struct
     let metadata_fields =
       let open TemporalMetadata in
       match temporal_metadata with
-        | Current -> []
+        | Current _ -> []
         | ValidTime { vt_from_field; vt_to_field } ->
             [dt vt_from_field; dt vt_to_field]
         | TransactionTime { tt_from_field; tt_to_field } ->
@@ -429,7 +429,7 @@ struct
                 (* TODO: We will also need to handle "demotion" ops such
                  * as time-slicing here *)
                 match table.temporal_metadata with
-                  | Current ->
+                  | Current _ ->
                       let field_types = table_field_types table in
                       (* we need to generate a fresh variable in order to
                          correctly handle self joins *)
@@ -1565,7 +1565,7 @@ let compile_delete :
     let where = opt_map (Eval.norm_comp env) where in
     let q =
       match md with
-        | Current -> delete ((x, table), where)
+        | Current _ -> delete ((x, table), where)
         | TransactionTime { tt_to_field; _ } ->
             transaction_time_delete
               ((x, table), where) tt_to_field
@@ -1576,7 +1576,7 @@ let compile_delete :
 let rewrite_insert field_names rows md =
   let open TemporalMetadata in
   match md with
-    | Current -> (field_names, rows)
+    | Current _ -> (field_names, rows)
     | TransactionTime { tt_from_field; tt_to_field } ->
         (* TT insert: Add period-stamping fields.
          * Values: (from = now, to = forever) *)

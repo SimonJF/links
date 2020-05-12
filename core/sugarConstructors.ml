@@ -286,7 +286,7 @@ module SugarConstructors (Position : Pos)
 
   let table_lit ?(ppos=dp) name record_type field_constraints keys temporal_metadata database =
     let temporal_metadata =
-      OptionUtils.from_option (TemporalMetadata.current) temporal_metadata in
+      OptionUtils.from_option (TemporalMetadata.current false) temporal_metadata in
     let keys = OptionUtils.from_option (list ~ppos []) keys in
     with_pos ppos (TableLit { name; record_type; field_constraints; keys;
       temporal_metadata; database })
