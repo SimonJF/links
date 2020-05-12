@@ -115,3 +115,14 @@ tests/temporal/tt-current-demotion-bad-deletion.links
 filemode : true
 exit : 1
 stderr : @.*Type error:.*
+
+Transaction time -> given time demotion (good)
+tests/temporal/tt-at-demotion.links
+filemode : true
+exit : 0
+
+Transaction time -> given time demotion (inserts disallowed)
+tests/temporal/tt-at-demotion-bad-insert.links
+filemode : true
+exit : 1
+stderr : @.*Type error:.*

@@ -7,5 +7,5 @@ var demoted = ttCurrent(timetbl);
 
 update (x <-- demoted)
   where (x.foo == "foo")
-  [(x with foo = "fooo")]
+  set (foo = "fooo")
 

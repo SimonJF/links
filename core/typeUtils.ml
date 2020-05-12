@@ -112,6 +112,9 @@ let rec choice_at name t = match concrete_type t with
 
 (* Given a temporal metadata type, returns the result type *)
 (* Works on both sugared and desugared forms. *)
+(* TODO: Best to rename, since we're now allowing temporal operations to also
+ * work on tables as well as metadata. Or maybe we should stop conflating them,
+ * and give them their own construct? *)
 let rec metadata_payload_type t =
   match concrete_type t with
     | `ForAll (_, t) -> metadata_payload_type t
@@ -123,6 +126,7 @@ let rec metadata_payload_type t =
             | Some (`Present typ) -> typ
             | _ -> error ("Attempt to deconstruct non-metadata type "^string_of_datatype t)
         end
+    | `Table (row, _, _, _) -> row
     | t ->
         error ("Attempt to deconstruct non-metadata type "^string_of_datatype t)
 

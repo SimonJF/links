@@ -2817,45 +2817,53 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * Usage.t =
         | TableLit _ -> assert false
         | TemporalOp (op, target, arguments) ->
             let open TemporalOperation in
-            let data_row = Types.make_empty_open_row (lin_any, res_base) in
-            let data_ty =  `Record data_row in
+            let data_ty = `Record (Types.make_empty_open_row (lin_any, res_base)) in
             let target = tc target in
-            let check_transaction_time () =
-              let expected = Types.transaction_absty data_ty in
-              unify ~handle:(Gripers.transaction_accessor op) (pos_and_typ target, no_pos expected) in
 
             let arguments = List.map tc arguments in
 
             let accessor_ty tbl field =
               match tbl with
                 | Transaction ->
-                    check_transaction_time ();
+                    let expected = Types.transaction_absty data_ty in
+                    let () = unify ~handle:(Gripers.transaction_accessor op)
+                      (pos_and_typ target, no_pos expected) in
                     begin
                       match field with
                         | Data -> data_ty
                         | From | To -> `Primitive (Primitive.DateTime)
-                    end in
+                    end
+            in
 
             (* Demotion operations construct a view of the table as a current-time
              * table, but close off the "write" and "needed" rows such that it's
              * not possible to update the views. *)
             let table_view_ty =
               `Table (
-                `Record data_row,
+                data_ty,
                 `Record (Types.make_empty_closed_row ()),
                 `Record (Types.make_empty_closed_row ()),
-                Types.make_table_metadata_var (TemporalMetadata.current)
-                ) in
+                Types.make_table_metadata_var (TemporalMetadata.current))
+            in
 
             let result_ty =
+              let check_table_ty () =
+                let expected =
+                  `Table (data_ty,
+                    `Record (Types.make_empty_open_row (lin_any, res_base)),
+                    `Record (Types.make_empty_open_row (lin_any, res_base)),
+                    Types.make_table_metadata_unifier (`Transaction))
+                in
+                unify ~handle:(Gripers.transaction_accessor op)
+                      (pos_and_typ target, no_pos expected)
+              in
               match op with
                 | Accessor (tbl, field) ->
                     accessor_ty tbl field
                 | Demotion AtCurrent  ->
-                    check_transaction_time ();
-                    table_view_ty
+                    check_table_ty (); table_view_ty
                 | Demotion AtTime ->
-                    check_transaction_time ();
+                    let () = check_table_ty () in
                     (* Verify that the argument is a DateTime. *)
                     (* List.hd is safe since the parser only constructs
                      * singleton lists for atTime. If it's snuck in, it's
@@ -2865,7 +2873,6 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * Usage.t =
                       (pos_and_typ arg, no_pos (`Primitive Primitive.DateTime));
                     table_view_ty
             in
-
             let replacement_usages =
               List.map usages arguments
                 |> Usage.combine_many in
