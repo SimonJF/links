@@ -360,7 +360,7 @@ and phrasenode =
   | DBInsert         of TableMode.t * phrase * Name.t list * phrase * phrase option
   | DBUpdate         of TableMode.t * Pattern.with_pos * phrase * phrase option *
                           (Name.t * phrase) list
-  | TemporalOp       of TemporalOperation.t * phrase * phrase option
+  | TemporalOp       of TemporalOperation.t * phrase (* Target *) * phrase list  (* Arguments *)
   | LensLit          of phrase * Lens.Type.t option
   | LensSerialLit    of phrase * string list * Lens.Type.t option
   (* the lens keys lit is a literal that takes an expression and is converted
@@ -546,7 +546,7 @@ struct
     | TupleLit ps -> union_map phrase ps
 
     | TemporalOp (_, p, p_opt) ->
-        union_all [phrase p; option_map phrase p_opt]
+        union_all [phrase p; union_map phrase p_opt]
     | LensLit (l, _) -> phrase l
     | LensSerialLit (l, _, _) -> phrase l
     | LensFunDepsLit (l, _, _) -> phrase l

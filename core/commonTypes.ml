@@ -352,7 +352,14 @@ end
 
 module TemporalOperation = struct
   (* TODO: Expand when we implement valid time / bitemporal tables *)
-  type table_type = Transaction
+
+  type demotion =
+    | AtCurrent
+    | AtTime
+    [@@deriving show]
+
+  type table_type =
+    | Transaction
     [@@deriving show]
 
   type field = Data | From | To
@@ -360,6 +367,7 @@ module TemporalOperation = struct
 
   type t =
     | Accessor of table_type * field
+    | Demotion of demotion
     [@@deriving show]
 
   let name = function
@@ -369,6 +377,12 @@ module TemporalOperation = struct
             | From -> "ttFrom"
             | To -> "ttTo"
             | Data -> "ttData"
+        end
+    | Demotion d ->
+        begin
+          match d with
+            | AtCurrent -> "ttCurrent"
+            | AtTime -> "ttAt"
         end
 
   let field = function

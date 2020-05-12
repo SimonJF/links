@@ -136,8 +136,15 @@ let metadata_operation_type op t =
               | Data -> metadata_payload_type t
               | From | To -> `Primitive (Primitive.DateTime)
           end in
+  let demotion_type =
+    let row = metadata_payload_type t in
+    `Table (row,
+      `Record (Types.make_empty_closed_row ()),
+      `Record (Types.make_empty_closed_row ()),
+      Types.make_table_metadata_var (TemporalMetadata.current)) in
   match op with
     | Accessor (tbl, field) -> accessor_type tbl field
+    | Demotion _ -> demotion_type
 
 let rec project_type ?(overstep_quantifiers=true) name t = match (concrete_type t, overstep_quantifiers) with
   | (`ForAll (_, t), true) -> project_type name t

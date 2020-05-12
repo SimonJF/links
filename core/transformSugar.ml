@@ -625,11 +625,11 @@ class transform (env : Types.typing_environment) =
               set
           in
             (o, DBUpdate (mode, p, from, where, set), Types.unit_type)
-      | TemporalOp (op, target, replacement) ->
+      | TemporalOp (op, target, args) ->
           let (o, target, target_ty) = o#phrase target in
-          let (o, replacement, _) = option o (fun o -> o#phrase) replacement in
+          let (o, args, _) = list o (fun o -> o#phrase) args in
           let ty = TypeUtils.metadata_operation_type op target_ty in
-          (o, TemporalOp (op, target, replacement), ty)
+          (o, TemporalOp (op, target, args), ty)
       | Xml (tag, attrs, attrexp, children) ->
           let (o, attrs) =
             listu o

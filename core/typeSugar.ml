@@ -416,6 +416,7 @@ sig
     unit
 
   val transaction_accessor: TemporalOperation.t -> griper
+  val transaction_demotion_argument : TemporalOperation.t -> griper
 
 end
   = struct
@@ -1592,6 +1593,17 @@ end
       let ppr_actual   = show_type actual   in
       let ppr_expected = show_type expected in
       die pos ("The argument of " ^ (TemporalOperation.name op) ^ " " ^
+               "was expected to have type "       ^ nli () ^
+                code ppr_expected                 ^ nl  () ^
+               "but has type"                     ^ nli () ^
+                code ppr_actual                   ^ nl  () ^
+               "instead.")
+
+    let transaction_demotion_argument op ~pos ~t1:(_, actual) ~t2:(_, expected) ~error:_ =
+      build_tyvar_names [actual; expected];
+      let ppr_actual   = show_type actual   in
+      let ppr_expected = show_type expected in
+      die pos ("The argument of demotion operator" ^ (TemporalOperation.name op) ^ " " ^
                "was expected to have type "       ^ nli () ^
                 code ppr_expected                 ^ nl  () ^
                "but has type"                     ^ nli () ^
@@ -2803,14 +2815,16 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * Usage.t =
               table_ty,
               Usage.combine (usages tname) (usages db)
         | TableLit _ -> assert false
-        | TemporalOp (op, target, replacement) ->
+        | TemporalOp (op, target, arguments) ->
             let open TemporalOperation in
-            let data_ty =  `Record (Types.make_empty_open_row (lin_any, res_base)) in
+            let data_row = Types.make_empty_open_row (lin_any, res_base) in
+            let data_ty =  `Record data_row in
             let target = tc target in
-            let replacement = opt_map tc replacement in
             let check_transaction_time () =
               let expected = Types.transaction_absty data_ty in
               unify ~handle:(Gripers.transaction_accessor op) (pos_and_typ target, no_pos expected) in
+
+            let arguments = List.map tc arguments in
 
             let accessor_ty tbl field =
               match tbl with
@@ -2822,12 +2836,40 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * Usage.t =
                         | From | To -> `Primitive (Primitive.DateTime)
                     end in
 
+            (* Demotion operations construct a view of the table as a current-time
+             * table, but close off the "write" and "needed" rows such that it's
+             * not possible to update the views. *)
+            let table_view_ty =
+              `Table (
+                `Record data_row,
+                `Record (Types.make_empty_closed_row ()),
+                `Record (Types.make_empty_closed_row ()),
+                Types.make_table_metadata_var (TemporalMetadata.current)
+                ) in
+
             let result_ty =
               match op with
-                | Accessor (tbl, field) -> accessor_ty tbl field in
+                | Accessor (tbl, field) ->
+                    accessor_ty tbl field
+                | Demotion AtCurrent  ->
+                    check_transaction_time ();
+                    table_view_ty
+                | Demotion AtTime ->
+                    check_transaction_time ();
+                    (* Verify that the argument is a DateTime. *)
+                    (* List.hd is safe since the parser only constructs
+                     * singleton lists for atTime. If it's snuck in, it's
+                     * an internal error. *)
+                    let arg = List.hd arguments in
+                    unify ~handle:(Gripers.transaction_demotion_argument op)
+                      (pos_and_typ arg, no_pos (`Primitive Primitive.DateTime));
+                    table_view_ty
+            in
 
-            let replacement_usages = OptionUtils.opt_app (usages) (Usage.empty) replacement in
-            TemporalOp (op, erase target, opt_map erase replacement), result_ty,
+            let replacement_usages =
+              List.map usages arguments
+                |> Usage.combine_many in
+            TemporalOp (op, erase target, List.map erase arguments), result_ty,
             (Usage.combine (usages target) replacement_usages)
         | LensLit (table, _) ->
            relational_lenses_guard pos;

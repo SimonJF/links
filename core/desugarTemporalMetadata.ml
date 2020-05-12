@@ -44,6 +44,8 @@ object (o: 'self_type)
           let (o, phr, _) = o#phrase phr in
           let field_name = TemporalOperation.field (tbl, field) in
           (o, Projection (phr, field_name), ty)
+      (* Note: We explicitly don't desugar demotion functions; these are useful to
+       * keep around at runtime. *)
       | pn -> super#phrasenode pn
 end
 
