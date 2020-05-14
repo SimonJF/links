@@ -849,7 +849,6 @@ module Desugar = struct
     in
     (* We deliberately don't concretise the returned read_type in the hope of improving error
        messages during type inference. *)
-    (* TODO: Once we've extended the term, `current` needs to change here *)
     (read_type, `Record write_row, `Record needed_row)
 end
 

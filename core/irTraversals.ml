@@ -298,6 +298,17 @@ struct
         | Database v ->
             let v, _, o = o#value v in
               Database v, `Primitive Primitive.DB, o
+        | DemoteTemporal { table; from_time; to_time } ->
+            let table, t, o = o#value table in
+            let from_time, _, o = o#value from_time in
+            let to_time, _, o = o#value to_time in
+            let ty =
+              Types.make_table_type
+                ~metadata:(TemporalMetadata.current true)
+                (TypeUtils.table_read_type t)
+                (`Record (Types.make_empty_closed_row ()))
+                (`Record (Types.make_empty_closed_row ())) in
+            DemoteTemporal { table; from_time; to_time }, ty, o
         | Table { database = db; table = table_name; keys; table_type = tt } ->
             let db, _, o = o#value db in
             let keys, _, o = o#value keys in

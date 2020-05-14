@@ -223,18 +223,20 @@ struct
           end
         | Constant c -> Constant c
 
-  let table_field_types Value.{ row = (fields, _, _); temporal_metadata; _ } =
+  let table_field_types Value.{ row = (fields, _, _); state; _ } =
     (* As well as the declared fields in the table, we must also include
      * the period-stamping fields included in the temporal metadata. *)
     let dt x = (x, `Primitive Primitive.DateTime) in
     let metadata_fields =
-      let open TemporalMetadata in
-      match temporal_metadata with
-        | Current _ -> []
-        | ValidTime { vt_from_field; vt_to_field } ->
-            [dt vt_from_field; dt vt_to_field]
-        | TransactionTime { tt_from_field; tt_to_field } ->
-            [dt tt_from_field; dt tt_to_field]
+      let open Value.TemporalState in
+      match state with
+        | Demoted { from_field; to_field; _ } ->
+            [dt from_field; dt to_field]
+        | Current -> []
+        | ValidTime { from_field; to_field } ->
+            [dt from_field; dt to_field]
+        | TransactionTime { from_field; to_field } ->
+            [dt from_field; dt to_field]
         | Bitemporal { tt_from_field; tt_to_field; vt_from_field; vt_to_field } ->
             List.map dt [tt_from_field; tt_to_field; vt_from_field; vt_to_field ] in
 
@@ -425,23 +427,35 @@ struct
           | Table table ->
               begin
                 let open Value in
-                let open TemporalMetadata in
-                (* TODO: We will also need to handle "demotion" ops such
-                 * as time-slicing here *)
-                match table.temporal_metadata with
-                  | Current _ ->
+                let open TemporalState in
+                match table.state with
+                  | Current ->
                       let field_types = table_field_types table in
                       (* we need to generate a fresh variable in order to
                          correctly handle self joins *)
                       let x = Var.fresh_raw_var () in
                       reduce_for_body ([(x, source)], [], body (Var (x, field_types)))
-                  | TransactionTime { tt_from_field; tt_to_field } ->
+                  | Demoted { from_field; to_field; lower_bound; upper_bound } ->
+                      let field_types = table_field_types table in
+                      let x = Var.fresh_raw_var () in
+                      let var = Var (x, field_types) in
+                      let c =
+                        Apply (Primitive ("=="),
+                          [Apply (Primitive (">="),
+                            [Project (var, from_field);
+                             Constant (Constant.DateTime lower_bound)]);
+                           Apply (Primitive ("<"),
+                            [Project (var, to_field);
+                             Constant (Constant.DateTime upper_bound)])]) in
+                      reduce_for_body ([(x, source)], [],
+                        reduce_where_then (c, body var))
+                  | TransactionTime { from_field ; to_field } ->
                       (* TT Tables: Ensure we add transaction-time metadata *)
                       (* First, generate a fresh variable for the table *)
                       let field_types = table_field_types table in
                       let base_field_types =
                         StringMap.filter
-                          (fun x _ -> x <> tt_from_field && x <> tt_to_field)
+                          (fun x _ -> x <> from_field && x <> to_field)
                           field_types in
 
                       let table_raw_var = Var.fresh_raw_var () in
@@ -450,12 +464,14 @@ struct
                       (* Second, generate a fresh variable for the metadata *)
                       let metadata_record =
                         StringMap.from_alist [
-                          (Transaction.data_field, eta_expand_var (table_raw_var, base_field_types));
-                          (Transaction.from_field, Project (table_var, tt_from_field) );
-                          (Transaction.to_field, Project (table_var, tt_to_field))
+                          (TemporalMetadata.Transaction.data_field,
+                            eta_expand_var (table_raw_var, base_field_types));
+                          (TemporalMetadata.Transaction.from_field,
+                            Project (table_var, from_field) );
+                          (TemporalMetadata.Transaction.to_field,
+                            Project (table_var, to_field))
                         ] in
                       let generators = [ (table_raw_var, source) ] in
-
                       reduce_for_body (generators, [], body (Record metadata_record))
                   | ValidTime _ | Bitemporal _ ->
                       raise (internal_error
@@ -959,7 +975,7 @@ struct
         in
         (* TODO: We should refine the types: after sugartoir, we have concrete information
          * about this, so should propagate it *)
-        let temporal_metadata =
+        let md =
           begin
             match Unionfind.find md with
               | `Metadata md -> md
@@ -971,7 +987,8 @@ struct
               ~name:(Q.unbox_string name)
               ~keys:unboxed_keys
               ~row
-              ~temporal_metadata)
+              ~state:(Value.TemporalState.from_metadata md)
+              )
          | _ -> query_error "Error evaluating table handle"
        end
     | Special _s ->
@@ -1551,58 +1568,60 @@ let compile_transaction_time_update :
 
 
 let compile_delete :
-  TemporalMetadata.t ->
+  Value.TemporalState.t ->
   Value.database ->
   Value.env ->
  ((Ir.var * string * Types.datatype StringMap.t) * Ir.computation option) ->
   Sql.query =
-  fun md db env ((x, table, field_types), where) ->
-    let open TemporalMetadata in
+  fun state db env ((x, table, field_types), where) ->
+    let open Value.TemporalState in
     let env =
       Eval.bind
         (Eval.env_of_value_env QueryPolicy.Default env)
         (x, Q.Var (x, field_types)) in
     let where = opt_map (Eval.norm_comp env) where in
     let q =
-      match md with
-        | Current _ -> delete ((x, table), where)
-        | TransactionTime { tt_to_field; _ } ->
+      match state with
+        | Current -> delete ((x, table), where)
+        | TransactionTime { to_field; _ } ->
             transaction_time_delete
-              ((x, table), where) tt_to_field
+              ((x, table), where) to_field
         | _ -> raise (internal_error "Valid / Bitemporal data not yet supported") in
     Debug.print ("Generated delete query: " ^ (db#string_of_query None q));
     q
 
-let rewrite_insert field_names rows md =
-  let open TemporalMetadata in
-  match md with
-    | Current _ -> (field_names, rows)
-    | TransactionTime { tt_from_field; tt_to_field } ->
+let rewrite_insert field_names rows state =
+  let open Value.TemporalState in
+  match state with
+    | Current -> (field_names, rows)
+    | TransactionTime { from_field; to_field } ->
         (* TT insert: Add period-stamping fields.
          * Values: (from = now, to = forever) *)
         (* Other than that, straightforward insert. *)
-        let field_names = field_names @ [tt_from_field; tt_to_field] in
+        let field_names = field_names @ [from_field; to_field] in
         let now = Sql.Constant (Constant.DateTime.now ()) in
         let forever = Sql.Constant (Constant.DateTime.forever) in
         let rows =
           List.map (fun vs -> vs @ [now; forever]) rows in
         (field_names, rows)
+    | Demoted _ ->
+        raise (internal_error "Shouldn't be inserting into a demoted table!")
     | _ -> raise (internal_error "Valid time / Bitemporal inserts not yet supported")
 
 
-let insert_internal table_name field_names rows md_opt =
+let insert_internal table_name field_names rows state_opt =
   let rows = List.map (List.map (Q.expression_of_base_value ->- base [])) rows in
   let field_names, rows =
-    match md_opt with
-      | Some md -> rewrite_insert field_names rows md
+    match state_opt with
+      | Some state -> rewrite_insert field_names rows state
       | None -> field_names, rows in
   Sql.(Insert {
       ins_table = table_name;
       ins_fields = field_names;
       ins_records = `Values rows })
 
-let temporal_insert table_name field_names rows md =
-  insert_internal table_name field_names rows (Some md)
+let temporal_insert table_name field_names rows state =
+  insert_internal table_name field_names rows (Some state)
 let insert table_name field_names rows =
   insert_internal table_name field_names rows None
 

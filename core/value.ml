@@ -211,17 +211,61 @@ let split_html : xml -> xml * xml =
   | [Node ("body", xs)] -> [], xs
   | xs -> [], xs
 
+module TemporalState = struct
+  type t =
+    | Demoted of { from_field: string; to_field: string;
+        lower_bound: Timestamp.t; upper_bound: Timestamp.t}
+    | TransactionTime of { from_field: string; to_field: string }
+    | ValidTime of { from_field: string; to_field: string }
+    | Bitemporal of {
+        tt_from_field: string; tt_to_field: string;
+        vt_from_field: string; vt_to_field: string }
+    | Current
+    [@@deriving show]
+
+  let current = Current
+  let transaction from_field to_field =
+    TransactionTime { from_field; to_field }
+
+  let valid from_field to_field =
+    ValidTime { from_field; to_field }
+
+  let bitemporal tt_from_field tt_to_field vt_from_field vt_to_field =
+    Bitemporal { tt_from_field; tt_to_field; vt_from_field; vt_to_field }
+
+  let from_metadata =
+    function
+    | TemporalMetadata.Current _ -> current
+    | TemporalMetadata.TransactionTime { tt_from_field; tt_to_field } ->
+        transaction tt_from_field tt_to_field
+    | TemporalMetadata.ValidTime { vt_from_field; vt_to_field } ->
+        valid vt_from_field vt_to_field
+    | TemporalMetadata.Bitemporal { tt_from_field; tt_to_field; vt_from_field; vt_to_field } ->
+        bitemporal tt_from_field tt_to_field vt_from_field vt_to_field
+
+  let demote lower_bound upper_bound =
+    function
+      | TransactionTime { from_field; to_field } ->
+          Demoted { from_field; to_field; lower_bound; upper_bound }
+      | Bitemporal _
+      | ValidTime _ ->
+          raise (internal_error "Bitemporal / ValidTime tables not yet supported")
+      | Current
+      | Demoted _ ->
+          raise (internal_error "Cannot demote a demoted or current table!")
+end
+
 type table = {
   database: (database * string);
   name: string;
   keys: string list list;
   row: Types.row;
-  temporal_metadata: TemporalMetadata.t
+  state: TemporalState.t
 }
   [@@deriving show]
 
-let make_table ~database ~name ~keys ~row ~temporal_metadata =
-  { database; name; keys; row; temporal_metadata }
+let make_table ~database ~name ~keys ~row ~state =
+  { database; name; keys; row; state }
 
 type primitive_value_basis =  [
 | `Bool of bool

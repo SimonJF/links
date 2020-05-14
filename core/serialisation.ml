@@ -1,7 +1,6 @@
 (* Serialisation of Value.t inhabitants. *)
 module E = Env
 open Value
-open CommonTypes
 
 let internal_error message =
   Errors.internal_error ~filename:"serialisation.ml" ~message
@@ -162,7 +161,7 @@ module Compressible = struct
          let driver, params = parse_db_string db_name in
          let database = db_connect driver params in
          (* FIXME: Hacked the metadata. Needs to be fixed if we serialise tables. *)
-         `Table { database; name = table_name; keys; row; temporal_metadata = TemporalMetadata.current false }
+         `Table { database; name = table_name; keys; row; state = Value.TemporalState.current }
       | `Database s ->
          let driver, params = parse_db_string s in
          let database = db_connect driver params in
@@ -462,8 +461,8 @@ module UnsafeJsonSerialiser : SERIALISER with type s := Yojson.Basic.t = struct
            List.map (function
                | `List part_keys -> List.map unwrap_string part_keys
                | _ -> raise (error "keys must be lists of strings")) keys in
-         (* TODO: Hacked the MD *)
-         `Table { database = db; name; keys; row; temporal_metadata = TemporalMetadata.current false }
+         (* TODO: Hacked the MD and demotion *)
+         `Table { database = db; name; keys; row; state = Value.TemporalState.current }
       | `Assoc [("_table", nonsense)] ->
          raise (error (
                     "table should be an assoc list. Got: " ^ (Yojson.Basic.to_string nonsense)))

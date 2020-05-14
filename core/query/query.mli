@@ -107,7 +107,7 @@ val compile_update :
     Ir.computation option * Ir.computation) ->
   Sql.query
 
-val compile_delete : TemporalMetadata.t -> Value.database -> Value.env ->
+val compile_delete : Value.TemporalState.t -> Value.database -> Value.env ->
   ((Ir.var * string * Types.datatype StringMap.t) * Ir.computation option) ->
   Sql.query
 
@@ -115,7 +115,7 @@ val temporal_insert :
   string -> (* Table name *)
   string list -> (* Field names *)
   Value.t list list -> (* Values *)
-  TemporalMetadata.t ->
+  Value.TemporalState.t ->
   Sql.query
 
 val insert :

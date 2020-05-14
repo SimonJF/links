@@ -1026,7 +1026,7 @@ struct
           o#check_eq_types ret_type_expected t (SSpec special);
 
           (DoOperation (name, vs, t), t, o)
-
+        | DemoteTemporal _
         | Lens _
         | LensSerial _
         | LensDrop _

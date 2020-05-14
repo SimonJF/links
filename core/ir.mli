@@ -71,6 +71,7 @@ and binding =
 and special =
   | Wrong      of Types.datatype
   | Database   of value
+  | DemoteTemporal of { table: value; from_time: value; to_time: value }
   | Lens of value * Lens.Type.t
   | LensSerial of { lens: value; columns : Lens.Alias.Set.t; typ : Lens.Type.t }
   | LensDrop   of { lens : value; drop : string; key : string; default : value; typ : Lens.Type.t }

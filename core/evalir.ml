@@ -689,7 +689,7 @@ struct
                 (Value.unbox_list keys) in
             (* TODO: We should refine the types: after sugartoir, we have concrete information
              * about this, so should propagate it *)
-            let temporal_metadata =
+            let md =
               begin
                 match Unionfind.find md with
                   | `Metadata md -> md
@@ -701,10 +701,33 @@ struct
                 ~name:(Value.unbox_string name)
                 ~keys:unboxed_keys
                 ~row
-                ~temporal_metadata
+                ~state:(Value.TemporalState.from_metadata md)
             in apply_cont cont env (`Table tbl)
           | _ -> eval_error "Error evaluating table handle"
       end
+    | DemoteTemporal { table; from_time; to_time } ->
+        value env table >>= fun table ->
+        value env from_time >>= fun from_time ->
+        value env to_time >>= fun to_time ->
+        begin
+          match table with
+            | `Table tbl ->
+                let open Value in
+                let table =
+                  make_table
+                    ~database:tbl.database
+                    ~name:tbl.name
+                    ~keys:tbl.keys
+                    ~row:tbl.row
+                    ~state:(
+                      Value.TemporalState.demote
+                        (unbox_datetime from_time)
+                        (unbox_datetime to_time)
+                        tbl.state
+                        ) in
+                apply_cont cont env (`Table table)
+            | _ -> raise (internal_error "Demoting non-table-handle")
+        end
     | Query (range, policy, e, _t) ->
        begin
          match range with
@@ -782,10 +805,10 @@ struct
           let open Value in
           match source, rows with
           | `Table _, `List [] ->  apply_cont cont env (`Record [])
-          | `Table { database = (db, _); name = table_name; temporal_metadata; _ }, rows ->
+          | `Table { database = (db, _); name = table_name; state; _ }, rows ->
               let (field_names,vss) = Query.row_columns_values rows in
               let query =
-                Query.temporal_insert table_name field_names vss temporal_metadata
+                Query.temporal_insert table_name field_names vss state
                 |> db#string_of_query None in
               Debug.print ("RUNNING INSERT QUERY:\n" ^ query);
               let () = ignore (Database.execute_command query db) in
@@ -812,12 +835,12 @@ struct
           | `Table _, `List [], _ ->
               raise (internal_error "InsertReturning: undefined for empty list of rows")
           | `Table { database = (db, _); name = table_name;
-                temporal_metadata; _}, rows, returning ->
+                state; _}, rows, returning ->
               let (field_names,vss) = Query.row_columns_values rows in
               let returning = Value.unbox_string returning in
               let insert_query =
                 Query.temporal_insert table_name field_names
-                  vss temporal_metadata in
+                  vss state in
               let queries = db#make_insert_returning_query returning insert_query
               in
               Debug.print ("RUNNING INSERT ... RETURNING QUERY:\n" ^
@@ -831,17 +854,17 @@ struct
         let open Value in
         value env source >>= fun source ->
         match source with
-          | `Table { database = (db, _); name = table; row = (fields, _, _); temporal_metadata; _ } ->
+          | `Table { database = (db, _); name = table; row = (fields, _, _); state; _ } ->
               Lwt.return
-            (db, temporal_metadata, table, (StringMap.map (function
+            (db, state, table, (StringMap.map (function
                                         | `Present t -> t
                                         | _ -> assert false) fields))
           | _ -> assert false
-      end >>= fun (db, md, table, field_types) ->
+      end >>= fun (db, state, table, field_types) ->
       begin
-        let open TemporalMetadata in
-        match md with
-          | Current _ ->
+        let open Value.TemporalState in
+        match state with
+          | Current ->
               let update_query =
                 Query.compile_update
                   db env
@@ -849,7 +872,7 @@ struct
                 |> db#string_of_query None in
               let () = ignore (Database.execute_command update_query db) in
               apply_cont cont env (`Record [])
-          | TransactionTime { tt_from_field; tt_to_field } ->
+          | TransactionTime { from_field; to_field } ->
               (* SJF TODO: This requires a transactional semantics, which we
                * do not have at present. Ideally, the select, insert, and update
                * would all be done in a single transaction.
@@ -861,7 +884,7 @@ struct
               let query =
                 Query.compile_transaction_time_update env
                   ((Var.var_of_binder xb, table, field_types), where, body)
-                  tt_from_field tt_to_field
+                  from_field to_field
                 |> db#string_of_query None in
               let () = ignore (Database.execute_command query db) in
               apply_cont cont env (`Record [])
@@ -872,15 +895,15 @@ struct
         begin
         let open Value in
         match source with
-          | `Table { database = (db, _); name = table; row = (fields, _, _); temporal_metadata; _ } ->
+          | `Table { database = (db, _); name = table; row = (fields, _, _); state; _ } ->
               Lwt.return
-            (db, table, temporal_metadata, (StringMap.map (function
+            (db, table, state, (StringMap.map (function
                                         | `Present t -> t
                                         | _ -> assert false) fields))
           | _ -> assert false
-        end >>= fun (db, table, md, field_types) ->
+        end >>= fun (db, table, state, field_types) ->
       let delete_query =
-        Query.compile_delete md db env
+        Query.compile_delete state db env
           ((Var.var_of_binder xb, table, field_types), where)
         |> db#string_of_query None in
       let () = ignore (Database.execute_command delete_query db) in

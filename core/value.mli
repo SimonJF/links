@@ -58,13 +58,39 @@ type xmlitem =   Text of string
 and xml = xmlitem list
   [@@deriving show,yojson]
 
+module TemporalState : sig
+
+  type t =
+    | Demoted of { from_field: string; to_field: string;
+        lower_bound: Timestamp.t; upper_bound: Timestamp.t}
+    | TransactionTime of { from_field: string; to_field: string }
+    | ValidTime of { from_field: string; to_field: string }
+    | Bitemporal of {
+        tt_from_field: string; tt_to_field: string;
+        vt_from_field: string; vt_to_field: string }
+    | Current
+
+  val from_metadata : TemporalMetadata.t -> t
+
+  val current : t
+  val transaction : string (* from field *) -> string (* to field *) -> t
+  val valid : string (* from field *) -> string (* to field *) -> t
+  val bitemporal :
+    string (* transaction from field *) ->
+    string (* transaction to field *) ->
+    string (* valid from field *) ->
+    string (* valid to field *) -> t
+
+  val demote : Timestamp.t -> Timestamp.t -> t -> t
+end
+
 type table = {
   database: (database * string);
   name: string;
   keys: string list list;
   row: Types.row;
-  temporal_metadata: TemporalMetadata.t
-}
+  state: TemporalState.t
+  }
   [@@deriving show]
 
 val make_table :
@@ -72,7 +98,7 @@ val make_table :
   name:string ->
   keys:(string list list) ->
   row:Types.row ->
-  temporal_metadata:TemporalMetadata.t ->
+  state:TemporalState.t ->
   table
 
 type primitive_value_basis =  [

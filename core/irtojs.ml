@@ -913,6 +913,7 @@ end = functor (K : CONTINUATION) -> struct
               (* Is there a reason to not use js_hide_database_info ? *)
               K.apply kappa (Dict [])
       | LensGet _ | LensPut _ -> Die "Attempt to run a relational lens operation on client"
+      | DemoteTemporal _ -> Die "Attempt to demote temporal table handle on client"
       | Query _ -> Die "Attempt to run a query on the client"
       | InsertRows _ -> Die "Attempt to run a database insert on the client"
       | InsertReturning _ -> Die "Attempt to run a database insert on the client"
