@@ -165,6 +165,10 @@ sig
 
   val table_handle : value sem * value sem * value sem * (datatype * datatype * datatype * Types.meta_md_var) -> tail_computation sem
 
+  val temporal_demotion :
+    TemporalOperation.demotion * value sem * (value sem) list ->
+      tail_computation sem
+
   val lens_handle : value sem * Lens.Type.t -> tail_computation sem
 
   val lens_serial : value sem * Lens.Alias.Set.t * Lens.Type.t -> tail_computation sem
@@ -488,6 +492,30 @@ struct
         (fun keys ->
           let tbl = { database; table; keys; table_type = (r, w, n, md) } in
           lift (Special (Table tbl), `Table (r, w, n, md)))))
+
+
+  let temporal_demotion (dem, tbl, args) =
+    let tbl_ty = sem_type tbl in
+    bind tbl
+      (fun tbl ->
+        let open TemporalOperation in
+        match (dem, args) with
+          | AtCurrent, [] -> assert false
+          | AtTime, [time] ->
+              bind time
+                (fun time ->
+                  let dtemp =
+                    DemoteTemporal
+                      { table = tbl; from_time = time; to_time = time } in
+                  let tbl_read_ty = TypeUtils.table_read_type tbl_ty in
+                  let ecr () = `Record (Types.make_empty_closed_row ()) in
+                  lift (Special dtemp,
+                    Types.make_table_type
+                      ~metadata:(TemporalMetadata.current true)
+                      tbl_read_ty
+                      (ecr ())
+                      (ecr ())))
+          | _, _ -> assert false)
 
   let lens_handle (table, t) =
       bind table
@@ -1061,6 +1089,10 @@ struct
               in
                 I.db_delete env (p, source, where)
 
+          | TemporalOp (TemporalOperation.Demotion d, phr, args) ->
+              let phr = ev phr in
+              let args = evs args in
+              I.temporal_demotion (d, phr, args)
           | Select (l, e) ->
              I.select (l, ev e)
           | Offer (e, cases, Some t) ->
@@ -1075,6 +1107,7 @@ struct
                 I.offer env (ev e, cases, t)
 
                   (* These things should all have been desugared already *)
+          | TemporalOp (TemporalOperation.Accessor _, _, _)
           | Spawn _
           | Receive _
           | Section (Section.Project _)
@@ -1110,7 +1143,6 @@ struct
           | TryInOtherwise _
           | Raise
           | Instantiate _ | Generalise _
-          | TemporalOp _
           | CP _ ->
               Debug.print ("oops: " ^ show_phrasenode e);
               assert false
