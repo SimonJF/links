@@ -152,8 +152,9 @@ let rec less l r =
           | _::rest                -> compare_list rest in
           compare_list (combine lv rv)
     | `List (l), `List (r) -> less_lists (l,r)
-    | `DateTime (Timestamp.Timestamp _), `DateTime (Timestamp.Forever) -> true
-    | `DateTime (Timestamp.Forever), `DateTime _ -> false
+    | `DateTime _, `DateTime (Timestamp.Infinity) -> true
+    | `DateTime (Timestamp.Infinity), `DateTime _ -> false
+    | `DateTime (Timestamp.MinusInfinity), _ -> false
     | `DateTime (Timestamp.Timestamp dt1), `DateTime (Timestamp.Timestamp dt2) ->
         let f1 = CalendarShow.to_unixfloat dt1 in
         let f2 = CalendarShow.to_unixfloat dt2 in
@@ -193,7 +194,8 @@ let add_attributes : (Value.t * Value.t) list -> Value.t -> Value.t =
 let project_datetime (f: CalendarShow.t -> int) : located_primitive * Types.datatype * pure =
   (p1 (fun dt ->
     match Value.unbox_datetime dt with
-      | Timestamp.Forever -> raise (runtime_error "Cannot project from 'forever'")
+      | Timestamp.Infinity -> raise (runtime_error "Cannot project from 'forever'")
+      | Timestamp.MinusInfinity -> raise (runtime_error "Cannot project from beginning_of_time")
       | Timestamp.Timestamp ts -> Value.box_int (f ts)),
   datatype "(DateTime) -> Int",
   PURE)
@@ -1072,10 +1074,10 @@ let env : (string * (located_primitive * Types.datatype * pure)) list = [
   "dateToInt",
   (p1 (fun r ->
          match r with
-           | `DateTime (Timestamp.Forever) ->
+           | `DateTime (Timestamp.Infinity) | `DateTime (Timestamp.MinusInfinity) ->
                (* SJF: Not sure what the semantics should be here...
                 * For now, just throwing a runtime exception. *)
-               raise (runtime_error "Cannot convert 'forever' into an integer")
+               raise (runtime_error "Cannot convert 'forever' or 'beginning_of_time' into an integer")
            | `DateTime (Timestamp.Timestamp dt) ->
                let tm = {
                 Unix.tm_sec = CalendarShow.second dt |> int_of_float;
@@ -1117,7 +1119,8 @@ let env : (string * (located_primitive * Types.datatype * pure)) list = [
   "dateSeconds",
   (p1 (fun dt ->
     match Value.unbox_datetime dt with
-      | Timestamp.Forever -> raise (runtime_error "Cannot project from 'forever'")
+      | Timestamp.Infinity -> raise (runtime_error "Cannot project from 'forever'")
+      | Timestamp.MinusInfinity -> raise (runtime_error "Cannot project from beginning_of_time")
       | Timestamp.Timestamp ts -> Value.box_float (CalendarShow.second ts)),
   datatype "(DateTime) -> Float",
   PURE);
@@ -1137,7 +1140,12 @@ let env : (string * (located_primitive * Types.datatype * pure)) list = [
     IMPURE);
 
   "forever",
-  (`PFun (fun _ _ -> Value.box_datetime Timestamp.forever),
+  (`PFun (fun _ _ -> Value.box_datetime Timestamp.infinity),
+    datatype "() -> DateTime",
+    IMPURE);
+
+  "beginning_of_time",
+  (`PFun (fun _ _ -> Value.box_datetime Timestamp.minus_infinity),
     datatype "() -> DateTime",
     IMPURE);
 

@@ -85,7 +85,8 @@ class virtual database = object(self)
      * variants of the server, so for now I'm going to say that dates and times should
      * be stored in the DB as UTC.
      *)
-    | DateTime (Timestamp.Forever) -> "'infinity' :: timestamp with time zone"
+    | DateTime (Timestamp.Infinity) -> "'infinity' :: timestamp with time zone"
+    | DateTime (Timestamp.MinusInfinity) -> "'-infinity' :: timestamp with time zone"
     | DateTime (Timestamp.Timestamp ts) ->
         let open CalendarLib in
         CalendarShow.convert ts (Time_Zone.current ()) (Time_Zone.UTC)
@@ -886,7 +887,8 @@ let rec p_value (ppf : formatter) : t -> 'a = function
   | `Pid (`ClientPid (cid, i)) -> fprintf ppf "Pid Client num %s, process %s" (ClientID.to_string cid) (ProcessID.to_string i)
   | `Alien -> fprintf ppf "alien"
   | `DateTime (Timestamp.Timestamp ts) -> fprintf ppf "%s" (CalendarShow.show ts)
-  | `DateTime (Timestamp.Forever) -> fprintf ppf "forever"
+  | `DateTime (Timestamp.Infinity) -> fprintf ppf "infinity"
+  | `DateTime (Timestamp.MinusInfinity) -> fprintf ppf "-infinity"
 and p_record_fields ppf = function
   | [] -> fprintf ppf ""
   | [(l, v)] -> fprintf ppf "@[@{<recordlabel>%a@} = %a@]"

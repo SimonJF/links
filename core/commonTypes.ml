@@ -222,15 +222,18 @@ module Primitive = struct
 end
 
 module Timestamp = struct
-  type t = Timestamp of CalendarShow.t | Forever
+  type t = Timestamp of CalendarShow.t | MinusInfinity | Infinity
   [@@deriving show, ord]
 
   let timestamp ts = Timestamp ts
   let now () = Timestamp (CalendarShow.now ())
-  let forever = Forever
+  let infinity = Infinity
+  let minus_infinity = MinusInfinity
+
   let to_string = function
     | Timestamp ts -> Printf.sprintf "'%s'" (CalendarShow.show ts)
-    | Forever -> "'infinity'"
+    | Infinity -> "'infinity'"
+    | MinusInfinity -> "'-infinity'"
 
   let from_string str =
     let bad_date msg = Errors.RuntimeError ("Ill-formed date: " ^ str ^ " ||| Message: " ^ msg) in
@@ -239,7 +242,8 @@ module Timestamp = struct
     (* match parse_string ~consume:All db_timestamp str with *)
     match parse_string db_timestamp str with
       | Ok (`Timestamp x) -> timestamp x
-      | Ok (`Forever) -> forever
+      | Ok (`Infinity) -> infinity
+      | Ok (`MinusInfinity) -> minus_infinity
       | Error msg -> raise (bad_date msg)
 end
 
@@ -263,7 +267,8 @@ module Constant = struct
 
   module DateTime = struct
     let now () = DateTime (Timestamp.timestamp (CalendarShow.now()))
-    let forever = DateTime (Timestamp.forever)
+    let beginning_of_time = DateTime (Timestamp.minus_infinity)
+    let forever = DateTime (Timestamp.infinity)
   end
 
   (* SQL standard for escaping single quotes in a string *)

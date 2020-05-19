@@ -1535,7 +1535,8 @@ module AngstromExtended = struct
           *)
       ) in
 
-    let infinity = string "infinity" *> (return `Forever) in
+    let infinity = string "infinity" *> (return `Infinity) in
+    let neginfinity = string "-infinity" *> (return `Infinity) in
 
-    datetime <|> infinity
+    datetime <|> infinity <|> neginfinity
 end
