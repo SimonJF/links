@@ -705,27 +705,41 @@ struct
             in apply_cont cont env (`Table tbl)
           | _ -> eval_error "Error evaluating table handle"
       end
-    | DemoteTemporal { table; from_time; to_time } ->
+    | DemoteTemporal { table; demotion } ->
         value env table >>= fun table ->
-        value env from_time >>= fun from_time ->
-        value env to_time >>= fun to_time ->
         begin
           match table with
             | `Table tbl ->
                 let open Value in
-                let table =
-                  make_table
-                    ~database:tbl.database
-                    ~name:tbl.name
-                    ~keys:tbl.keys
-                    ~row:tbl.row
-                    ~state:(
-                      Value.TemporalState.demote
-                        (unbox_datetime from_time)
-                        (unbox_datetime to_time)
-                        tbl.state
-                        ) in
-                apply_cont cont env (`Table table)
+                begin
+                  match demotion with
+                    | DemoteCurrent ->
+                        let table =
+                          make_table
+                            ~database:tbl.database
+                            ~name:tbl.name
+                            ~keys:tbl.keys
+                            ~row:tbl.row
+                            ~state:(
+                              Value.TemporalState.demoteCurrent tbl.state) in
+                        apply_cont cont env (`Table table)
+                    | DemoteAtTime { from_time; to_time } ->
+                        value env from_time >>= fun from_time ->
+                        value env to_time >>= fun to_time ->
+                        let table =
+                          make_table
+                            ~database:tbl.database
+                            ~name:tbl.name
+                            ~keys:tbl.keys
+                            ~row:tbl.row
+                            ~state:(
+                              Value.TemporalState.demoteTime
+                                (unbox_datetime from_time)
+                                (unbox_datetime to_time)
+                                tbl.state
+                                ) in
+                        apply_cont cont env (`Table table)
+                end
             | _ -> raise (internal_error "Demoting non-table-handle")
         end
     | Query (range, policy, e, _t) ->

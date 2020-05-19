@@ -496,19 +496,28 @@ struct
 
   let temporal_demotion (dem, tbl, args) =
     let tbl_ty = sem_type tbl in
+    let tbl_read_ty = TypeUtils.table_read_type tbl_ty in
+    let ecr () = `Record (Types.make_empty_closed_row ()) in
     bind tbl
       (fun tbl ->
         let open TemporalOperation in
         match (dem, args) with
-          | AtCurrent, [] -> assert false
+          | AtCurrent, [] ->
+              let dtemp =
+                DemoteTemporal { table = tbl; demotion = DemoteCurrent } in
+              lift (Special dtemp,
+                    Types.make_table_type
+                      ~metadata:(TemporalMetadata.current true)
+                      tbl_read_ty
+                      (ecr ())
+                      (ecr ()))
           | AtTime, [time] ->
               bind time
                 (fun time ->
                   let dtemp =
                     DemoteTemporal
-                      { table = tbl; from_time = time; to_time = time } in
-                  let tbl_read_ty = TypeUtils.table_read_type tbl_ty in
-                  let ecr () = `Record (Types.make_empty_closed_row ()) in
+                      { table = tbl; demotion =
+                        DemoteAtTime { from_time = time; to_time = time} } in
                   lift (Special dtemp,
                     Types.make_table_type
                       ~metadata:(TemporalMetadata.current true)

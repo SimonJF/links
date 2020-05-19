@@ -435,12 +435,23 @@ struct
                          correctly handle self joins *)
                       let x = Var.fresh_raw_var () in
                       reduce_for_body ([(x, source)], [], body (Var (x, field_types)))
-                  | Demoted { from_field; to_field; lower_bound; upper_bound } ->
+                  | Demoted { to_field; demotion  = AtCurrent; _ } ->
                       let field_types = table_field_types table in
                       let x = Var.fresh_raw_var () in
                       let var = Var (x, field_types) in
                       let c =
                         Apply (Primitive ("=="),
+                            [Project (var, to_field);
+                             Constant (Constant.DateTime.forever)]) in
+                      reduce_for_body ([(x, source)], [],
+                        reduce_where_then (c, body var))
+                  | Demoted { from_field; to_field;
+                    demotion  = AtTime { lower_bound; upper_bound } } ->
+                      let field_types = table_field_types table in
+                      let x = Var.fresh_raw_var () in
+                      let var = Var (x, field_types) in
+                      let c =
+                        Apply (Primitive ("&&"),
                           [Apply (Primitive (">="),
                             [Project (var, from_field);
                              Constant (Constant.DateTime lower_bound)]);

@@ -60,9 +60,12 @@ and xml = xmlitem list
 
 module TemporalState : sig
 
+  type demotion =
+    | AtCurrent
+    | AtTime of { lower_bound: Timestamp.t; upper_bound: Timestamp.t }
+
   type t =
-    | Demoted of { from_field: string; to_field: string;
-        lower_bound: Timestamp.t; upper_bound: Timestamp.t}
+    | Demoted of { from_field: string; to_field: string; demotion: demotion }
     | TransactionTime of { from_field: string; to_field: string }
     | ValidTime of { from_field: string; to_field: string }
     | Bitemporal of {
@@ -81,7 +84,8 @@ module TemporalState : sig
     string (* valid from field *) ->
     string (* valid to field *) -> t
 
-  val demote : Timestamp.t -> Timestamp.t -> t -> t
+  val demoteTime : Timestamp.t -> Timestamp.t -> t -> t
+  val demoteCurrent : t -> t
 end
 
 type table = {

@@ -68,10 +68,13 @@ and binding =
                     language: ForeignLanguage.t;
                     object_name: string }
   | Module     of string * binding list option
+and temporal_demotion =
+  | DemoteCurrent
+  | DemoteAtTime of { from_time: value; to_time: value }
 and special =
   | Wrong      of Types.datatype
   | Database   of value
-  | DemoteTemporal of { table: value; from_time: value; to_time: value }
+  | DemoteTemporal of { table: value; demotion: temporal_demotion }
   | Lens of value * Lens.Type.t
   | LensSerial of { lens: value; columns : Lens.Alias.Set.t; typ : Lens.Type.t }
   | LensDrop   of { lens : value; drop : string; key : string; default : value; typ : Lens.Type.t }

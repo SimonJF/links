@@ -213,9 +213,14 @@ let split_html : xml -> xml * xml =
   | xs -> [], xs
 
 module TemporalState = struct
+
+  type demotion =
+    | AtCurrent
+    | AtTime of { lower_bound: Timestamp.t; upper_bound: Timestamp.t }
+    [@@deriving show]
+
   type t =
-    | Demoted of { from_field: string; to_field: string;
-        lower_bound: Timestamp.t; upper_bound: Timestamp.t}
+    | Demoted of { from_field: string; to_field: string; demotion: demotion }
     | TransactionTime of { from_field: string; to_field: string }
     | ValidTime of { from_field: string; to_field: string }
     | Bitemporal of {
@@ -244,10 +249,22 @@ module TemporalState = struct
     | TemporalMetadata.Bitemporal { tt_from_field; tt_to_field; vt_from_field; vt_to_field } ->
         bitemporal tt_from_field tt_to_field vt_from_field vt_to_field
 
-  let demote lower_bound upper_bound =
+  let demoteTime lower_bound upper_bound =
     function
       | TransactionTime { from_field; to_field } ->
-          Demoted { from_field; to_field; lower_bound; upper_bound }
+          Demoted { from_field; to_field;
+            demotion = AtTime { lower_bound; upper_bound } }
+      | Bitemporal _
+      | ValidTime _ ->
+          raise (internal_error "Bitemporal / ValidTime tables not yet supported")
+      | Current
+      | Demoted _ ->
+          raise (internal_error "Cannot demote a demoted or current table!")
+
+  let demoteCurrent =
+    function
+      | TransactionTime { from_field; to_field } ->
+          Demoted { from_field; to_field; demotion = AtCurrent }
       | Bitemporal _
       | ValidTime _ ->
           raise (internal_error "Bitemporal / ValidTime tables not yet supported")

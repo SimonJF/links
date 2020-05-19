@@ -59,6 +59,9 @@ and tail_computation =
   | Case       of value * (binder * computation) name_map * (binder * computation) option
   | If         of value * computation * computation
 and fun_def = binder * (tyvar list * binder list * computation) * binder option * location
+and temporal_demotion =
+  | DemoteCurrent
+  | DemoteAtTime of { from_time: value; to_time: value }
 and binding =
   | Let        of binder * (tyvar list * tail_computation)
   | Fun        of fun_def
@@ -70,7 +73,7 @@ and binding =
 and special =
   | Wrong      of Types.datatype
   | Database   of value
-  | DemoteTemporal of { table: value; from_time: value; to_time: value }
+  | DemoteTemporal of { table: value; demotion: temporal_demotion }
   | Lens       of value * Lens.Type.t
   | LensSerial of { lens: value; columns : Lens.Alias.Set.t; typ : Lens.Type.t }
   | LensDrop   of { lens: value; drop : string; key : string; default : value; typ : Lens.Type.t }

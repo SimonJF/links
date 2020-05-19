@@ -67,7 +67,9 @@ let variables_in_computation comp =
     | CallCC value
     | Select (_, value) -> traverse_value value
     | Wrong _ -> ()
-    | DemoteTemporal { table; from_time; to_time } ->
+    | DemoteTemporal { table; demotion = DemoteCurrent } ->
+        traverse_value table
+    | DemoteTemporal { table; demotion = DemoteAtTime { from_time; to_time } } ->
         List.iter (traverse_value) [table; from_time; to_time]
     | Table  { database; table; keys; _ } ->
         List.iter (traverse_value) [database; table; keys]
