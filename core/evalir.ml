@@ -887,14 +887,6 @@ struct
               let () = ignore (Database.execute_command update_query db) in
               apply_cont cont env (`Record [])
           | TransactionTime { from_field; to_field } ->
-              (* SJF TODO: This requires a transactional semantics, which we
-               * do not have at present. Ideally, the select, insert, and update
-               * would all be done in a single transaction.
-               *
-               * As a first step, it would be good to at least expose the transaction
-               * primitives and have the insert and update statements execute
-               * transactionally -- but we'd do well to have the whole thing
-               * as SQL rather than having the extra marshalling step. *)
               let query =
                 Query.compile_transaction_time_update env
                   ((Var.var_of_binder xb, table, field_types), where, body)
