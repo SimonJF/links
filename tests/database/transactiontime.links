@@ -3,6 +3,8 @@ var transactiontime =
   table "transactiontime" with (name: String, address: String)
   using transaction_time(from_time, to_time) from db;
 
+var demotedTT = ttCurrent(transactiontime);
+
 fun deleteAll() {
   delete (x <-t- transactiontime);
 }
@@ -61,9 +63,25 @@ fun currentLookup(p) {
   }
 }
 
+fun demotedCurrentLookup(p) {
+  query {
+    for (x <-- demotedTT)
+      where (p(x))
+        [x]
+  }
+}
 
 fun currentLookupName(name) {
   currentLookup(fun(x) { ttData(x).name == name })
+}
+
+fun demotedLookupAt(p, timestamp) {
+  var demoted = ttAt(transactiontime, timestamp);
+  query {
+    for (x <-- demoted)
+      where (p(x))
+      [x]
+  }
 }
 
 fun lookupAt(p, timestamp) {
@@ -98,7 +116,7 @@ fun test() {
   deleteAll();
   assertEq(currentLookup(fun(x) { true }), []);
   insertDean();
-  assertEq(currentLookup(fun(x) { true }), [(name = "Dean", address = "West Nicholson Street")]);
+  assertEq(demotedCurrentLookup(fun(x) { true }), [(name = "Dean", address = "West Nicholson Street")]);
   insertBob();
   assertEq(sortBy(fun(x) { x.name }, currentLookup(fun(x) { true })), [
         (name = "Bob", address = "George Square"),
@@ -108,7 +126,7 @@ fun test() {
   var t2 = now();
   updateBobDean();
   assertEq(sortBy(fun(x) { x.name },
-      lookupAt(fun(x) { true }, t2)), [
+      demotedLookupAt(fun(x) { true }, t2)), [
         (name = "Alice", address = "Crichton Street"),
         (name = "Bob", address = "George Square"),
         (name = "Dean", address = "West Nicholson Street")

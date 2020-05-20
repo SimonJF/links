@@ -230,8 +230,7 @@ struct
     let metadata_fields =
       let open Value.TemporalState in
       match state with
-        | Demoted { from_field; to_field; _ } ->
-            [dt from_field; dt to_field]
+        | Demoted _
         | Current -> []
         | ValidTime { from_field; to_field } ->
             [dt from_field; dt to_field]
@@ -453,11 +452,11 @@ struct
                       let c =
                         Apply (Primitive ("&&"),
                           [Apply (Primitive (">="),
-                            [Project (var, from_field);
-                             Constant (Constant.DateTime lower_bound)]);
+                            [Constant (Constant.DateTime lower_bound);
+                             Project (var, from_field)]);
                            Apply (Primitive ("<"),
-                            [Project (var, to_field);
-                             Constant (Constant.DateTime upper_bound)])]) in
+                            [Constant (Constant.DateTime upper_bound);
+                             Project (var, to_field)])]) in
                       reduce_for_body ([(x, source)], [],
                         reduce_where_then (c, body var))
                   | TransactionTime { from_field ; to_field } ->
