@@ -483,9 +483,29 @@ struct
                         ] in
                       let generators = [ (table_raw_var, source) ] in
                       reduce_for_body (generators, [], body (Record metadata_record))
-                  | ValidTime _ | Bitemporal _ ->
+                  | ValidTime { from_field; to_field } ->
+                      (* Same as TransactionTime. Should probably abstract it. *)
+                      let field_types = table_field_types table in
+                      let base_field_types =
+                        StringMap.filter
+                          (fun x _ -> x <> from_field && x <> to_field)
+                          field_types in
+                      let table_raw_var = Var.fresh_raw_var () in
+                      let table_var = Var (table_raw_var, field_types) in
+                      let metadata_record =
+                        StringMap.from_alist [
+                          (TemporalMetadata.Valid.data_field,
+                            eta_expand_var (table_raw_var, base_field_types));
+                          (TemporalMetadata.Valid.from_field,
+                            Project (table_var, from_field) );
+                          (TemporalMetadata.Valid.to_field,
+                            Project (table_var, to_field))
+                        ] in
+                      let generators = [ (table_raw_var, source) ] in
+                      reduce_for_body (generators, [], body (Record metadata_record))
+                  | Bitemporal _ ->
                       raise (internal_error
-                        "Valid time / bitemporal tables not yet supported")
+                        "Bitemporal tables not yet supported")
               end
           | v -> query_error "Bad source in for comprehension: %s" (string_of_t v)
 

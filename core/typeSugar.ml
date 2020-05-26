@@ -3645,7 +3645,7 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * Usage.t =
                              match mode with
                                | Current -> (a, `Current)
                                | Transaction -> (Types.transaction_absty a, `Transaction)
-                               | Valid -> (a, `Valid)
+                               | Valid -> (Types.valid_absty a, `Valid)
                                | Bitemporal -> (a, `Bitemporal) in
                          let d = Types.make_table_metadata_unifier basis in
                          let pattern = tpc pattern in

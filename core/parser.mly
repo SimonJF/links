@@ -342,7 +342,7 @@ let parse_foreign_language pos lang =
 %token TRY OTHERWISE RAISE
 %token <string> OPERATOR
 %token USING TTFROM TTTO TTDATA TTCURRENT TTAT VTFROM VTTO VTDATA
-%token VTSETFROM VTSETTO
+%token VTSETFROM VTSETTO VTSETDATA
 
 %start just_datatype
 %start interactive
@@ -640,6 +640,7 @@ temporal_operation:
 | TTAT LPAREN exp COMMA exp RPAREN                             { with_pos $loc (TemporalOp (TemporalOperation.(Demotion AtTime), $3, [$5])) }
 | VTSETFROM LPAREN exp COMMA exp RPAREN                        { with_pos $loc (TemporalOp (TemporalOperation.(Mutator From), $3, [$5])) }
 | VTSETTO LPAREN exp COMMA exp RPAREN                          { with_pos $loc (TemporalOp (TemporalOperation.(Mutator To), $3, [$5])) }
+| VTSETDATA LPAREN exp COMMA exp RPAREN                        { with_pos $loc (TemporalOp (TemporalOperation.(Mutator Data), $3, [$5])) }
 
 arg_spec:
 | LPAREN perhaps_exps RPAREN                                   { $2 }

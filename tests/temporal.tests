@@ -126,3 +126,56 @@ tests/temporal/tt-at-demotion-bad-insert.links
 filemode : true
 exit : 1
 stderr : @.*Type error:.*
+
+Valid time iteration
+tests/temporal/vt-iteration-good.links
+filemode : true
+exit : 0
+
+Current-time iteration over valid-time table
+tests/temporal/vt-iteration-bad.links
+filemode : true
+exit : 1
+stderr : @.*Type error:.*
+
+Valid time "from" timestamp access
+tests/temporal/vt-from.links
+filemode : true
+exit : 0
+
+Valid time "to" timestamp access
+tests/temporal/vt-to.links
+filemode : true
+exit : 0
+
+Valid time data access
+tests/temporal/vt-data.links
+filemode : true
+exit : 0
+
+Valid time "to" mutation
+tests/temporal/vt-mutate-to.links
+filemode : true
+exit : 0
+
+Valid time "to" mutation (bad)
+tests/temporal/vt-mutate-to-bad.links
+filemode : true
+exit : 1
+stderr : @.*Type error:.*
+
+Valid time "from" mutation
+tests/temporal/vt-mutate-from.links
+filemode : true
+exit : 0
+
+Valid time data mutation
+tests/temporal/vt-mutate-data.links
+filemode : true
+exit : 0
+
+Valid time data mutation (bad)
+tests/temporal/vt-mutate-data-bad.links
+filemode : true
+exit : 1
+stderr : @.*Type error:.*

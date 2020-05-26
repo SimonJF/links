@@ -250,10 +250,12 @@ rule lex ctxt nl = parse
   | "ttData"                            { TTDATA }
   | "ttFrom"                            { TTFROM }
   | "ttTo"                              { TTTO }
+  | "vtData"                            { VTDATA }
   | "vtFrom"                            { VTFROM }
-  | "vtTo"                              { TTTO }
+  | "vtTo"                              { VTTO }
   | "vtSetFrom"                         { VTSETFROM }
   | "vtSetTo"                           { VTSETTO }
+  | "vtSetData"                         { VTSETDATA }
   | "~fun"                              { FROZEN_FUN }
   | "~linfun"                           { FROZEN_LINFUN }
   | def_id as var                       { try List.assoc var keywords
