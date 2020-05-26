@@ -415,9 +415,11 @@ sig
     escapees:((string * Types.datatype) list) ->
     unit
 
-  val transaction_accessor: TemporalOperation.t -> griper
+  val temporal_accessor: TemporalOperation.t -> griper
   val transaction_demotion_argument : TemporalOperation.t -> griper
 
+  val valid_mutator: TemporalOperation.t -> griper
+  val valid_mutator_argument: TemporalOperation.t -> griper
 end
   = struct
     type griper =
@@ -1588,7 +1590,8 @@ end
                displayed_tys)
 
 
-    let transaction_accessor op ~pos ~t1:(_, actual) ~t2:(_, expected) ~error:_ =
+    (* Temporal DB gripers *)
+    let temporal_accessor op ~pos ~t1:(_, actual) ~t2:(_, expected) ~error:_ =
       build_tyvar_names [actual; expected];
       let ppr_actual   = show_type actual   in
       let ppr_expected = show_type expected in
@@ -1607,6 +1610,29 @@ end
                "was expected to have type "       ^ nli () ^
                 code ppr_expected                 ^ nl  () ^
                "but has type"                     ^ nli () ^
+                code ppr_actual                   ^ nl  () ^
+               "instead.")
+
+    (* val valid_mutator: TemporalOperation.t -> griper *)
+    let valid_mutator op ~pos ~t1:(_, actual) ~t2:(_, expected) ~error:_ =
+      build_tyvar_names [actual; expected];
+      let ppr_actual   = show_type actual   in
+      let ppr_expected = show_type expected in
+      die pos ("The first argument of temporal mutator " ^ (TemporalOperation.name op) ^ " " ^
+               "must be of type "                 ^ nli () ^
+                code ppr_expected                 ^ nl  () ^
+               "but the given argument has type"  ^ nli () ^
+                code ppr_actual                   ^ nl  () ^
+               "instead.")
+
+    let valid_mutator_argument op ~pos ~t1:(_, actual) ~t2:(_, expected) ~error:_ =
+      build_tyvar_names [actual; expected];
+      let ppr_actual   = show_type actual   in
+      let ppr_expected = show_type expected in
+      die pos ("The second argument of temporal mutator " ^ (TemporalOperation.name op) ^ " " ^
+               "must be of type "                 ^ nli () ^
+                code ppr_expected                 ^ nl  () ^
+               "but the given argument has type"  ^ nli () ^
                 code ppr_actual                   ^ nl  () ^
                "instead.")
 end
@@ -2823,16 +2849,35 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * Usage.t =
             let arguments = List.map tc arguments in
 
             let accessor_ty tbl field =
-              match tbl with
-                | Transaction ->
-                    let expected = Types.transaction_absty data_ty in
-                    let () = unify ~handle:(Gripers.transaction_accessor op)
-                      (pos_and_typ target, no_pos expected) in
-                    begin
-                      match field with
-                        | Data -> data_ty
-                        | From | To -> `Primitive (Primitive.DateTime)
-                    end
+              let expected =
+                match tbl with
+                  | Transaction -> Types.transaction_absty data_ty
+                  | Valid -> Types.valid_absty data_ty
+              in
+              let () = unify ~handle:(Gripers.temporal_accessor op)
+                (pos_and_typ target, no_pos expected) in
+              match field with
+                | Data -> data_ty
+                | From | To -> `Primitive (Primitive.DateTime)
+            in
+
+            let mutator_ty field =
+              (* First, check to see that the first arg is VT metadata *)
+              let () = unify ~handle:(Gripers.valid_mutator op)
+                (pos_and_typ target, no_pos (Types.valid_absty data_ty)) in
+              (* The expected argument type is the data type if we're setting
+               * the VT data, otherwise it's a DateTime *)
+              let expected =
+                match field with
+                  | Data -> data_ty
+                  | From | To -> Types.datetime_type
+              in
+              match arguments with
+                | [arg] ->
+                    let () = unify ~handle:(Gripers.valid_mutator_argument op)
+                      (pos_and_typ arg, no_pos expected) in
+                    Types.valid_absty data_ty
+                | _ -> raise (internal_error "Invalid VT mutator argument list length")
             in
 
             (* Demotion operations construct a view of the table as a current-time
@@ -2854,12 +2899,12 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * Usage.t =
                     `Record (Types.make_empty_open_row (lin_any, res_base)),
                     Types.make_table_metadata_unifier (`Transaction))
                 in
-                unify ~handle:(Gripers.transaction_accessor op)
+                unify ~handle:(Gripers.temporal_accessor op)
                       (pos_and_typ target, no_pos expected)
               in
               match op with
-                | Accessor (tbl, field) ->
-                    accessor_ty tbl field
+                | Accessor (tbl, field) -> accessor_ty tbl field
+                | Mutator field -> mutator_ty field
                 | Demotion AtCurrent  ->
                     check_table_ty (); table_view_ty
                 | Demotion AtTime ->

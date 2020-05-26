@@ -120,11 +120,20 @@ let rec metadata_payload_type t =
     | `ForAll (_, t) -> metadata_payload_type t
     | `Application (absty, [`Type typ]) when
         (Abstype.name absty) = "TransactionTime" -> typ
+    | `Application (absty, [`Type typ]) when
+        (Abstype.name absty) = "ValidTime" -> typ
     | `Record (fields, _, _) ->
+        (* SJF: Really need to sort this out *)
         begin
           match StringMap.lookup (TemporalMetadata.Transaction.data_field) fields with
-            | Some (`Present typ) -> typ
-            | _ -> error ("Attempt to deconstruct non-metadata type "^string_of_datatype t)
+            | Some (`Present typ) ->
+                typ
+            | _ ->
+                begin
+                  match StringMap.lookup (TemporalMetadata.Valid.data_field) fields with
+                    | Some (`Present typ) -> typ
+                    | _ -> error ("Attempt to deconstruct non-metadata type "^string_of_datatype t)
+                end
         end
     | `Table (row, _, _, _) -> row
     | t ->
@@ -134,7 +143,8 @@ let metadata_operation_type op t =
   let open TemporalOperation in
   let accessor_type tbl field =
     match tbl with
-      | Transaction ->
+      | Transaction
+      | Valid ->
           begin
             match field with
               | Data -> metadata_payload_type t
@@ -148,6 +158,8 @@ let metadata_operation_type op t =
       Types.make_table_metadata_var (TemporalMetadata.current true)) in
   match op with
     | Accessor (tbl, field) -> accessor_type tbl field
+    | Mutator Data -> metadata_payload_type t
+    | Mutator From | Mutator To -> `Primitive (Primitive.DateTime)
     | Demotion _ -> demotion_type
 
 let rec project_type ?(overstep_quantifiers=true) name t = match (concrete_type t, overstep_quantifiers) with

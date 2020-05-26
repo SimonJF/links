@@ -143,6 +143,7 @@ and type_arg =
     [@@deriving show]
 
 val transaction_absty : typ -> typ
+val valid_absty : typ -> typ
 val make_empty_table_metadata : unit -> meta_md_var
 val make_table_metadata_unifier :
   meta_md_var_basis -> meta_md_var

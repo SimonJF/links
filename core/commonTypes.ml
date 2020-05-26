@@ -357,6 +357,12 @@ module TemporalMetadata = struct
     let from_field = "!ttfrom"
     let to_field = "!ttto"
   end
+
+  module Valid = struct
+    let data_field = "!vtdata"
+    let from_field = "!vtfrom"
+    let to_field = "!vtto"
+  end
 end
 
 module TemporalOperation = struct
@@ -369,6 +375,7 @@ module TemporalOperation = struct
 
   type table_type =
     | Transaction
+    | Valid
     [@@deriving show]
 
   type field = Data | From | To
@@ -376,6 +383,7 @@ module TemporalOperation = struct
 
   type t =
     | Accessor of table_type * field
+    | Mutator  of field (* Mutators only apply to valid-time tables *)
     | Demotion of demotion
     [@@deriving show]
 
@@ -386,6 +394,20 @@ module TemporalOperation = struct
             | From -> "ttFrom"
             | To -> "ttTo"
             | Data -> "ttData"
+        end
+    | Accessor (Valid, field) ->
+        begin
+          match field with
+            | From -> "vtFrom"
+            | To -> "vtTo"
+            | Data -> "vtData"
+        end
+    | Mutator field ->
+        begin
+          match field with
+            | From -> "vtSetFrom"
+            | To -> "vtSetFrom"
+            | Data -> "vtSetData"
         end
     | Demotion d ->
         begin
@@ -401,5 +423,12 @@ module TemporalOperation = struct
             | Data -> TemporalMetadata.Transaction.data_field
             | From -> TemporalMetadata.Transaction.from_field
             | To -> TemporalMetadata.Transaction.to_field
+        end
+    | (Valid, field) ->
+        begin
+          match field with
+            | Data -> TemporalMetadata.Valid.data_field
+            | From -> TemporalMetadata.Valid.from_field
+            | To -> TemporalMetadata.Valid.to_field
         end
 end

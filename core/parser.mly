@@ -341,7 +341,8 @@ let parse_foreign_language pos lang =
 %token TYPE ROW PRESENCE
 %token TRY OTHERWISE RAISE
 %token <string> OPERATOR
-%token USING TTFROM TTTO TTDATA TTCURRENT TTAT
+%token USING TTFROM TTTO TTDATA TTCURRENT TTAT VTFROM VTTO VTDATA
+%token VTSETFROM VTSETTO
 
 %start just_datatype
 %start interactive
@@ -632,8 +633,13 @@ temporal_operation:
 | TTDATA LPAREN exp RPAREN                                     { with_pos $loc (TemporalOp (TemporalOperation.(Accessor (Transaction, Data)), $3, [])) }
 | TTFROM LPAREN exp RPAREN                                     { with_pos $loc (TemporalOp (TemporalOperation.(Accessor (Transaction, From)), $3, [])) }
 | TTTO   LPAREN exp RPAREN                                     { with_pos $loc (TemporalOp (TemporalOperation.(Accessor (Transaction, To)),   $3, [])) }
+| VTDATA LPAREN exp RPAREN                                     { with_pos $loc (TemporalOp (TemporalOperation.(Accessor (Valid, Data)), $3, [])) }
+| VTFROM LPAREN exp RPAREN                                     { with_pos $loc (TemporalOp (TemporalOperation.(Accessor (Valid, From)), $3, [])) }
+| VTTO   LPAREN exp RPAREN                                     { with_pos $loc (TemporalOp (TemporalOperation.(Accessor (Valid, To)),   $3, [])) }
 | TTCURRENT LPAREN exp RPAREN                                  { with_pos $loc (TemporalOp (TemporalOperation.(Demotion AtCurrent),   $3, [])) }
 | TTAT LPAREN exp COMMA exp RPAREN                             { with_pos $loc (TemporalOp (TemporalOperation.(Demotion AtTime), $3, [$5])) }
+| VTSETFROM LPAREN exp COMMA exp RPAREN                        { with_pos $loc (TemporalOp (TemporalOperation.(Mutator From), $3, [$5])) }
+| VTSETTO LPAREN exp COMMA exp RPAREN                          { with_pos $loc (TemporalOp (TemporalOperation.(Mutator To), $3, [$5])) }
 
 arg_spec:
 | LPAREN perhaps_exps RPAREN                                   { $2 }

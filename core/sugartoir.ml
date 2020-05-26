@@ -1117,6 +1117,7 @@ struct
 
                   (* These things should all have been desugared already *)
           | TemporalOp (TemporalOperation.Accessor _, _, _)
+          | TemporalOp (TemporalOperation.Mutator _, _, _)
           | Spawn _
           | Receive _
           | Section (Section.Project _)

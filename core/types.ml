@@ -121,8 +121,17 @@ let transaction_time_metadata = {
   arity      = [pk_type, (lin_any, res_any)]
 }
 
+let valid_time_metadata = {
+  Abstype.id = "ValidTime";
+  name       = "ValidTime";
+  arity      = [pk_type, (lin_any, res_any)]
+}
+
 let transaction_absty typ =
   `Application (transaction_time_metadata, [`Type typ])
+
+let valid_absty typ =
+  `Application (valid_time_metadata, [`Type typ])
 
 let make_empty_table_metadata () = Unionfind.fresh `Undefined
 let make_table_metadata_unifier = Unionfind.fresh
