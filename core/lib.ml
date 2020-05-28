@@ -1149,6 +1149,15 @@ let env : (string * (located_primitive * Types.datatype * pure)) list = [
     datatype "() -> DateTime",
     IMPURE);
 
+  "withValidity",
+  (p3 (fun x v_from v_to ->
+    Value.box_record
+      [(TemporalMetadata.Valid.data_field, x);
+       (TemporalMetadata.Valid.from_field, v_from);
+       (TemporalMetadata.Valid.to_field, v_to)]),
+    datatype "((|r), DateTime, DateTime) -> ValidTime(a)",
+    PURE);
+
   (* Testing *)
   "unsafeCoerce",
   (p1 (fun x -> x),

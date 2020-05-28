@@ -74,6 +74,7 @@ val dom_node     : Abstype.t
 val access_point : Abstype.t
 val socket       : Abstype.t
 val spawn_location : Abstype.t
+val valid_time_metadata : Abstype.t
 val transaction_time_metadata : Abstype.t
 
 type ('t, 'r) session_type_basis =

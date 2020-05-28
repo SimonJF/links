@@ -18,4 +18,6 @@ let alias_env : Types.tycon_environment =
       "EndBang" , `Alias ([], Types.make_endbang_type);
       "Socket"  , `Abstract Types.socket;
       "Location", `Abstract Types.spawn_location;
-      "TransactionTime", `Abstract Types.transaction_time_metadata ]
+      "TransactionTime", `Abstract Types.transaction_time_metadata;
+      "ValidTime", `Abstract Types.valid_time_metadata;
+      ]
