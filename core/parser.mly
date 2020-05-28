@@ -312,7 +312,7 @@ let parse_foreign_language pos lang =
 %token LRARROW
 %token COMMA VBAR DOT DOTDOT COLON COLONCOLON
 %token TABLE TABLEHANDLE TABLEKEYS FROM DATABASE QUERY WITH YIELDS ORDERBY
-%token UPDATE DELETE TTINSERT INSERT VALUES SET RETURNING
+%token UPDATE DELETE TTINSERT VTINSERT INSERT VALUES SET RETURNING
 %token LENS LENSDROP LENSSELECT LENSJOIN DETERMINED BY ON DELETE_LEFT
 %token LENSPUT LENSGET LENSCHECK LENSSERIAL
 %token READONLY DEFAULT
@@ -837,6 +837,7 @@ exp:
 
 insert_keyword:
 | TTINSERT                                                     { TableMode.transaction }
+| VTINSERT                                                     { TableMode.valid }
 | INSERT                                                       { TableMode.current }
 
 database_expression:

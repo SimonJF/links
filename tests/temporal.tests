@@ -179,3 +179,20 @@ tests/temporal/vt-mutate-data-bad.links
 filemode : true
 exit : 1
 stderr : @.*Type error:.*
+
+Valid time insertion
+tests/temporal/vt-insertion.links
+filemode : true
+exit : 0
+
+Valid time insertion (bad #1)
+tests/temporal/vt-insertion-bad-1.links
+filemode : true
+exit : 1
+stderr : @.*Type error:.*
+
+Valid time insertion (bad #2)
+tests/temporal/vt-insertion-bad-2.links
+filemode : true
+exit : 1
+stderr : @.*Type error:.*

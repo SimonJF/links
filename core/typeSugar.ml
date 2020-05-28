@@ -277,6 +277,7 @@ sig
   val delete_outer : griper
 
   val insert_table : griper
+  val valid_time_insert_values : griper
   val insert_values : griper
   val insert_read : griper
   val insert_write : griper
@@ -824,6 +825,23 @@ end
                 code ppr_lt                   ^ nl  () ^
                "while the write row has type" ^ nli () ^
                 code ppr_rt)
+
+    let valid_time_insert_values ~pos ~t1:(lexpr, lt) ~t2:(_,rt) ~error:_ =
+      build_tyvar_names [lt; rt];
+      let ppr_lt = show_type lt in
+      let ppr_rt = show_type rt in
+      die pos ("Valid time insertions require values matching the table " ^
+               "in an insert expression, associated with validity periods," ^
+               "but the values"               ^ nli () ^
+                code lexpr                    ^ nl  () ^
+               "have type"                    ^ nli () ^
+                code ppr_lt                   ^ nl  () ^
+               "while values of type"         ^ nli () ^
+                code ppr_rt                   ^ nl  () ^
+               "were expected."               ^ nl  () ^
+                "Hint: try using"             ^ nli () ^
+                "setValidity(x, from, to)")
+
 
     let insert_read ~pos ~t1:(_, lt) ~t2:(_,rt) ~error:_ =
       build_tyvar_names [lt; rt];
@@ -3075,6 +3093,7 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * Usage.t =
               DBDelete (mode, erase_pat pat, erase from, opt_map erase where), Types.unit_type,
               Usage.combine (usages from) (hide (from_option Usage.empty (opt_map usages where)))
         | DBInsert (mode, into, labels, values, id) ->
+            let open CommonTypes.TableMode in
             let into   = tc into in
             let values = tc values in
             let id = opt_map tc id in
@@ -3083,7 +3102,6 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * Usage.t =
             let needed = `Record (Types.make_empty_open_row (lin_any, res_base)) in
 
             let basis =
-                let open CommonTypes.TableMode in
                 match mode with
                   | Current -> `CurrentNotDemoted
                   | Transaction -> `Transaction
@@ -3104,11 +3122,21 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * Usage.t =
                      StringMap.add name (`Present (Types.fresh_type_variable (lin_any, res_base))) field_env)
                 labels StringMap.empty in
 
-            (* check that the fields in the type of values match the declared labels *)
+            (* Check that the fields in the type of values match the declared labels *)
+            (* In the case of a valid-time insert, we need to be inserting valid-time metadata *)
             let () =
-              unify ~handle:Gripers.insert_values
-                (pos_and_typ values,
-                 no_pos (Types.make_list_type (`Record (field_env, Unionfind.fresh `Closed, false)))) in
+              match mode with
+                | Valid ->
+                    let ty =
+                      `Record (field_env, Unionfind.fresh `Closed, false)
+                        |> Types.valid_absty
+                        |> Types.make_list_type in
+                    unify ~handle:Gripers.valid_time_insert_values (pos_and_typ values, no_pos ty)
+                | _ ->
+                    unify ~handle:Gripers.insert_values
+                      (pos_and_typ values,
+                       no_pos (Types.make_list_type (`Record (field_env, Unionfind.fresh `Closed, false))))
+            in
 
             let needed_env =
               StringMap.map
@@ -3159,6 +3187,7 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * Usage.t =
               DBInsert (mode, erase into, labels, erase values, opt_map erase id), return_type,
               Usage.combine_many [usages into; usages values; from_option Usage.empty (opt_map usages id)]
         | DBUpdate (mode, pat, from, where, set) ->
+            let open CommonTypes.TableMode in
             let pat  = tpc pat in
             let from = tc from in
             let read =  `Record (Types.make_empty_open_row (lin_any, res_base)) in
@@ -3166,7 +3195,6 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * Usage.t =
             let needed = `Record (Types.make_empty_open_row (lin_any, res_base)) in
 
             let basis =
-                let open CommonTypes.TableMode in
                 match mode with
                   | Current -> `CurrentNotDemoted
                   | Transaction -> `Transaction
@@ -3184,7 +3212,16 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * Usage.t =
             in
 
             (* the pattern should match the read type *)
-            let () = unify ~handle:Gripers.update_pattern (ppos_and_typ pat, no_pos read) in
+            (* if we're doing a valid-time update, the pattern should be
+             * valid-time metadata *)
+            let () =
+              let expected =
+                match mode with
+                  | Valid -> Types.valid_absty read
+                  | _ -> read
+              in
+              unify ~handle:Gripers.update_pattern (ppos_and_typ pat, no_pos expected)
+            in
 
             let inner_effects = Types.make_empty_closed_row () in
             let context' = bind_effects (context ++ pattern_env pat) inner_effects in
@@ -3196,6 +3233,7 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * Usage.t =
               opt_iter
                 (fun e -> unify ~handle:Gripers.update_where (pos_and_typ e, no_pos Types.bool_type)) where in
 
+            (* TODO: Go from here *)
             let set, field_env =
               List.fold_right
                 (fun (name, exp) (set, field_env) ->

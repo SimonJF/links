@@ -95,6 +95,7 @@ let keywords = [
  "import"   , IMPORT;
  "insert"   , INSERT;
  "tt_insert", TTINSERT;
+ "vt_insert", VTINSERT;
  "linfun"   , LINFUN;
  "module"   , MODULE;
  "mu"       , MU;
