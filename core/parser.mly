@@ -686,7 +686,7 @@ valid_time_exps:
 | LPAREN labeled_exps RPAREN VALID FROM exp TO exp             { $2, Some $6, Some $8 }
 | LPAREN labeled_exps RPAREN VALID FROM exp                    { $2, Some $6, None    }
 | LPAREN labeled_exps RPAREN VALID TO exp                      { $2, None   , Some $6 }
-| LPAREN labeled_exps RPAREN                                   { $2, None   , None    }
+| labeled_exps                                                 { $1, None   , None    }
 
 mode_not_valid:
 | LLARROW                                                      { TableMode.current }
