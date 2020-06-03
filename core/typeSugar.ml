@@ -3057,6 +3057,7 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * Usage.t =
            unify (pos_and_typ data, (exp_pos lens, Types.make_list_type ltrow)) ~handle:Gripers.lens_put_input;
            LensPutLit (erase lens, erase data, Some Types.unit_type), make_tuple_type [], Usage.combine (usages lens) (usages data)
         | DBDelete (mode, pat, from, where) ->
+            let open CommonTypes.TableMode in
             let pat  = tpc pat in
             let from = tc from in
             let read  = `Record (Types.make_empty_open_row (lin_any, res_base)) in
@@ -3064,7 +3065,6 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * Usage.t =
             let needed = `Record (Types.make_empty_open_row (lin_any, res_base)) in
 
             let basis =
-                let open CommonTypes.TableMode in
                 match mode with
                   | Current -> `CurrentNotDemoted
                   | Transaction -> `Transaction
@@ -3074,7 +3074,13 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * Usage.t =
             let tt = `Table (read, write, needed, md) in
 
             let () = unify ~handle:Gripers.delete_table (pos_and_typ from, no_pos tt) in
-            let () = unify ~handle:Gripers.delete_pattern (ppos_and_typ pat, no_pos read) in
+
+            let () =
+              let expected =
+                match mode with
+                  | Valid -> Types.valid_absty read
+                  | _ -> read in
+              unify ~handle:Gripers.delete_pattern (ppos_and_typ pat, no_pos expected) in
 
             let hide =
               let bs = Env.domain (pattern_env pat) in
