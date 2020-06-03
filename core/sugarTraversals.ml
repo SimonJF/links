@@ -424,7 +424,7 @@ class map =
           let _x_i1 = o#list (fun o -> o#name) _x_i1 in
           let _x_i2 = o#phrase _x_i2 in
           let _x_i3 = o#option (fun o -> o#phrase) _x_i3 in DBInsert ((_mode, _x, _x_i1, _x_i2, _x_i3))
-      | DBUpdate ((_mode, _x, _x_i1, _x_i2, _x_i3)) ->
+      | DBUpdate ((_mode, _x, _x_i1, _x_i2, _x_i3, _x_i4, _x_i5)) ->
           let _x = o#pattern _x in
           let _x_i1 = o#phrase _x_i1 in
           let _x_i2 = o#option (fun o -> o#phrase) _x_i2 in
@@ -433,8 +433,10 @@ class map =
               (fun o (_x, _x_i1) ->
                  let _x = o#name _x in
                  let _x_i1 = o#phrase _x_i1 in (_x, _x_i1))
-              _x_i3
-          in DBUpdate ((_mode, _x, _x_i1, _x_i2, _x_i3))
+              _x_i3 in
+          let _x_i4 = o#option (fun o -> o#phrase) _x_i4 in
+          let _x_i5 = o#option (fun o -> o#phrase) _x_i5
+          in DBUpdate ((_mode, _x, _x_i1, _x_i2, _x_i3, _x_i4, _x_i5))
       | Xml ((_x, _x_i1, _x_i2, _x_i3)) ->
           let _x = o#name _x in
           let _x_i1 =
@@ -1168,7 +1170,7 @@ class fold =
           let o = o#phrase _x in
           let o = o#list (fun o -> o#name) _x_i1 in
           let o = o#phrase _x_i2 in let o = o#option (fun o -> o#phrase) _x_i3 in o
-      | DBUpdate ((_mode, _x, _x_i1, _x_i2, _x_i3)) ->
+      | DBUpdate ((_mode, _x, _x_i1, _x_i2, _x_i3, _x_i4, _x_i5)) ->
           let o = o#pattern _x in
           let o = o#phrase _x_i1 in
           let o = o#option (fun o -> o#phrase) _x_i2 in
@@ -1176,7 +1178,9 @@ class fold =
             o#list
               (fun o (_x, _x_i1) ->
                  let o = o#name _x in let o = o#phrase _x_i1 in o)
-              _x_i3
+              _x_i3 in
+          let o = o#option (fun o -> o#phrase) _x_i4 in
+          let o = o#option (fun o -> o#phrase) _x_i5
           in o
       | Xml ((_x, _x_i1, _x_i2, _x_i3)) ->
           let o = o#name _x in
@@ -1949,7 +1953,7 @@ class fold_map =
           let (o, _x_i2) = o#phrase _x_i2 in
           let (o, _x_i3) = o#option (fun o -> o#phrase) _x_i3
           in (o, (DBInsert ((_mode, _x, _x_i1, _x_i2, _x_i3))))
-      | DBUpdate ((_mode, _x, _x_i1, _x_i2, _x_i3)) ->
+      | DBUpdate ((_mode, _x, _x_i1, _x_i2, _x_i3, _x_i4, _x_i5)) ->
           let (o, _x) = o#pattern _x in
           let (o, _x_i1) = o#phrase _x_i1 in
           let (o, _x_i2) = o#option (fun o -> o#phrase) _x_i2 in
@@ -1958,8 +1962,10 @@ class fold_map =
               (fun o (_x, _x_i1) ->
                  let (o, _x) = o#name _x in
                  let (o, _x_i1) = o#phrase _x_i1 in (o, (_x, _x_i1)))
-              _x_i3
-          in (o, (DBUpdate ((_mode, _x, _x_i1, _x_i2, _x_i3))))
+              _x_i3 in
+          let (o, _x_i4) = o#option (fun o -> o#phrase) _x_i4 in
+          let (o, _x_i5) = o#option (fun o -> o#phrase) _x_i5
+          in (o, (DBUpdate ((_mode, _x, _x_i1, _x_i2, _x_i3, _x_i4, _x_i5))))
       | Xml ((_x, _x_i1, _x_i2, _x_i3)) ->
           let (o, _x) = o#name _x in
           let (o, _x_i1) =

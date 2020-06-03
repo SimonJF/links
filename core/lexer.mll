@@ -127,12 +127,14 @@ let keywords = [
  "switch"   , SWITCH;
  "table"    , TABLE;
  "TableHandle", TABLEHANDLE;
+ "to"       , TO;
  "true"     , TRUE;
- "try"     , TRY;
+ "try"      , TRY;
  "typename" , TYPENAME;
  "update"   , UPDATE;
  "unsafe"   , UNSAFE;
  "using"    , USING;
+ "valid"    , VALID;
  "values"   , VALUES;
  "var"      , VAR;
  "where"    , WHERE;
@@ -246,6 +248,7 @@ rule lex ctxt nl = parse
   | "infixr"                            { FIXITY Associativity.Right }
   | "prefix"                            { FIXITY Associativity.Right }
   | "postfix"                           { FIXITY Associativity.Left }
+  | "to"                                { TO }
   | "ttCurrent"                         { TTCURRENT }
   | "ttAt"                              { TTAT }
   | "ttData"                            { TTDATA }

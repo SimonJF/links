@@ -341,7 +341,7 @@ let parse_foreign_language pos lang =
 %token TYPE ROW PRESENCE
 %token TRY OTHERWISE RAISE
 %token <string> OPERATOR
-%token USING TTFROM TTTO TTDATA TTCURRENT TTAT VTFROM VTTO VTDATA
+%token VALID TO USING TTFROM TTTO TTDATA TTCURRENT TTAT VTFROM VTTO VTDATA
 %token VTSETFROM VTSETTO VTSETDATA
 
 %start just_datatype
@@ -682,11 +682,28 @@ typed_expression:
 | typed_expression COLON datatype                              { with_pos $loc (TypeAnnotation ($1, datatype $3)) }
 | typed_expression COLON datatype LARROW datatype              { with_pos $loc (Upcast ($1, datatype $3, datatype $5)) }
 
+valid_time_exps:
+| LPAREN labeled_exps RPAREN VALID FROM exp TO exp             { $2, Some $6, Some $8 }
+| LPAREN labeled_exps RPAREN VALID FROM exp                    { $2, Some $6, None    }
+| LPAREN labeled_exps RPAREN VALID TO exp                      { $2, None   , Some $6 }
+| LPAREN labeled_exps RPAREN                                   { $2, None   , None    }
+
+mode_not_valid:
+| LLARROW                                                      { TableMode.current }
+| LTLARROW                                                     { TableMode.transaction }
+| LBLARROW                                                     { TableMode.bitemporal }
+
+update_expression:
+| UPDATE LPAREN pattern LVLARROW exp RPAREN
+         perhaps_where SET LPAREN valid_time_exps RPAREN       { let exps, v_from, v_to = $10 in 
+                                                                  with_pos $loc (DBUpdate(TableMode.valid, $3, $5, $7, exps, v_from, v_to)) }
+| UPDATE LPAREN pattern mode_not_valid exp RPAREN
+         perhaps_where
+         SET LPAREN labeled_exps RPAREN                        { with_pos $loc (DBUpdate ($4, $3, $5, $7, $10, None, None)) }
+
 db_expression:
 | DELETE LPAREN table_generator RPAREN perhaps_where           { let mode, pat, phrase = $3 in with_pos $loc (DBDelete (mode, pat, phrase, $5)) }
-| UPDATE LPAREN table_generator RPAREN
-         perhaps_where
-         SET LPAREN labeled_exps RPAREN                        { let mode, pat, phrase = $3 in with_pos $loc (DBUpdate(mode, pat, phrase, $5, $8)) }
+| update_expression                                            { $1 }
 
 /* XML */
 xmlid:

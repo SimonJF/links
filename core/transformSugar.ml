@@ -614,7 +614,7 @@ class transform (env : Types.typing_environment) =
           let (o, values, _) = o#phrase values in
           let (o, id, _) = option o (fun o -> o#phrase) id in
             (o, DBInsert (mode, into, labels, values, id), Types.unit_type)
-      | DBUpdate (mode, p, from, where, set) ->
+      | DBUpdate (mode, p, from, where, set, valid_from, valid_to) ->
           let (o, from, _) = o#phrase from in
           let (o, p) = o#pattern p in
           let (o, where, _) = option o (fun o -> o#phrase) where in
@@ -624,7 +624,9 @@ class transform (env : Types.typing_environment) =
                  let (o, value, _) = o#phrase value in (o, (name, value)))
               set
           in
-            (o, DBUpdate (mode, p, from, where, set), Types.unit_type)
+          let (o, valid_from, _) = option o (fun o -> o#phrase) valid_from in
+          let (o, valid_to, _) = option o (fun o -> o#phrase) valid_to in
+            (o, DBUpdate (mode, p, from, where, set, valid_from, valid_to), Types.unit_type)
       | TemporalOp (op, target, args) ->
           let (o, target, target_ty) = o#phrase target in
           let (o, args, _) = list o (fun o -> o#phrase) args in

@@ -196,3 +196,69 @@ tests/temporal/vt-insertion-bad-2.links
 filemode : true
 exit : 1
 stderr : @.*Type error:.*
+
+Valid time update (1)
+tests/temporal/vt-update.links
+filemode : true
+exit : 0
+
+Valid time update (2)
+tests/temporal/vt-update-2.links
+filemode : true
+exit : 0
+
+Valid time update (3)
+tests/temporal/vt-update-3.links
+filemode : true
+exit : 0
+
+Valid time update (4)
+tests/temporal/vt-update-4.links
+filemode : true
+exit : 0
+
+Valid time update (5)
+tests/temporal/vt-update-5.links
+filemode : true
+exit : 0
+
+Valid time update (6)
+tests/temporal/vt-update-6.links
+filemode : true
+exit : 0
+
+Valid time update (bad #1)
+tests/temporal/vt-update-bad-1.links
+filemode : true
+exit : 1
+stderr : @.*Type error:.*
+
+Valid time update (bad #2)
+tests/temporal/vt-update-bad-2.links
+filemode : true
+exit : 1
+stderr : @.*Type error:.*
+
+Valid time update (bad #3)
+tests/temporal/vt-update-bad-3.links
+filemode : true
+exit : 1
+stderr : @.*Type error:.*
+
+Valid time update (bad #4)
+tests/temporal/vt-update-bad-4.links
+filemode : true
+exit : 1
+stderr : @.*Type error:.*
+
+Valid time update (bad #5)
+tests/temporal/vt-update-bad-5.links
+filemode : true
+exit : 1
+stderr : @.*Type error:.*
+
+Valid time update (bad #6)
+tests/temporal/vt-update-bad-6.links
+filemode : true
+exit : 1
+stderr : @.*Type error:.*

@@ -359,7 +359,7 @@ and phrasenode =
   | DBDelete         of TableMode.t * Pattern.with_pos * phrase * phrase option
   | DBInsert         of TableMode.t * phrase * Name.t list * phrase * phrase option
   | DBUpdate         of TableMode.t * Pattern.with_pos * phrase * phrase option *
-                          (Name.t * phrase) list
+                          (Name.t * phrase) list * phrase option (* valid from *) * phrase option (* valid to *)
   | TemporalOp       of TemporalOperation.t * phrase (* Target *) * phrase list  (* Arguments *)
   | LensLit          of phrase * Lens.Type.t option
   | LensSerialLit    of phrase * string list * Lens.Type.t option
@@ -627,10 +627,12 @@ struct
         union (phrase p)
           (diff (option_map phrase where)
              (pattern pat))
-    | DBUpdate (_, pat, from, where, fields) ->
+    | DBUpdate (_, pat, from, where, fields, valid_from, valid_to) ->
         let pat_bound = pattern pat in
           union_all [phrase from;
                      diff (option_map phrase where) pat_bound;
+                     diff (option_map phrase valid_from) pat_bound;
+                     diff (option_map phrase valid_to) pat_bound;
                      diff (union_map (snd ->- phrase) fields) pat_bound]
     | DoOperation (_, ps, _) -> union_map phrase ps
     | QualifiedVar _ -> empty
