@@ -863,7 +863,7 @@ struct
                 (Database.execute_insert_returning returning insert_query db)
           | _ -> raise (internal_error "insert row into non-database")
         end
-    | Update ((xb, source), where, body) ->
+    | Update ((xb, source), where, body, _valid_from, _valid_to) ->
       begin
         let open Value in
         value env source >>= fun source ->

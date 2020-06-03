@@ -836,7 +836,7 @@ struct
                 | _ -> assert false (* impossible at this point *)
             end
 
-        | Update ((x, source), where, body) ->
+        | Update ((x, source), where, body, valid_from, valid_to) ->
             o#impose_presence_of_effect "wild" Types.unit_type (SSpec special);
             let source, source_t, o = o#value source in
             (* this implicitly checks that source is a table *)
@@ -865,9 +865,20 @@ struct
                   | `Var _  -> raise_ir_type_error "Found presence polymorphism in the result of an update" (SSpec special)
               ) body_record_row;
             let o = o#remove_binder x in
+            let valid_from, o = o#optionu (fun o valid_from ->
+                  let valid_from, t, o = o#computation valid_from in
+                  o#check_eq_types t Types.datetime_type (SSpec special);
+                  valid_from, o
+                )
+               valid_from in
+            let valid_to, o = o#optionu (fun o valid_to ->
+                  let valid_to, t, o = o#computation valid_to in
+                  o#check_eq_types t Types.datetime_type (SSpec special);
+                  valid_to, o
+                )
+               valid_to in
             let o, _ = o#set_allowed_effects outer_effects in
-              Update ((x, source), where, body), Types.unit_type, o
-
+              Update ((x, source), where, body, valid_from, valid_to), Types.unit_type, o
         | Delete ((x, source), where) ->
             o#impose_presence_of_effect "wild" Types.unit_type (SSpec special);
             let source, source_t, o = o#value source in

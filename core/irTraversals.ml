@@ -374,12 +374,15 @@ struct
 	    let rows, _, o = o#value rows in
 	    let returning, _, o = o#value returning in
               InsertReturning(source, rows, returning), Types.unit_type, o
-        | Update ((x, source), where, body) ->
+        | Update ((x, source), where, body, valid_from, valid_to) ->
             let source, _, o = o#value source in
             let x, o = o#binder x in
             let where, _, o = o#option (fun o -> o#computation) where in
             let body, _, o = o#computation body in
-              Update ((x, source), where, body), Types.unit_type, o
+            let valid_from, _, o = o#option (fun o -> o#computation) valid_from in
+            let valid_to, _, o = o#option (fun o -> o#computation) valid_to in
+              Update ((x, source), where, body, valid_from, valid_to),
+                Types.unit_type, o
         | Delete ((x, source), where) ->
             let source, _, o = o#value source in
             let x, o = o#binder x in

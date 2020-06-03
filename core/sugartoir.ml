@@ -138,7 +138,14 @@ sig
   val db_insert : env -> (value sem * value sem) -> tail_computation sem
   val db_insert_returning : env -> (value sem * value sem * value sem) -> tail_computation sem
 
-  val db_update : env -> (CompilePatterns.Pattern.t * value sem * tail_computation sem option * tail_computation sem) -> tail_computation sem
+  val db_update : env ->
+    (CompilePatterns.Pattern.t *
+     value sem *
+     tail_computation sem option *
+     tail_computation sem *
+     tail_computation sem option *
+     tail_computation sem option) -> tail_computation sem
+
   val db_delete : env -> (CompilePatterns.Pattern.t * value sem * tail_computation sem option) -> tail_computation sem
 
   val do_operation : Name.t * (value sem) list * Types.datatype -> tail_computation sem
@@ -620,23 +627,22 @@ struct
 	      (fun returning ->
 		lift (Special (InsertReturning (source, rows, returning)), Types.int_type))))
 
-  let db_update env (p, source, where, body) =
+  let db_update env (p, source, where, body, valid_from, valid_to) =
     let source_type = sem_type source in
     let xt = TypeUtils.table_read_type source_type in
     let xb, x = Var.fresh_var_of_type xt in
+    let wrap = CompilePatterns.let_pattern env p (Variable x, xt) in
       bind source
         (fun source ->
-           match where with
-             | None ->
-                 let body_type = sem_type body in
-                 let body = CompilePatterns.let_pattern env p (Variable x, xt) (reify body, body_type) in
-                   lift (Special (Update ((xb, source), None, body)), Types.unit_type)
-             | Some where ->
-                 let body_type = sem_type body in
-                 let wrap = CompilePatterns.let_pattern env p (Variable x, xt) in
-                 let where = wrap (reify where, Types.bool_type) in
-                 let body = wrap (reify body, body_type) in
-                   lift (Special (Update ((xb, source), Some where, body)), Types.unit_type))
+          let body_type = sem_type body in
+          let body = wrap (reify body, body_type) in
+          let where = OptionUtils.opt_map
+            (fun where -> wrap (reify where, Types.bool_type)) where in
+          let valid_from = OptionUtils.opt_map
+            (fun valid_from -> wrap (reify valid_from, Types.datetime_type)) valid_from in
+          let valid_to = OptionUtils.opt_map
+            (fun valid_to -> wrap (reify valid_to, Types.datetime_type)) valid_to in
+          lift (Special (Update ((xb, source), where, body, valid_from, valid_to)), Types.unit_type))
 
   let db_delete env (p, source, where) =
     let source_type = sem_type source in
@@ -1077,16 +1083,16 @@ struct
               let rows = ev rows in
               let returning = ev returning in
               I.db_insert_returning env (source, rows, returning)
-          | DBUpdate (_, p, source, where, fields) ->
+          | DBUpdate (_, p, source, where, fields, valid_from, valid_to) ->
               let p, penv = CompilePatterns.desugar_pattern (lookup_effects env) p in
               let env' = env ++ penv in
               let source = ev source in
-              let where =
-                opt_map
-                  (fun where -> eval env' where)
-                  where in
+              let eval_opt = opt_map (eval env') in
+              let where = eval_opt where in
+              let valid_from = eval_opt valid_from in
+              let valid_to = eval_opt valid_to in
               let body = eval env' (WithPos.make ~pos (RecordLit (fields, None))) in
-                I.db_update env (p, source, where, body)
+                I.db_update env (p, source, where, body, valid_from, valid_to)
           | DBDelete (_, p, source, where) ->
               let p, penv = CompilePatterns.desugar_pattern (lookup_effects env) p in
               let env' = env ++ penv in

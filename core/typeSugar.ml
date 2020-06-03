@@ -292,6 +292,7 @@ sig
   val update_write : griper
   val update_needed : griper
   val update_outer : griper
+  val update_validity_type : griper
 
   val range_bound : griper
   val range_wild : griper
@@ -889,6 +890,11 @@ end
     let update_table ~pos ~t1:l ~t2:(_,t) ~error:_ =
       build_tyvar_names [snd l; t];
       fixed_type pos "Tables" t l
+
+    let update_validity_type ~pos ~t1:l ~t2:(_,t) ~error:_ =
+      build_tyvar_names [snd l; t];
+      fixed_type pos "Validity period" t l
+
 
     let update_pattern ~pos ~t1:l ~t2:r ~error:_ =
       build_tyvar_names [snd l; snd r];
@@ -3186,7 +3192,7 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * Usage.t =
             in
               DBInsert (mode, erase into, labels, erase values, opt_map erase id), return_type,
               Usage.combine_many [usages into; usages values; from_option Usage.empty (opt_map usages id)]
-        | DBUpdate (mode, pat, from, where, set) ->
+        | DBUpdate (mode, pat, from, where, set, valid_from, valid_to) ->
             let open CommonTypes.TableMode in
             let pat  = tpc pat in
             let from = tc from in
@@ -3227,13 +3233,14 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * Usage.t =
             let context' = bind_effects (context ++ pattern_env pat) inner_effects in
 
             let where = opt_map (type_check context') where in
+            let valid_from = opt_map (type_check context') valid_from in
+            let valid_to = opt_map (type_check context') valid_to in
 
             (* check that the where clause is boolean *)
             let () =
               opt_iter
                 (fun e -> unify ~handle:Gripers.update_where (pos_and_typ e, no_pos Types.bool_type)) where in
 
-            (* TODO: Go from here *)
             let set, field_env =
               List.fold_right
                 (fun (name, exp) (set, field_env) ->
@@ -3261,6 +3268,24 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * Usage.t =
             let () = unify ~handle:Gripers.update_needed
               (no_pos needed, no_pos (`Record (needed_env, Types.fresh_row_variable (lin_any, res_base), false))) in
 
+            (* Valid-time updates:
+             *   1. Unless this is a valid-time update, the "valid from" and "valid to" fields should be empty
+             *   2. If this is indeed a valid-time update, the "valid from" and "valid to" fields should be
+             *      of type DateTime.
+             *)
+            let () =
+              match mode with
+                | Valid | Bitemporal ->
+                    let check_datetime =
+                      opt_iter (fun e ->
+                        unify ~handle:Gripers.update_validity_type
+                        (pos_and_typ e, no_pos Types.datetime_type)) in
+                    check_datetime valid_from;
+                    check_datetime valid_to
+                | _ ->
+                    if not (valid_from = None && valid_to = None) then
+                      Gripers.die pos "Validity may only be specified for valid-time updates." in
+
             (* update is wild *)
             let () =
               let outer_effects =
@@ -3269,9 +3294,18 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * Usage.t =
                 unify ~handle:Gripers.update_outer
                   (no_pos (`Record context.effect_row), no_pos (`Record outer_effects))
             in
-              DBUpdate (mode, erase_pat pat, erase from, opt_map erase where, List.map (fun (n,(p,_,_)) -> n, p) set),
+            let validity_usages =
+              Usage.combine
+                (hide (from_option Usage.empty (opt_map usages valid_from)))
+                (hide (from_option Usage.empty (opt_map usages valid_to)))
+            in
+              DBUpdate (mode, erase_pat pat, erase from, opt_map erase where,
+                List.map (fun (n,(p,_,_)) -> n, p) set,
+                opt_map erase valid_from, opt_map erase valid_to),
               Types.unit_type,
-              Usage.combine_many (usages from :: hide (from_option Usage.empty (opt_map usages where)) :: List.map hide (List.map (usages -<- snd) set))
+              Usage.combine_many (usages from :: hide (from_option Usage.empty (opt_map usages where)) ::
+                validity_usages ::
+                List.map hide (List.map (usages -<- snd) set))
         | Query (range, policy, p, _) ->
             let open QueryPolicy in
             let range, outer_effects, range_usages =

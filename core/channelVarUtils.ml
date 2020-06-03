@@ -84,10 +84,12 @@ let variables_in_computation comp =
         traverse_value v;
         traverse_value r;
 	traverse_value s
-    | Update ((_, v), c_opt, c) ->
+    | Update ((_, v), c_opt, c, v1_opt, v2_opt) ->
         traverse_value v;
         OptionUtils.opt_iter (traverse_computation) c_opt;
-        traverse_computation c
+        traverse_computation c;
+        OptionUtils.opt_iter (traverse_computation) v1_opt;
+        OptionUtils.opt_iter (traverse_computation) v2_opt
     | Delete ((_, v), c_opt) ->
         traverse_value v;
         OptionUtils.opt_iter (traverse_computation) c_opt

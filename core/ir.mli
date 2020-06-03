@@ -87,7 +87,8 @@ and special =
   | Query      of (value * value) option * QueryPolicy.t * computation * Types.datatype
   | InsertRows of value * value
   | InsertReturning of value * value * value
-  | Update     of (binder * value) * computation option * computation
+  | Update     of (binder * value) * computation option * computation *
+      computation option (* valid from *) * computation option (* valid to *)
   | Delete     of (binder * value) * computation option
   | CallCC     of value
   | Select     of Name.t * value
