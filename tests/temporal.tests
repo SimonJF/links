@@ -262,3 +262,20 @@ tests/temporal/vt-update-bad-6.links
 filemode : true
 exit : 1
 stderr : @.*Type error:.*
+
+Valid time deletion
+tests/temporal/vt-deletion.links
+filemode : true
+exit : 0
+
+Valid time update (bad #1)
+tests/temporal/vt-deletion-bad.links
+filemode : true
+exit : 1
+stderr : @.*Type error:.*
+
+Valid time update (bad #2)
+tests/temporal/vt-deletion-bad-2.links
+filemode : true
+exit : 1
+stderr : @.*Type error:.*
