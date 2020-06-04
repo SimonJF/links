@@ -863,7 +863,7 @@ struct
                 (Database.execute_insert_returning returning insert_query db)
           | _ -> raise (internal_error "insert row into non-database")
         end
-    | Update ((xb, source), where, body, _valid_from, _valid_to) ->
+    | Update ((xb, source), where, body, valid_from, valid_to) ->
       begin
         let open Value in
         value env source >>= fun source ->
@@ -890,6 +890,15 @@ struct
               let query =
                 Query.compile_transaction_time_update env
                   ((Var.var_of_binder xb, table, field_types), where, body)
+                  from_field to_field
+                |> db#string_of_query None in
+              let () = ignore (Database.execute_command query db) in
+              apply_cont cont env (`Record [])
+          | ValidTime { from_field; to_field } ->
+              let query =
+                Query.compile_valid_time_update db env
+                  ((Var.var_of_binder xb, table, field_types), where, body,
+                    valid_from, valid_to)
                   from_field to_field
                 |> db#string_of_query None in
               let () = ignore (Database.execute_command query db) in

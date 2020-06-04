@@ -1443,6 +1443,29 @@ let update : ((Ir.var * string) * Q.t option * Q.t) -> Sql.query =
       |> StringMap.to_alist in
     Update { upd_table = table; upd_fields; upd_where }
 
+let valid_time_update :
+  ((Ir.var * string) * Q.t option * Q.t * Q.t option * Q.t option) ->
+  string (* valid from field *) ->
+  string (* valid to field *) ->
+  Sql.query =
+  fun ((_, table), where, body, valid_from, valid_to) from_field to_field ->
+    let open Sql in
+    let upd_where = OptionUtils.opt_map (base []) where in
+    let opt_as_tuple_list field x =
+      OptionUtils.opt_as_list x
+      |> List.map (fun x -> (field, base [] x)) in
+
+    let upd_from = opt_as_tuple_list from_field valid_from in
+    let upd_to = opt_as_tuple_list to_field valid_to in
+
+    let upd_fields =
+      Q.unbox_record body
+      |> StringMap.map (base [])
+      |> StringMap.to_alist in
+    let upd_fields = upd_fields @ upd_from @ upd_to in
+
+    Update { upd_table = table; upd_fields; upd_where }
+
 let transaction_time_update :
     Types.datatype StringMap.t ->
     ((Ir.var * string) * Q.t option * Q.t) ->
@@ -1584,6 +1607,33 @@ let compile_update :
     Debug.print ("Generated update query: " ^ (db#string_of_query None q));
     q
 
+let compile_valid_time_update :
+    Value.database ->
+    Value.env ->
+    ((Ir.var * string * Types.datatype StringMap.t) *
+      Ir.computation option * Ir.computation *
+      Ir.computation option * Ir.computation option) ->
+    string (* valid from field *) ->
+    string (* valid to field *) ->
+    Sql.query =
+  fun db env ((x, table, field_types), where, body, valid_from, valid_to)
+    from_field to_field ->
+    let env =
+      Eval.bind
+        (Eval.env_of_value_env QueryPolicy.Default env)
+        (x, Q.Var (x, field_types)) in
+    let where = opt_map (Eval.norm_comp env) where in
+    let valid_from = opt_map (Eval.norm_comp env) valid_from in
+    let valid_to = opt_map (Eval.norm_comp env) valid_to in
+    let body = Eval.norm_comp env body in
+    let q =
+      valid_time_update
+        ((x, table), where, body, valid_from, valid_to)
+        from_field to_field
+    in
+    Debug.print ("Generated update query: " ^ (db#string_of_query None q));
+    q
+
 let compile_transaction_time_update :
   Value.env ->
   ((Ir.var * string * Types.datatype StringMap.t) * Ir.computation option * Ir.computation) ->
@@ -1595,7 +1645,6 @@ let compile_transaction_time_update :
     let where = opt_map (Eval.norm_comp env) where in
     let body = Eval.norm_comp env body in
     transaction_time_update field_types ((x, table), where, body) tt_from tt_to
-
 
 let compile_delete :
   Value.TemporalState.t ->
