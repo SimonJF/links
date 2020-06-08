@@ -4,4 +4,5 @@ var timetbl = table "timetbl"
   with (foo: String) using valid_time(vt_from, vt_to) from db;
 
 update (x <-v- timetbl)
-  set (foo = vtData(x).foo)
+  where (x.foo == 123)
+  set (foo = "bar")

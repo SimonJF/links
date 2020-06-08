@@ -6,5 +6,5 @@ var timetbl = table "timetbl"
 var currentTime = now();
 query {
   for (x <-v- timetbl)
-    [vtSetData(x, 123)]
+    [(foo = 123)]
 }

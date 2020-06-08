@@ -4,4 +4,5 @@ var timetbl = table "timetbl"
   with (foo: String) using valid_time(vt_from, vt_to) from db;
 
 update (x <-v- timetbl)
-  set ((foo = "bar") valid to now())
+  where (x.foo == "foo") # Current queries don't get temporal MD in the where clause
+  set (foo = "bar")

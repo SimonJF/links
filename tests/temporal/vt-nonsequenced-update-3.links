@@ -4,5 +4,4 @@ var timetbl = table "timetbl"
   with (foo: String) using valid_time(vt_from, vt_to) from db;
 
 update (x <-v- timetbl)
-  where (vtData(x).foo == "foo")
-  set (foo = vtData(x).foo)
+  set ((foo = vtData(x).foo) valid to now())

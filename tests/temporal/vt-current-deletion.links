@@ -4,4 +4,4 @@ var timetbl = table "timetbl"
   with (foo: String) using valid_time(vt_from, vt_to) from db;
 
 delete (x <-v- timetbl)
-  where (x.foo == "foo")
+  where (x == "foo")

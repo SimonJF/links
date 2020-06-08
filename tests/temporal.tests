@@ -153,22 +153,6 @@ tests/temporal/vt-data.links
 filemode : true
 exit : 0
 
-Valid time "to" mutation
-tests/temporal/vt-mutate-to.links
-filemode : true
-exit : 0
-
-Valid time "to" mutation (bad)
-tests/temporal/vt-mutate-to-bad.links
-filemode : true
-exit : 1
-stderr : @.*Type error:.*
-
-Valid time "from" mutation
-tests/temporal/vt-mutate-from.links
-filemode : true
-exit : 0
-
 Valid time data mutation
 tests/temporal/vt-mutate-data.links
 filemode : true
@@ -197,85 +181,92 @@ filemode : true
 exit : 1
 stderr : @.*Type error:.*
 
-Valid time update (1)
-tests/temporal/vt-update.links
+Valid time nonsequenced update (1)
+tests/temporal/vt-nonsequenced-update.links
 filemode : true
 exit : 0
 
-Valid time update (2)
-tests/temporal/vt-update-2.links
+Valid time nonsequenced update (2)
+tests/temporal/vt-nonsequenced-update-2.links
 filemode : true
 exit : 0
 
-Valid time update (3)
-tests/temporal/vt-update-3.links
+Valid time nonsequenced update (3)
+tests/temporal/vt-nonsequenced-update-3.links
 filemode : true
 exit : 0
 
-Valid time update (4)
-tests/temporal/vt-update-4.links
+Valid time current update (1)
+tests/temporal/vt-current-update.links
 filemode : true
 exit : 0
 
-Valid time update (5)
-tests/temporal/vt-update-5.links
+Valid time current update (2)
+tests/temporal/vt-current-update-2.links
 filemode : true
 exit : 0
 
-Valid time update (6)
-tests/temporal/vt-update-6.links
-filemode : true
-exit : 0
-
-Valid time update (bad #1)
-tests/temporal/vt-update-bad-1.links
+Valid time nonsequenced update (bad #1)
+tests/temporal/vt-nonsequenced-update-bad-1.links
 filemode : true
 exit : 1
 stderr : @.*Type error:.*
 
-Valid time update (bad #2)
-tests/temporal/vt-update-bad-2.links
+Valid time nonsequenced update (bad #2)
+tests/temporal/vt-nonsequenced-update-bad-2.links
 filemode : true
 exit : 1
 stderr : @.*Type error:.*
 
-Valid time update (bad #3)
-tests/temporal/vt-update-bad-3.links
+Valid time nonsequenced update (bad #3)
+tests/temporal/vt-nonsequenced-update-bad-3.links
 filemode : true
 exit : 1
 stderr : @.*Type error:.*
 
-Valid time update (bad #4)
-tests/temporal/vt-update-bad-4.links
+Valid time nonsequenced update (bad #4)
+tests/temporal/vt-nonsequenced-update-bad-4.links
 filemode : true
 exit : 1
 stderr : @.*Type error:.*
 
-Valid time update (bad #5)
-tests/temporal/vt-update-bad-5.links
+Valid time nonsequenced update (bad #5)
+tests/temporal/vt-nonsequenced-update-bad-5.links
 filemode : true
 exit : 1
 stderr : @.*Type error:.*
 
-Valid time update (bad #6)
-tests/temporal/vt-update-bad-6.links
+Valid time nonsequenced update (bad #6)
+tests/temporal/vt-nonsequenced-update-bad-6.links
 filemode : true
 exit : 1
 stderr : @.*Type error:.*
 
-Valid time deletion
-tests/temporal/vt-deletion.links
+Valid time current update (bad #1)
+tests/temporal/vt-current-update-bad.links
+filemode : true
+exit : 1
+stderr : @.*Type error:.*
+
+Valid time current update (bad #2)
+tests/temporal/vt-current-update-bad-2.links
+filemode : true
+exit : 1
+stderr : @.*Type error:.*
+
+Valid time current deletion
+tests/temporal/vt-current-deletion.links
 filemode : true
 exit : 0
 
-Valid time update (bad #1)
-tests/temporal/vt-deletion-bad.links
+Valid time current deletion (bad #1)
+tests/temporal/vt-current-deletion-bad.links
 filemode : true
 exit : 1
 stderr : @.*Type error:.*
 
-Valid time update (bad #2)
-tests/temporal/vt-deletion-bad-2.links
+Valid time current deletion (bad #2)
+tests/temporal/vt-current-deletion-bad-2.links
 filemode : true
 exit : 1
 stderr : @.*Type error:.*
