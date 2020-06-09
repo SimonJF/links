@@ -3078,7 +3078,10 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * Usage.t =
             let () =
               let expected =
                 match mode with
-                  | Valid -> Types.valid_absty read
+                  (* We'll add nonsequenced deletions later -- probably with an extra tag
+                   * or something. Anyway, for the time being, current-time deletions don't
+                   * take metadata. *)
+                  (* | Valid -> Types.valid_absty read *)
                   | _ -> read in
               unify ~handle:Gripers.delete_pattern (ppos_and_typ pat, no_pos expected) in
 
@@ -3229,7 +3232,19 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * Usage.t =
             let () =
               let expected =
                 match mode with
-                  | Valid -> Types.valid_absty read
+                  | Valid ->
+                      (* At the moment, we're distinguishing between current and nonsequenced
+                       * updates by the presence of `valid to` or `valid from` fields.
+                       * I think at some point we'll want to be more explicit about this. *)
+
+                      let is_nonsequenced =
+                        OptionUtils.is_some valid_from ||
+                        OptionUtils.is_some valid_to in
+
+                      if is_nonsequenced then
+                        Types.valid_absty read
+                      else
+                        read
                   | _ -> read
               in
               unify ~handle:Gripers.update_pattern (ppos_and_typ pat, no_pos expected)

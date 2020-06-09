@@ -153,17 +153,6 @@ tests/temporal/vt-data.links
 filemode : true
 exit : 0
 
-Valid time data mutation
-tests/temporal/vt-mutate-data.links
-filemode : true
-exit : 0
-
-Valid time data mutation (bad)
-tests/temporal/vt-mutate-data-bad.links
-filemode : true
-exit : 1
-stderr : @.*Type error:.*
-
 Valid time insertion
 tests/temporal/vt-insertion.links
 filemode : true
