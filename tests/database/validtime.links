@@ -1,0 +1,101 @@
+var db = database "links";
+
+var employees =
+  table "employees" with (name: String, salary: Int, position_id: Int)
+  using valid_time(valid_from, valid_to) from db;
+
+var positions =
+  table "positions" with (position_id: Integer, position: String)
+  where position_id readonly from "db";
+
+# SJF: We really should have sugar for this.
+fun hire(name, salary, positionID, startDate, endDate) {
+  vt_insert employees
+    (name, salary, position_id)
+    [withValidity((=name, =salary, position_id = positionID), startDate, endDate)]
+}
+
+fun fire(name) {
+  delete (x <-v- employees)
+    where (x.name == name)
+}
+
+fun promote(name, salary, positionID) {
+  update (x <-v- employees)
+    where (x.name == name)
+    set (position_id = positionID, =salary)
+}
+
+fun lookupAt(pred, time) {
+  query {
+    for (x <-v- employees)
+      where (pred(x) && time >= vtFrom(x) && time < vtTo(x))
+      [vtData(x)]
+  }
+}
+
+fun currentLookup(pred) {
+  lookupAt(pred, now())
+}
+
+fun insertPositions() {
+  insert positions values (position = "PhD student");
+  insert positions values (position = "Postdoc");
+  insert positions values (position = "Lecturer");
+  insert positions values (position = "Reader");
+  insert positions values (position = "Professor");
+}
+
+fun getPositions() {
+  query {
+    for (x <-- positions) [x]
+  }
+}
+
+fun test() {
+
+  insertPositions();
+  var positions = getPositions();
+
+  fun lookupPosition(positionName) {
+    switch (lookup(positionName, positions)) {
+      case Just(x) -> x
+      case Nothing -> error("Invalid position!")
+    }
+  }
+
+  var t1 = now();
+  hire("Alice", 15000, lookupPosition("PhD student"), now(), forever());
+  hire("Bob", 40000, lookupPosition("Lecturer"), now(), forever());
+  var t2 = now();
+  assertEq(lookupAt(fun(x) { true }, t1), []);
+  assertEq(sortBy(fun(x) { x.name }, currentLookup(fun(x) { true })),
+      [
+        (name = "Alice", salary = 15000, lookupPosition("PhD student"));
+        (name = "Bob", salary = 40000, lookupPosition("Lecturer"))
+      ]);
+  promote("Alice", 30000, lookupPosition("Postdoc"));
+  assertEq(lookupAt(fun(x) { true }, t1), []);
+  assertEq(sortBy(fun(x) { x.name }, lookupAt(fun(x) { true }, t2)),
+      [
+        (name = "Alice", salary = 15000, lookupPosition("PhD student"));
+        (name = "Bob", salary = 40000, lookupPosition("Lecturer"))
+      ]); 
+  assertEq(sortBy(fun(x) { x.name }, currentLookup(fun(x) { true })),
+      [
+        (name = "Alice", salary = 30000, lookupPosition("Postdoc"));
+        (name = "Bob", salary = 40000, lookupPosition("Lecturer"))
+      ]);
+  fire("Bob");
+  assertEq(sortBy(fun(x) { x.name }, currentLookup(fun(x) { true })),
+      [
+        (name = "Alice", salary = 30000, lookupPosition("Postdoc"))
+      ]);
+  assertEq(sortBy(fun(x) { x.name }, lookupAt(fun(x) { true }, t2)),
+      [
+        (name = "Alice", salary = 15000, lookupPosition("PhD student"));
+        (name = "Bob", salary = 40000, lookupPosition("Lecturer"))
+      ])
+}
+
+test()
