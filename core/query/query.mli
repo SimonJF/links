@@ -121,10 +121,11 @@ val compile_delete : Value.TemporalState.t -> Value.database -> Value.env ->
   ((Ir.var * string * Types.datatype StringMap.t) * Ir.computation option) ->
   Sql.query
 
+(* Note that temporal insertions defer unwrapping, since
+ * valid-time insertions insert valid-time metadata rather than raw rows *)
 val temporal_insert :
   string -> (* Table name *)
-  string list -> (* Field names *)
-  Value.t list list -> (* Values *)
+  Value.t -> (* Values and columns (wrapped) *)
   Value.TemporalState.t ->
   Sql.query
 

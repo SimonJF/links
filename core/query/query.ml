@@ -1827,44 +1827,6 @@ let compile_delete :
     Debug.print ("Generated delete query: " ^ (db#string_of_query None q));
     q
 
-let rewrite_insert field_names rows state =
-  let open Value.TemporalState in
-  match state with
-    | Current -> (field_names, rows)
-    | TransactionTime { from_field; to_field } ->
-        (* TT insert: Add period-stamping fields.
-         * Values: (from = now, to = forever) *)
-        (* Other than that, straightforward insert. *)
-        let field_names = field_names @ [from_field; to_field] in
-        let now = Sql.Constant (Constant.DateTime.now ()) in
-        let forever = Sql.Constant (Constant.DateTime.forever) in
-        let rows =
-          List.map (fun vs -> vs @ [now; forever]) rows in
-        (field_names, rows)
-    | Demoted _ ->
-        raise (internal_error "Shouldn't be inserting into a demoted table!")
-    | _ -> raise (internal_error "Valid time / Bitemporal inserts not yet supported")
-
-
-let insert_internal table_name field_names rows state_opt =
-  let rows = List.map (List.map (Q.expression_of_base_value ->- base [])) rows in
-  let field_names, rows =
-    match state_opt with
-      | Some state -> rewrite_insert field_names rows state
-      | None -> field_names, rows in
-  Sql.(Insert {
-      ins_table = table_name;
-      ins_fields = field_names;
-      ins_records = `Values rows })
-
-let temporal_insert table_name field_names rows state =
-  insert_internal table_name field_names rows (Some state)
-let insert table_name field_names rows =
-  insert_internal table_name field_names rows None
-
-let show_base db =
-  (base []) ->- (Sql.string_of_base (db#quote_field) (db#show_constant) true)
-
 let row_columns_values v =
   let row_columns : Value.t -> string list = function
     | `List ((`Record fields)::_) -> List.map fst fields
@@ -1879,6 +1841,82 @@ let row_columns_values v =
     | _ -> raise (runtime_type_error "tried to form query row from non-list")
   in
   (row_columns v, row_values v)
+
+let valid_time_row_columns_values from_field to_field v =
+  (* v should be a non-empty list of valid-time metadata. *)
+  let records = Value.unbox_list v in
+  assert (records <> []);
+  let md_from = TemporalMetadata.Valid.from_field in
+  let md_to = TemporalMetadata.Valid.to_field in
+  let md_data = TemporalMetadata.Valid.data_field in
+
+  let fields =
+    List.hd records
+    |> Value.unbox_record
+    |> List.assoc md_data
+    |> Value.unbox_record
+    |> List.map fst in
+  let fields = fields @ [from_field; to_field] in
+
+  let vss =
+    List.map (fun md ->
+      let md = Value.unbox_record md in
+      let from_val = List.assoc md_from md in
+      let to_val = List.assoc md_to md in
+
+      let data =
+        List.assoc md_data md
+          |> Value.unbox_record
+          |> List.map snd in
+      let data = data @ [from_val; to_val] in
+      List.map (Q.expression_of_base_value ->- base []) data
+    ) records in
+
+  (fields, vss)
+
+let rewrite_insert rows state =
+  let open Value.TemporalState in
+
+  let compile_rows =
+    List.map (List.map (Q.expression_of_base_value ->- base [])) in
+
+  match state with
+    | Current ->
+        let (field_names, rows) = row_columns_values rows in
+        (field_names, compile_rows rows)
+    | TransactionTime { from_field; to_field } ->
+        (* TT insert: Add period-stamping fields.
+         * Values: (from = now, to = forever) *)
+        (* Other than that, straightforward insert. *)
+        let (field_names, rows) = row_columns_values rows in
+        let rows = compile_rows rows in
+        let field_names = field_names @ [from_field; to_field] in
+        let now = Sql.Constant (Constant.DateTime.now ()) in
+        let forever = Sql.Constant (Constant.DateTime.forever) in
+        let rows = List.map (fun vs -> vs @ [now; forever]) rows in
+        (field_names, rows)
+    | ValidTime { from_field; to_field } ->
+        valid_time_row_columns_values from_field to_field rows
+    | Demoted _ ->
+        raise (internal_error "Shouldn't be inserting into a demoted table!")
+    | _ -> raise (internal_error "Bitemporal inserts not yet supported")
+
+let insert table_name field_names rows =
+  let rows = List.map (List.map (Q.expression_of_base_value ->- base [])) rows in
+  Sql.(Insert {
+      ins_table = table_name;
+      ins_fields = field_names;
+      ins_records = `Values rows })
+
+let temporal_insert table_name rows state =
+  let (field_names, rows) = rewrite_insert rows state in
+  Sql.(Insert {
+      ins_table = table_name;
+      ins_fields = field_names;
+      ins_records = `Values rows })
+
+let show_base db =
+  (base []) ->- (Sql.string_of_base (db#quote_field) (db#show_constant) true)
 
 let is_list = Q.is_list
 let table_field_types = Q.table_field_types

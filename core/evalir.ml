@@ -820,9 +820,9 @@ struct
           match source, rows with
           | `Table _, `List [] ->  apply_cont cont env (`Record [])
           | `Table { database = (db, _); name = table_name; state; _ }, rows ->
-              let (field_names,vss) = Query.row_columns_values rows in
+              (* let (field_names,vss) = Query.row_columns_values rows in *)
               let query =
-                Query.temporal_insert table_name field_names vss state
+                Query.temporal_insert table_name rows state
                 |> db#string_of_query None in
               Debug.print ("RUNNING INSERT QUERY:\n" ^ query);
               let () = ignore (Database.execute_command query db) in
@@ -850,11 +850,9 @@ struct
               raise (internal_error "InsertReturning: undefined for empty list of rows")
           | `Table { database = (db, _); name = table_name;
                 state; _}, rows, returning ->
-              let (field_names,vss) = Query.row_columns_values rows in
               let returning = Value.unbox_string returning in
               let insert_query =
-                Query.temporal_insert table_name field_names
-                  vss state in
+                Query.temporal_insert table_name rows state in
               let queries = db#make_insert_returning_query returning insert_query
               in
               Debug.print ("RUNNING INSERT ... RETURNING QUERY:\n" ^
