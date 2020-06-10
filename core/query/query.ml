@@ -1443,7 +1443,109 @@ let update : ((Ir.var * string) * Q.t option * Q.t) -> Sql.query =
       |> StringMap.to_alist in
     Update { upd_table = table; upd_fields; upd_where }
 
-let valid_time_update :
+let valid_time_current_update :
+  Types.datatype StringMap.t ->
+  ((Ir.var * string) * Q.t option * Q.t) ->
+  string ->
+  string ->
+  Sql.query =
+  fun table_types ((tbl_var, table), where, body) from_field to_field ->
+    (* Valid time current updates are similar to transaction-time updates
+     * in structure: fetch the current rows, but with updated fields;
+     * insert the updated rows; and close off the previous ones.
+     * There's an extra step, though: ensure any future rows are also
+     * updated. *)
+    let open Sql in
+    let now_const = Constant.DateTime.now () in
+    let sql_now = Constant now_const in
+    let sql_proj field = Project (tbl_var, field) in
+    let sql_binop op x1 x2 = Apply (op, [x1; x2]) in
+    let current_at =
+      sql_binop "&&"
+        (sql_binop "<=" (sql_proj from_field) sql_now)
+        (sql_binop ">" (sql_proj to_field) sql_now) in
+
+    (* Construct select query. Currently a lot is C&P; would be better to
+     * abstract it (in some nice way) *)
+    let table_types =
+      table_types
+        |> StringMap.add from_field (`Primitive Primitive.DateTime)
+        |> StringMap.add to_field (`Primitive Primitive.DateTime) in
+    let field_names =
+      StringMap.to_alist table_types |> List.map fst in
+    let record_fields =
+      match body with
+        | Q.Record fields -> fields
+        | _ -> assert false in
+    let fields_with_time =
+        StringMap.add from_field (Q.Constant now_const) record_fields in
+
+    (* Select either the field name if unspecified, or the updated value
+     * if it is. *)
+    let select_fields =
+      StringMap.mapi (fun k _ ->
+        OptionUtils.opt_map (base []) (StringMap.lookup k fields_with_time)
+        |> OptionUtils.from_option (Project (tbl_var, k))) table_types
+      |> StringMap.to_alist
+      (* Need to swap (col, val) pairs to (val, col) to fit select_clause AST,
+       * which mirrors "SELECT V as K" form in SQL *)
+      |> List.map (fun (k, v) -> (v, k)) in
+    (* Add "current at" clause to predicate *)
+    let sel_where =
+      match where with
+        | Some where -> Sql.Apply ("&&", [base [] where; current_at])
+        | None -> current_at in
+
+    let select =
+      Select (select_fields, [(table, tbl_var)], sel_where, []) in
+
+    (* Generate fresh variable for selection result *)
+    let sel_var = Var.fresh_raw_var () in
+
+    (* Next, we need to insert the results *)
+    let insert =
+      Insert { ins_table = table; ins_fields = field_names;
+        ins_records = `Query sel_var } in
+
+    (* Next: close off the old rows *)
+    let upd_current =
+      let pred =
+        let starts_before_now =
+          sql_binop "<" (sql_proj from_field) sql_now in
+        match where with
+          | Some where -> sql_binop "&&" (base [] where) starts_before_now
+          | _ -> starts_before_now in
+      Update {
+        upd_table = table;
+        upd_fields = [(to_field, sql_now)];
+        upd_where = Some pred
+      } in
+
+    (* Update the future rows.  *)
+    let upd_future =
+      let pred =
+        let in_future =
+          sql_binop ">=" (sql_proj to_field) sql_now in
+        match where with
+          | Some where -> sql_binop "&&" (base [] where) in_future
+          | _ -> in_future in
+
+      Update {
+        upd_table = table;
+        upd_fields =
+          StringMap.to_alist record_fields
+          |> List.map (fun (x, y) -> (x, base [] y));
+        upd_where = Some pred
+      } in
+
+    (* Finally, construct the transaction. *)
+    Transaction ([
+      (* First variable of "with" is unused? *)
+      With (0, select, sel_var, [insert; upd_current; upd_future])
+    ])
+
+
+let valid_time_nonsequenced_update :
   ((Ir.var * string) * Q.t option * Q.t * Q.t option * Q.t option) ->
   string (* valid from field *) ->
   string (* valid to field *) ->
@@ -1585,10 +1687,55 @@ let transaction_time_delete :
 
     (* where x --> where (x && is_current) *)
     let upd_where =
-      OptionUtils.opt_map (fun q -> Apply ("&&", [base [] q; is_current])) where in
+      Some (OptionUtils.opt_app
+        (fun q -> Apply ("&&", [base [] q; is_current]))
+        is_current
+        where) in
 
     let upd_fields = [(tt_to, now)] in
     Update { upd_table = table; upd_fields; upd_where }
+
+
+let valid_time_current_delete :
+  ((Ir.var * string) * Q.t option) ->
+  string -> (* valid from field *)
+  string -> (* valid to field *)
+  Sql.query =
+  fun ((tbl_var, table), where) from_field to_field ->
+    let open Sql in
+    let now_const = Constant.DateTime.now () in
+    let sql_now = Constant now_const in
+    let sql_binop op x1 x2 = Apply (op, [x1; x2]) in
+    let sql_proj field = Project (tbl_var, field) in
+
+    let current_at =
+      sql_binop "&&"
+        (sql_binop "<=" (sql_proj from_field) sql_now)
+        (sql_binop ">" (sql_proj to_field) sql_now) in
+
+    let upd_where =
+      Some (OptionUtils.opt_app
+        (fun q -> sql_binop "&&" (base [] q) current_at)
+        current_at
+        where) in
+
+    let del_where =
+      let valid_in_future =
+        sql_binop ">=" (sql_proj from_field) sql_now in
+      Some (OptionUtils.opt_app
+        (fun q -> sql_binop "&&" (base [] q) valid_in_future)
+        valid_in_future
+        where) in
+
+    let upd =
+      Update {
+        upd_table = table;
+        upd_fields = [(from_field, sql_now)];
+        upd_where
+      } in
+
+    let del = Delete { del_table = table; del_where } in
+    Transaction [ upd; del ]
 
 let compile_update :
     Value.database ->
@@ -1626,12 +1773,20 @@ let compile_valid_time_update :
     let valid_from = opt_map (Eval.norm_comp env) valid_from in
     let valid_to = opt_map (Eval.norm_comp env) valid_to in
     let body = Eval.norm_comp env body in
+    let is_nonsequenced =
+      OptionUtils.is_some valid_from || OptionUtils.is_some valid_to in
+
     let q =
-      valid_time_update
-        ((x, table), where, body, valid_from, valid_to)
-        from_field to_field
+      if is_nonsequenced then
+        valid_time_nonsequenced_update
+          ((x, table), where, body, valid_from, valid_to)
+          from_field to_field
+      else
+        valid_time_current_update
+          field_types
+          ((x, table), where, body) from_field to_field
     in
-    Debug.print ("Generated update query: " ^ (db#string_of_query None q));
+    Debug.print ("Generated valid-time update query: " ^ (db#string_of_query None q));
     q
 
 let compile_transaction_time_update :
@@ -1662,10 +1817,13 @@ let compile_delete :
     let q =
       match state with
         | Current -> delete ((x, table), where)
+        | ValidTime { from_field; to_field } ->
+            valid_time_current_delete
+              ((x, table), where) from_field to_field
         | TransactionTime { to_field; _ } ->
             transaction_time_delete
               ((x, table), where) to_field
-        | _ -> raise (internal_error "Valid / Bitemporal data not yet supported") in
+        | _ -> raise (internal_error "Bitemporal data not yet supported") in
     Debug.print ("Generated delete query: " ^ (db#string_of_query None q));
     q
 
