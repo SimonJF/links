@@ -1525,7 +1525,7 @@ let valid_time_current_update :
     let upd_future =
       let pred =
         let in_future =
-          sql_binop ">=" (sql_proj to_field) sql_now in
+          sql_binop ">=" (sql_proj from_field) sql_now in
         match where with
           | Some where -> sql_binop "&&" (base [] where) in_future
           | _ -> in_future in
@@ -1730,7 +1730,7 @@ let valid_time_current_delete :
     let upd =
       Update {
         upd_table = table;
-        upd_fields = [(from_field, sql_now)];
+        upd_fields = [(to_field, sql_now)];
         upd_where
       } in
 
