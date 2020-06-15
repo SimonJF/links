@@ -71,6 +71,22 @@ and binding =
 and temporal_demotion =
   | DemoteCurrent
   | DemoteAtTime of { from_time: value; to_time: value }
+and valid_time_update =
+  | IrCurrentUpdate
+  | IrSequencedUpdate of { validity_from: value; validity_to: value }
+  | IrNonsequencedUpdate of { from_time: computation option; to_time: computation option }
+and temporal_update =
+  | IrCurrentTimeUpdate
+  | IrValidTimeUpdate of valid_time_update
+  | IrTransactionTimeUpdate
+and valid_time_deletion =
+  | IrCurrentDeletion
+  | IrSequencedDeletion of { validity_from: value; validity_to: value }
+  | IrNonsequencedDeletion
+and temporal_deletion =
+  | IrCurrentTimeDeletion
+  | IrValidTimeDeletion of valid_time_deletion
+  | IrTransactionTimeDeletion
 and special =
   | Wrong      of Types.datatype
   | Database   of value
@@ -87,9 +103,8 @@ and special =
   | Query      of (value * value) option * QueryPolicy.t * computation * Types.datatype
   | InsertRows of value * value
   | InsertReturning of value * value * value
-  | Update     of (binder * value) * computation option * computation *
-      computation option (* valid from *) * computation option (* valid to *)
-  | Delete     of (binder * value) * computation option
+  | Update     of temporal_update * (binder * value) * computation option * computation
+  | Delete     of temporal_deletion * (binder * value) * computation option
   | CallCC     of value
   | Select     of Name.t * value
   | Choice     of value * (binder * computation) name_map

@@ -139,14 +139,18 @@ sig
   val db_insert_returning : env -> (value sem * value sem * value sem) -> tail_computation sem
 
   val db_update : env ->
-    (CompilePatterns.Pattern.t *
+    ([ `CurrentUpdate | `TransactionUpdate | `ValidCurrentUpdate
+       | `ValidSequencedUpdate of (value sem * value sem)
+       | `ValidNonsequencedUpdate of (tail_computation sem option * tail_computation sem option)] *
+     CompilePatterns.Pattern.t *
      value sem *
      tail_computation sem option *
-     tail_computation sem *
-     tail_computation sem option *
-     tail_computation sem option) -> tail_computation sem
+     tail_computation sem) -> tail_computation sem
 
-  val db_delete : env -> (CompilePatterns.Pattern.t * value sem * tail_computation sem option) -> tail_computation sem
+  val db_delete : env -> (
+    [ `CurrentDelete | `TransactionDelete | `ValidCurrentDelete
+      | `ValidSequencedDelete of (value sem * value sem) | `ValidNonsequencedDelete ] *
+    CompilePatterns.Pattern.t * value sem * tail_computation sem option) -> tail_computation sem
 
   val do_operation : Name.t * (value sem) list * Types.datatype -> tail_computation sem
 
@@ -627,7 +631,7 @@ struct
 	      (fun returning ->
 		lift (Special (InsertReturning (source, rows, returning)), Types.int_type))))
 
-  let db_update env (p, source, where, body, valid_from, valid_to) =
+  let db_update env (upd, p, source, where, body) =
     let source_type = sem_type source in
     let xt = TypeUtils.table_read_type source_type in
     let xb, x = Var.fresh_var_of_type xt in
@@ -638,24 +642,54 @@ struct
           let body = wrap (reify body, body_type) in
           let where = OptionUtils.opt_map
             (fun where -> wrap (reify where, Types.bool_type)) where in
-          let valid_from = OptionUtils.opt_map
-            (fun valid_from -> wrap (reify valid_from, Types.datetime_type)) valid_from in
-          let valid_to = OptionUtils.opt_map
-            (fun valid_to -> wrap (reify valid_to, Types.datetime_type)) valid_to in
-          lift (Special (Update ((xb, source), where, body, valid_from, valid_to)), Types.unit_type))
+          let lift_special upd =
+            lift (Special (Update (upd, (xb, source), where, body)), Types.unit_type) in
 
-  let db_delete env (p, source, where) =
+          match upd with
+            | `CurrentUpdate -> lift_special IrCurrentTimeUpdate
+            | `TransactionUpdate -> lift_special IrTransactionTimeUpdate
+            | `ValidCurrentUpdate ->
+                lift_special (IrValidTimeUpdate (IrCurrentUpdate))
+            | `ValidNonsequencedUpdate (valid_from, valid_to) ->
+                let valid_from = OptionUtils.opt_map
+                  (fun valid_from -> wrap (reify valid_from, Types.datetime_type)) valid_from in
+                let valid_to = OptionUtils.opt_map
+                  (fun valid_to -> wrap (reify valid_to, Types.datetime_type)) valid_to in
+                lift_special
+                  (IrValidTimeUpdate (IrNonsequencedUpdate { from_time = valid_from; to_time = valid_to }))
+            | `ValidSequencedUpdate (validity_from, validity_to) ->
+                bind validity_from
+                  (fun validity_from ->
+                    bind validity_to
+                      (fun validity_to ->
+                         lift_special
+                           (IrValidTimeUpdate (IrSequencedUpdate { validity_from; validity_to })))))
+
+  let db_delete env (del, p, source, where) =
     let source_type = sem_type source in
     let xt = TypeUtils.table_read_type source_type in
     let xb, x = Var.fresh_var_of_type xt in
-      bind source
-        (fun source ->
-           match where with
-             | None ->
-                 lift (Special (Delete ((xb, source), None)), Types.unit_type)
-             | Some where ->
-                 let where = CompilePatterns.let_pattern env p (Variable x, xt) (reify where, Types.bool_type) in
-                   lift (Special (Delete ((xb, source), Some where)), Types.unit_type))
+    let wrap tcomp ty = CompilePatterns.let_pattern env p (Variable x, xt) (reify tcomp, ty) in
+    bind source
+      (fun source ->
+        let lift_special del =
+          match where with
+            | None ->
+                lift (Special (Delete (del, (xb, source), None)), Types.unit_type)
+            | Some where ->
+                let where = wrap where Types.bool_type in
+                    lift (Special (Delete (del, (xb, source), Some where)), Types.unit_type) in
+        match del with
+          | `CurrentDelete -> lift_special IrCurrentTimeDeletion
+          | `TransactionDelete -> lift_special IrTransactionTimeDeletion
+          | `ValidCurrentDelete -> lift_special (IrValidTimeDeletion IrCurrentDeletion)
+          | `ValidSequencedDelete (validity_from, validity_to) ->
+              bind validity_from
+                (fun validity_from ->
+                  bind validity_to
+                    (fun validity_to ->
+                       lift_special (IrValidTimeDeletion (IrSequencedDeletion { validity_from; validity_to }))))
+          | `ValidNonsequencedDelete -> lift_special (IrValidTimeDeletion IrNonsequencedDeletion))
 
   let query (range, policy, s) =
     let bs, e = reify s in
@@ -1083,27 +1117,43 @@ struct
               let rows = ev rows in
               let returning = ev returning in
               I.db_insert_returning env (source, rows, returning)
-          | DBUpdate (_, p, source, where, fields, valid_from, valid_to) ->
+          | DBUpdate (upd, p, source, where, fields) ->
               let p, penv = CompilePatterns.desugar_pattern (lookup_effects env) p in
               let env' = env ++ penv in
               let source = ev source in
               let eval_opt = opt_map (eval env') in
               let where = eval_opt where in
-              let valid_from = eval_opt valid_from in
-              let valid_to = eval_opt valid_to in
+              (* Irritating wrapping needed *)
+              let upd =
+                match upd with
+                  | CurrentTimeUpdate -> `CurrentUpdate
+                  | TransactionTimeUpdate -> `TransactionUpdate
+                  | ValidTimeUpdate CurrentUpdate -> `ValidCurrentUpdate
+                  | ValidTimeUpdate (SequencedUpdate { validity_from; validity_to }) ->
+                      let validity_from = ev validity_from in
+                      let validity_to = ev validity_to in
+                      `ValidSequencedUpdate (validity_from, validity_to)
+                  | ValidTimeUpdate (NonsequencedUpdate { from_time; to_time }) ->
+                      let from_time = eval_opt from_time in
+                      let to_time = eval_opt to_time in
+                      `ValidNonsequencedUpdate (from_time, to_time) in
               let body = eval env' (WithPos.make ~pos (RecordLit (fields, None))) in
-                I.db_update env (p, source, where, body, valid_from, valid_to)
-          | DBDelete (_, p, source, where) ->
+                I.db_update env (upd, p, source, where, body)
+          | DBDelete (del, p, source, where) ->
               let p, penv = CompilePatterns.desugar_pattern (lookup_effects env) p in
               let env' = env ++ penv in
               let source = ev source in
-              let where =
-                opt_map
-                  (fun where -> eval env' where)
-                  where
-              in
-                I.db_delete env (p, source, where)
-
+              let eval_opt = opt_map (eval env') in
+              let where = eval_opt where in
+              let del =
+                match del with
+                  | CurrentTimeDeletion -> `CurrentDelete
+                  | TransactionTimeDeletion -> `TransactionDelete
+                  | ValidTimeDeletion CurrentDeletion -> `ValidCurrentDelete
+                  | ValidTimeDeletion NonsequencedDeletion -> `ValidNonsequencedDelete
+                  | ValidTimeDeletion (SequencedDeletion { validity_from; validity_to }) ->
+                      `ValidSequencedDelete (ev validity_from, ev validity_to) in
+                I.db_delete env (del, p, source, where)
           | TemporalOp (TemporalOperation.Demotion d, phr, args) ->
               let phr = ev phr in
               let args = evs args in
