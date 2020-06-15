@@ -159,6 +159,26 @@ class map =
         | ExplicitSpawnLocation p -> ExplicitSpawnLocation (o#phrase p)
         | l -> l
 
+    method temporal_update : temporal_update -> temporal_update =
+      function
+        | ValidTimeUpdate (SequencedUpdate { validity_from; validity_to }) ->
+            let validity_from = o#phrase validity_from in
+            let validity_to = o#phrase validity_to in
+            ValidTimeUpdate (SequencedUpdate { validity_from; validity_to } )
+        | ValidTimeUpdate (NonsequencedUpdate { from_time; to_time }) ->
+            let from_time = o#option (fun o -> o#phrase) from_time in
+            let to_time = o#option (fun o -> o#phrase) to_time in
+            ValidTimeUpdate (NonsequencedUpdate { from_time; to_time })
+        | x -> x
+
+    method temporal_deletion : temporal_deletion -> temporal_deletion =
+      function
+        | ValidTimeDeletion (SequencedDeletion { validity_from; validity_to }) ->
+            let validity_from = o#phrase validity_from in
+            let validity_to = o#phrase validity_to in
+            ValidTimeDeletion (SequencedDeletion { validity_from; validity_to })
+        | x -> x
+
     method phrasenode : phrasenode -> phrasenode =
       function
       | Constant _x -> let _x = o#constant _x in Constant _x
@@ -414,17 +434,19 @@ class map =
           let _x_i1 = o#phrase _x_i1 in
           let _x_i2 = o#option (fun o -> o#typ) _x_i2 in
             LensPutLit ((_x, _x_i1, _x_i2))
-      | DBDelete ((_mode, _x, _x_i1, _x_i2)) ->
+      | DBDelete ((_del, _x, _x_i1, _x_i2)) ->
+          let _del = o#temporal_deletion _del in
           let _x = o#pattern _x in
           let _x_i1 = o#phrase _x_i1 in
           let _x_i2 = o#option (fun o -> o#phrase) _x_i2
-          in DBDelete ((_mode, _x, _x_i1, _x_i2))
+          in DBDelete ((_del, _x, _x_i1, _x_i2))
       | DBInsert ((_mode, _x, _x_i1, _x_i2, _x_i3)) ->
           let _x = o#phrase _x in
           let _x_i1 = o#list (fun o -> o#name) _x_i1 in
           let _x_i2 = o#phrase _x_i2 in
           let _x_i3 = o#option (fun o -> o#phrase) _x_i3 in DBInsert ((_mode, _x, _x_i1, _x_i2, _x_i3))
-      | DBUpdate ((_mode, _x, _x_i1, _x_i2, _x_i3, _x_i4, _x_i5)) ->
+      | DBUpdate ((_upd, _x, _x_i1, _x_i2, _x_i3)) ->
+          let _upd = o#temporal_update _upd in
           let _x = o#pattern _x in
           let _x_i1 = o#phrase _x_i1 in
           let _x_i2 = o#option (fun o -> o#phrase) _x_i2 in
@@ -434,9 +456,7 @@ class map =
                  let _x = o#name _x in
                  let _x_i1 = o#phrase _x_i1 in (_x, _x_i1))
               _x_i3 in
-          let _x_i4 = o#option (fun o -> o#phrase) _x_i4 in
-          let _x_i5 = o#option (fun o -> o#phrase) _x_i5
-          in DBUpdate ((_mode, _x, _x_i1, _x_i2, _x_i3, _x_i4, _x_i5))
+          DBUpdate ((_upd, _x, _x_i1, _x_i2, _x_i3))
       | Xml ((_x, _x_i1, _x_i2, _x_i3)) ->
           let _x = o#name _x in
           let _x_i1 =
@@ -944,6 +964,26 @@ class fold =
       | ExplicitSpawnLocation p -> let o = o#phrase p in o
       | _ -> o
 
+    method temporal_update : temporal_update -> 'self_type =
+      function
+        | ValidTimeUpdate (SequencedUpdate { validity_from; validity_to }) ->
+            let o = o#phrase validity_from in
+            let o = o#phrase validity_to in
+            o
+        | ValidTimeUpdate (NonsequencedUpdate { from_time; to_time }) ->
+            let o = o#option (fun o -> o#phrase) from_time in
+            let o = o#option (fun o -> o#phrase) to_time in
+            o
+        | _ -> o
+
+    method temporal_deletion : temporal_deletion -> 'self_type =
+      function
+        | ValidTimeDeletion (SequencedDeletion { validity_from; validity_to }) ->
+            let o = o#phrase validity_from in
+            let o = o#phrase validity_to in
+            o
+        | _ -> o
+
     method phrasenode : phrasenode -> 'self_type =
       function
       | Constant _x -> let o = o#constant _x in o
@@ -1162,15 +1202,17 @@ class fold =
           let o = o#phrase _x_i1 in
           let o = o#option (fun o -> o#unknown) _x_i2 in
             o
-      | DBDelete ((_mode, _x, _x_i1, _x_i2)) ->
+      | DBDelete ((_del, _x, _x_i1, _x_i2)) ->
+          let o = o#temporal_deletion _del in
           let o = o#pattern _x in
           let o = o#phrase _x_i1 in
           let o = o#option (fun o -> o#phrase) _x_i2 in o
-      | DBInsert ((_mode, _x, _x_i1, _x_i2, _x_i3)) ->
+      | DBInsert ((_del, _x, _x_i1, _x_i2, _x_i3)) ->
           let o = o#phrase _x in
           let o = o#list (fun o -> o#name) _x_i1 in
           let o = o#phrase _x_i2 in let o = o#option (fun o -> o#phrase) _x_i3 in o
-      | DBUpdate ((_mode, _x, _x_i1, _x_i2, _x_i3, _x_i4, _x_i5)) ->
+      | DBUpdate ((_upd, _x, _x_i1, _x_i2, _x_i3)) ->
+          let o = o#temporal_update _upd in
           let o = o#pattern _x in
           let o = o#phrase _x_i1 in
           let o = o#option (fun o -> o#phrase) _x_i2 in
@@ -1179,9 +1221,7 @@ class fold =
               (fun o (_x, _x_i1) ->
                  let o = o#name _x in let o = o#phrase _x_i1 in o)
               _x_i3 in
-          let o = o#option (fun o -> o#phrase) _x_i4 in
-          let o = o#option (fun o -> o#phrase) _x_i5
-          in o
+          o
       | Xml ((_x, _x_i1, _x_i2, _x_i3)) ->
           let o = o#name _x in
           let o =
@@ -1667,6 +1707,26 @@ class fold_map =
       | ExplicitSpawnLocation _p -> let (o, _p) = o#phrase _p in (o, ExplicitSpawnLocation _p)
       | l -> (o, l)
 
+    method temporal_update : temporal_update -> ('self_type * temporal_update) =
+      function
+        | ValidTimeUpdate (SequencedUpdate { validity_from; validity_to }) ->
+            let (o, validity_from) = o#phrase validity_from in
+            let (o, validity_to) = o#phrase validity_to in
+            (o, ValidTimeUpdate (SequencedUpdate { validity_from; validity_to } ))
+        | ValidTimeUpdate (NonsequencedUpdate { from_time; to_time }) ->
+            let (o, from_time) = o#option (fun o -> o#phrase) from_time in
+            let (o, to_time) = o#option (fun o -> o#phrase) to_time in
+            (o, ValidTimeUpdate (NonsequencedUpdate { from_time; to_time }))
+        | x -> (o, x)
+
+    method temporal_deletion : temporal_deletion -> ('self_type * temporal_deletion) =
+      function
+        | ValidTimeDeletion (SequencedDeletion { validity_from; validity_to }) ->
+            let (o, validity_from) = o#phrase validity_from in
+            let (o, validity_to) = o#phrase validity_to in
+            (o, ValidTimeDeletion (SequencedDeletion { validity_from; validity_to }))
+        | x -> (o, x)
+
     method phrasenode : phrasenode -> ('self_type * phrasenode) =
       function
       | Constant _x -> let (o, _x) = o#constant _x in (o, (Constant _x))
@@ -1942,18 +2002,20 @@ class fold_map =
           let (o, _x_i1) = o#phrase _x_i1 in
           let (o, _x_i2) = o#option (fun o -> o#typ) _x_i2 in
             (o, (LensPutLit ((_x, _x_i1, _x_i2))))
-      | DBDelete ((_mode, _x, _x_i1, _x_i2)) ->
+      | DBDelete ((_del, _x, _x_i1, _x_i2)) ->
+          let (o, _del) = o#temporal_deletion _del in
           let (o, _x) = o#pattern _x in
           let (o, _x_i1) = o#phrase _x_i1 in
           let (o, _x_i2) = o#option (fun o -> o#phrase) _x_i2
-          in (o, (DBDelete ((_mode, _x, _x_i1, _x_i2))))
+          in (o, (DBDelete ((_del, _x, _x_i1, _x_i2))))
       | DBInsert ((_mode, _x, _x_i1, _x_i2, _x_i3)) ->
           let (o, _x) = o#phrase _x in
           let (o, _x_i1) = o#list (fun o -> o#name) _x_i1 in
           let (o, _x_i2) = o#phrase _x_i2 in
           let (o, _x_i3) = o#option (fun o -> o#phrase) _x_i3
           in (o, (DBInsert ((_mode, _x, _x_i1, _x_i2, _x_i3))))
-      | DBUpdate ((_mode, _x, _x_i1, _x_i2, _x_i3, _x_i4, _x_i5)) ->
+      | DBUpdate ((_upd, _x, _x_i1, _x_i2, _x_i3)) ->
+          let (o, _upd) = o#temporal_update _upd in
           let (o, _x) = o#pattern _x in
           let (o, _x_i1) = o#phrase _x_i1 in
           let (o, _x_i2) = o#option (fun o -> o#phrase) _x_i2 in
@@ -1963,9 +2025,7 @@ class fold_map =
                  let (o, _x) = o#name _x in
                  let (o, _x_i1) = o#phrase _x_i1 in (o, (_x, _x_i1)))
               _x_i3 in
-          let (o, _x_i4) = o#option (fun o -> o#phrase) _x_i4 in
-          let (o, _x_i5) = o#option (fun o -> o#phrase) _x_i5
-          in (o, (DBUpdate ((_mode, _x, _x_i1, _x_i2, _x_i3, _x_i4, _x_i5))))
+          (o, (DBUpdate ((_upd, _x, _x_i1, _x_i2, _x_i3))))
       | Xml ((_x, _x_i1, _x_i2, _x_i3)) ->
           let (o, _x) = o#name _x in
           let (o, _x_i1) =

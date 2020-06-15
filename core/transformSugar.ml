@@ -257,6 +257,26 @@ class transform (env : Types.typing_environment) =
             (o, ExplicitSpawnLocation phr)
         | l -> (o, l)
 
+    method temporal_update : temporal_update -> ('self_type * temporal_update) =
+      function
+        | ValidTimeUpdate (SequencedUpdate { validity_from; validity_to }) ->
+            let (o, validity_from, _) = o#phrase validity_from in
+            let (o, validity_to, _) = o#phrase validity_to in
+            (o, ValidTimeUpdate (SequencedUpdate { validity_from; validity_to } ))
+        | ValidTimeUpdate (NonsequencedUpdate { from_time; to_time }) ->
+            let (o, from_time, _) = option o (fun o -> o#phrase) from_time in
+            let (o, to_time, _) = option o (fun o -> o#phrase) to_time in
+            (o, ValidTimeUpdate (NonsequencedUpdate { from_time; to_time }))
+        | x -> (o, x)
+
+    method temporal_deletion : temporal_deletion -> ('self_type * temporal_deletion) =
+      function
+        | ValidTimeDeletion (SequencedDeletion { validity_from; validity_to }) ->
+            let (o, validity_from, _) = o#phrase validity_from in
+            let (o, validity_to, _) = o#phrase validity_to in
+            (o, ValidTimeDeletion (SequencedDeletion { validity_from; validity_to }))
+        | x -> (o, x)
+
     method phrasenode : phrasenode -> ('self_type * phrasenode * Types.datatype) =
       function
       | Constant c -> let (o, c, t) = o#constant c in (o, Constant c, t)
@@ -597,9 +617,10 @@ class transform (env : Types.typing_environment) =
           let tbl_lit = { name; record_type = (dtype, Some tbl_ty);
             field_constraints = constraints; keys; temporal_metadata; database = db } in
           (o, TableLit tbl_lit, `Table tbl_ty)
-      | DBDelete (mode, p, from, where) ->
+      | DBDelete (del, p, from, where) ->
           let (o, from, _) = o#phrase from in
           let (o, p) = o#pattern p in
+          let (o, del) = o#temporal_deletion del in
             (* BUG:
 
                We should really reset the environment: variables bound
@@ -608,15 +629,16 @@ class transform (env : Types.typing_environment) =
                The same applies to DBUpdate and Iteration.
             *)
           let (o, where, _) = option o (fun o -> o#phrase) where in
-            (o, DBDelete (mode, p, from, where), Types.unit_type)
+            (o, DBDelete (del, p, from, where), Types.unit_type)
       | DBInsert (mode, into, labels, values, id) ->
           let (o, into, _) = o#phrase into in
           let (o, values, _) = o#phrase values in
           let (o, id, _) = option o (fun o -> o#phrase) id in
             (o, DBInsert (mode, into, labels, values, id), Types.unit_type)
-      | DBUpdate (mode, p, from, where, set, valid_from, valid_to) ->
+      | DBUpdate (upd, p, from, where, set) ->
           let (o, from, _) = o#phrase from in
           let (o, p) = o#pattern p in
+          let (o, upd) = o#temporal_update upd in
           let (o, where, _) = option o (fun o -> o#phrase) where in
           let (o, set) =
             listu o
@@ -624,9 +646,7 @@ class transform (env : Types.typing_environment) =
                  let (o, value, _) = o#phrase value in (o, (name, value)))
               set
           in
-          let (o, valid_from, _) = option o (fun o -> o#phrase) valid_from in
-          let (o, valid_to, _) = option o (fun o -> o#phrase) valid_to in
-            (o, DBUpdate (mode, p, from, where, set, valid_from, valid_to), Types.unit_type)
+            (o, DBUpdate (upd, p, from, where, set), Types.unit_type)
       | TemporalOp (op, target, args) ->
           let (o, target, target_ty) = o#phrase target in
           let (o, args, _) = list o (fun o -> o#phrase) args in

@@ -3056,8 +3056,7 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * Usage.t =
            let ltrow = Lens_type_conv.type_of_lens_phrase_type ~context trow in
            unify (pos_and_typ data, (exp_pos lens, Types.make_list_type ltrow)) ~handle:Gripers.lens_put_input;
            LensPutLit (erase lens, erase data, Some Types.unit_type), make_tuple_type [], Usage.combine (usages lens) (usages data)
-        | DBDelete (mode, pat, from, where) ->
-            let open CommonTypes.TableMode in
+        | DBDelete (del, pat, from, where) ->
             let pat  = tpc pat in
             let from = tc from in
             let read  = `Record (Types.make_empty_open_row (lin_any, res_base)) in
@@ -3065,11 +3064,10 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * Usage.t =
             let needed = `Record (Types.make_empty_open_row (lin_any, res_base)) in
 
             let basis =
-                match mode with
-                  | Current -> `CurrentNotDemoted
-                  | Transaction -> `Transaction
-                  | Valid -> `Valid
-                  | Bitemporal -> `Bitemporal in
+                match del with
+                  | CurrentTimeDeletion -> `CurrentNotDemoted
+                  | TransactionTimeDeletion -> `Transaction
+                  | ValidTimeDeletion _ -> `Valid in
             let md = Types.make_table_metadata_unifier basis in
             let tt = `Table (read, write, needed, md) in
 
@@ -3077,11 +3075,8 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * Usage.t =
 
             let () =
               let expected =
-                match mode with
-                  (* We'll add nonsequenced deletions later -- probably with an extra tag
-                   * or something. Anyway, for the time being, current-time deletions don't
-                   * take metadata. *)
-                  (* | Valid -> Types.valid_absty read *)
+                match del with
+                  | ValidTimeDeletion NonsequencedDeletion -> Types.valid_absty read
                   | _ -> read in
               unify ~handle:Gripers.delete_pattern (ppos_and_typ pat, no_pos expected) in
 
@@ -3091,6 +3086,21 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * Usage.t =
 
             let inner_effects = Types.make_empty_closed_row () in
             let context' = bind_effects (context ++ pattern_env pat) inner_effects in
+
+            (* We need to TC the validity periods for a sequenced deletion. *)
+            let (del, validity_from, validity_to) =
+              match del with
+                | ValidTimeDeletion (SequencedDeletion { validity_from; validity_to }) ->
+                    let check_datetime e =
+                        let e = tc e in
+                        let () = unify ~handle:Gripers.update_validity_type (pos_and_typ e, no_pos Types.datetime_type) in
+                        e in
+                    let validity_from = check_datetime validity_from in
+                    let validity_to = check_datetime validity_to in
+                    ValidTimeDeletion (
+                      SequencedDeletion { validity_from = erase validity_from; validity_to = erase validity_to }),
+                    Some validity_from, Some validity_to
+                | x -> x, None, None in
 
             let where = opt_map (type_check context') where in
             let () =
@@ -3105,8 +3115,13 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * Usage.t =
                 unify ~handle:Gripers.delete_outer
                   (no_pos (`Record context.effect_row), no_pos (`Record outer_effects))
             in
-              DBDelete (mode, erase_pat pat, erase from, opt_map erase where), Types.unit_type,
-              Usage.combine (usages from) (hide (from_option Usage.empty (opt_map usages where)))
+              DBDelete (del, erase_pat pat, erase from, opt_map erase where), Types.unit_type,
+              Usage.combine_many [
+                usages from;
+                hide (from_option Usage.empty (opt_map usages where));
+                hide (from_option Usage.empty (opt_map usages validity_from));
+                hide (from_option Usage.empty (opt_map usages validity_to))
+              ]
         | DBInsert (mode, into, labels, values, id) ->
             let open CommonTypes.TableMode in
             let into   = tc into in
@@ -3201,8 +3216,7 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * Usage.t =
             in
               DBInsert (mode, erase into, labels, erase values, opt_map erase id), return_type,
               Usage.combine_many [usages into; usages values; from_option Usage.empty (opt_map usages id)]
-        | DBUpdate (mode, pat, from, where, set, valid_from, valid_to) ->
-            let open CommonTypes.TableMode in
+        | DBUpdate (upd, pat, from, where, set) ->
             let pat  = tpc pat in
             let from = tc from in
             let read =  `Record (Types.make_empty_open_row (lin_any, res_base)) in
@@ -3210,11 +3224,10 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * Usage.t =
             let needed = `Record (Types.make_empty_open_row (lin_any, res_base)) in
 
             let basis =
-                match mode with
-                  | Current -> `CurrentNotDemoted
-                  | Transaction -> `Transaction
-                  | Valid -> `Valid
-                  | Bitemporal -> `Bitemporal in
+                match upd with
+                  | CurrentTimeUpdate -> `CurrentNotDemoted
+                  | TransactionTimeUpdate -> `Transaction
+                  | ValidTimeUpdate _ -> `Valid in
             let md = Types.make_table_metadata_unifier basis in
             let tt = `Table (read, write, needed, md) in
 
@@ -3226,25 +3239,12 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * Usage.t =
               (fun usages -> Usage.restrict usages bs)
             in
 
-            (* the pattern should match the read type *)
-            (* if we're doing a valid-time update, the pattern should be
-             * valid-time metadata *)
+            (* The pattern should match the read type, unless we're doing a valid time
+             * nonsequenced update, in which case it should be valid-time metadata. *)
             let () =
               let expected =
-                match mode with
-                  | Valid ->
-                      (* At the moment, we're distinguishing between current and nonsequenced
-                       * updates by the presence of `valid to` or `valid from` fields.
-                       * I think at some point we'll want to be more explicit about this. *)
-
-                      let is_nonsequenced =
-                        OptionUtils.is_some valid_from ||
-                        OptionUtils.is_some valid_to in
-
-                      if is_nonsequenced then
-                        Types.valid_absty read
-                      else
-                        read
+                match upd with
+                  | ValidTimeUpdate ( NonsequencedUpdate _ ) -> Types.valid_absty read
                   | _ -> read
               in
               unify ~handle:Gripers.update_pattern (ppos_and_typ pat, no_pos expected)
@@ -3253,9 +3253,36 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * Usage.t =
             let inner_effects = Types.make_empty_closed_row () in
             let context' = bind_effects (context ++ pattern_env pat) inner_effects in
 
+            (* Now, check the 'valid from' and 'valid to' fields, if necessary. *)
+            (* The logic here is quite irritating: we need to return the erased "upd",
+             * along with (optionally) the TCed from- and to- fields for usage calculation. *)
+            let upd, valid_from, valid_to =
+              match upd with
+                | ValidTimeUpdate (NonsequencedUpdate { from_time; to_time } ) ->
+                    let check_datetime =
+                      opt_map (fun e ->
+                        let e = type_check context' e in
+                        let () = unify ~handle:Gripers.update_validity_type (pos_and_typ e, no_pos Types.datetime_type) in
+                        e) in
+                    (* Check that the from- and to- fields are of type DateTime *)
+                    let from_time = check_datetime from_time in
+                    let to_time = check_datetime to_time in
+                    ValidTimeUpdate (NonsequencedUpdate { from_time = OptionUtils.opt_map erase from_time;
+                      to_time = OptionUtils.opt_map erase to_time }),
+                    from_time, to_time
+                | ValidTimeUpdate (SequencedUpdate { validity_from; validity_to }) ->
+                    let check_datetime e =
+                        let e = tc e in
+                        let () = unify ~handle:Gripers.update_where (pos_and_typ e, no_pos Types.datetime_type) in
+                        e in
+                    (* Check that the from- and to- fields are of type DateTime. Note: the pattern is *not* bound here. *)
+                    let validity_from = check_datetime validity_from in
+                    let validity_to = check_datetime validity_to in
+                    ValidTimeUpdate (SequencedUpdate { validity_from = erase validity_from; validity_to = erase validity_to}),
+                    Some validity_from, Some validity_to
+                | x -> x, None, None in
+
             let where = opt_map (type_check context') where in
-            let valid_from = opt_map (type_check context') valid_from in
-            let valid_to = opt_map (type_check context') valid_to in
 
             (* check that the where clause is boolean *)
             let () =
@@ -3289,24 +3316,6 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * Usage.t =
             let () = unify ~handle:Gripers.update_needed
               (no_pos needed, no_pos (`Record (needed_env, Types.fresh_row_variable (lin_any, res_base), false))) in
 
-            (* Valid-time updates:
-             *   1. Unless this is a valid-time update, the "valid from" and "valid to" fields should be empty
-             *   2. If this is indeed a valid-time update, the "valid from" and "valid to" fields should be
-             *      of type DateTime.
-             *)
-            let () =
-              match mode with
-                | Valid | Bitemporal ->
-                    let check_datetime =
-                      opt_iter (fun e ->
-                        unify ~handle:Gripers.update_validity_type
-                        (pos_and_typ e, no_pos Types.datetime_type)) in
-                    check_datetime valid_from;
-                    check_datetime valid_to
-                | _ ->
-                    if not (valid_from = None && valid_to = None) then
-                      Gripers.die pos "Validity may only be specified for valid-time updates." in
-
             (* update is wild *)
             let () =
               let outer_effects =
@@ -3320,9 +3329,8 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * Usage.t =
                 (hide (from_option Usage.empty (opt_map usages valid_from)))
                 (hide (from_option Usage.empty (opt_map usages valid_to)))
             in
-              DBUpdate (mode, erase_pat pat, erase from, opt_map erase where,
-                List.map (fun (n,(p,_,_)) -> n, p) set,
-                opt_map erase valid_from, opt_map erase valid_to),
+              DBUpdate (upd, erase_pat pat, erase from, opt_map erase where,
+                List.map (fun (n,(p,_,_)) -> n, p) set),
               Types.unit_type,
               Usage.combine_many (usages from :: hide (from_option Usage.empty (opt_map usages where)) ::
                 validity_usages ::
