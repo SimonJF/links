@@ -63,9 +63,11 @@ let count_newlines = StringUtils.count '\n'
 let keywords = [
  "alien"    , ALIEN;
  "as"       , AS;
+ "between"  , BETWEEN;
  "by"       , BY;
  "case"     , CASE;
  "client"   , CLIENT;
+ "current"  , CURRENT;
  "database" , DATABASE;
  "default"  , DEFAULT;
  "delete"   , DELETE;
@@ -100,6 +102,7 @@ let keywords = [
  "module"   , MODULE;
  "mu"       , MU;
  "mutual"   , MUTUAL;
+ "nonsequenced", NONSEQUENCED;
  "nu"       , NU;
  "offer"    , OFFER;
  "on"       , ON;
@@ -114,6 +117,7 @@ let keywords = [
  "receive"  , RECEIVE;
  "returning", RETURNING;
  "select"   , SELECT;
+ "sequenced", SEQUENCED;
  "server"   , SERVER;
  "set"      , SET;
  "shallowhandle", SHALLOWHANDLE;

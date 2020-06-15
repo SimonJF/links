@@ -342,7 +342,8 @@ let parse_foreign_language pos lang =
 %token TRY OTHERWISE RAISE
 %token <string> OPERATOR
 %token VALID TO USING TTFROM TTTO TTDATA TTCURRENT TTAT VTFROM VTTO VTDATA
-%token VTSETFROM VTSETTO VTSETDATA
+%token VTSETFROM VTSETTO VTSETDATA SEQUENCED CURRENT NONSEQUENCED
+%token BETWEEN
 
 %start just_datatype
 %start interactive
@@ -694,15 +695,47 @@ mode_not_valid:
 | LBLARROW                                                     { TableMode.bitemporal }
 
 update_expression:
-| UPDATE LPAREN pattern LVLARROW exp RPAREN
-         perhaps_where SET LPAREN valid_time_exps RPAREN       { let exps, v_from, v_to = $10 in 
-                                                                  with_pos $loc (DBUpdate(TableMode.valid, $3, $5, $7, exps, v_from, v_to)) }
+| UPDATE CURRENT LPAREN pattern LVLARROW exp RPAREN
+         perhaps_where SET LPAREN labeled_exps RPAREN          {  let upd = ValidTimeUpdate CurrentUpdate in
+                                                                  with_pos $loc (DBUpdate (upd, $4, $6, $8, $11)) }
+
+| UPDATE NONSEQUENCED LPAREN pattern LVLARROW exp RPAREN
+         perhaps_where SET LPAREN valid_time_exps RPAREN       { let exps, from_time, to_time = $11 in 
+                                                                 let upd = ValidTimeUpdate (NonsequencedUpdate { from_time; to_time }) in
+                                                                 with_pos $loc (DBUpdate (upd, $4, $6, $8, exps)) }
+| UPDATE SEQUENCED LPAREN pattern LVLARROW exp RPAREN          
+         BETWEEN LPAREN exp COMMA exp RPAREN perhaps_where
+         SET LPAREN labeled_exps RPAREN                        { let upd = ValidTimeUpdate (SequencedUpdate { validity_from = $10; validity_to = $12 }) in
+                                                                 with_pos $loc (DBUpdate (upd, $4, $6, $14, $17)) }
 | UPDATE LPAREN pattern mode_not_valid exp RPAREN
          perhaps_where
-         SET LPAREN labeled_exps RPAREN                        { with_pos $loc (DBUpdate ($4, $3, $5, $7, $10, None, None)) }
+         SET LPAREN labeled_exps RPAREN                        { let upd =
+                                                                   match $4 with
+                                                                     | TableMode.Current -> CurrentTimeUpdate
+                                                                     | TableMode.Transaction -> TransactionTimeUpdate
+                                                                     | TableMode.Valid -> assert false
+                                                                     | TableMode.Bitemporal -> assert false (* not yet supported *) in
+                                                                 with_pos $loc (DBUpdate (upd, $3, $5, $7, $10)) }
 
 db_expression:
-| DELETE LPAREN table_generator RPAREN perhaps_where           { let mode, pat, phrase = $3 in with_pos $loc (DBDelete (mode, pat, phrase, $5)) }
+| DELETE CURRENT LPAREN pattern LVLARROW exp RPAREN
+         perhaps_where                                         { let upd = ValidTimeDeletion CurrentDeletion in
+                                                                 with_pos $loc (DBDelete (upd, $4, $6, $8)) }
+| DELETE NONSEQUENCED LPAREN pattern LVLARROW exp RPAREN
+         perhaps_where                                         { let upd = ValidTimeDeletion NonsequencedDeletion in
+                                                                 with_pos $loc (DBDelete (upd, $4, $6, $8)) }
+| DELETE SEQUENCED LPAREN pattern LVLARROW exp RPAREN          
+         BETWEEN LPAREN exp COMMA exp RPAREN perhaps_where     { let upd = ValidTimeDeletion (SequencedDeletion { validity_from = $10; validity_to = $12 }) in
+                                                                 with_pos $loc (DBDelete (upd, $4, $6, $14)) }
+ 
+| DELETE LPAREN pattern mode_not_valid exp RPAREN 
+    perhaps_where                                              { let upd =
+                                                                   match $4 with
+                                                                     | TableMode.Current -> CurrentTimeDeletion
+                                                                     | TableMode.Transaction -> TransactionTimeDeletion
+                                                                     | TableMode.Valid -> assert false
+                                                                     | TableMode.Bitemporal -> assert false (* unsupported *) in
+                                                                 with_pos $loc (DBDelete (upd, $3, $5, $7)) }
 | update_expression                                            { $1 }
 
 /* XML */

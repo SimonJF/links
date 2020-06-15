@@ -311,6 +311,22 @@ and table_lit =
     keys: phrase;
     temporal_metadata: TemporalMetadata.t;
     database: phrase }
+and valid_time_update =
+  | CurrentUpdate
+  | SequencedUpdate of { validity_from: phrase; validity_to: phrase }
+  | NonsequencedUpdate of { from_time: phrase option; to_time: phrase option }
+and temporal_update =
+  | CurrentTimeUpdate
+  | ValidTimeUpdate of valid_time_update
+  | TransactionTimeUpdate
+and valid_time_deletion =
+  | CurrentDeletion
+  | SequencedDeletion of { validity_from: phrase; validity_to: phrase }
+  | NonsequencedDeletion
+and temporal_deletion =
+  | CurrentTimeDeletion
+  | ValidTimeDeletion of valid_time_deletion
+  | TransactionTimeDeletion
 and phrasenode =
   | Constant         of Constant.t
   | Var              of Name.t
@@ -356,10 +372,12 @@ and phrasenode =
   | Receive          of (Pattern.with_pos * phrase) list * Types.datatype option
   | DatabaseLit      of phrase * (phrase option * phrase option)
   | TableLit         of table_lit
-  | DBDelete         of TableMode.t * Pattern.with_pos * phrase * phrase option
+  | DBDelete         of temporal_deletion *
+                        Pattern.with_pos * phrase * phrase option
   | DBInsert         of TableMode.t * phrase * Name.t list * phrase * phrase option
-  | DBUpdate         of TableMode.t * Pattern.with_pos * phrase * phrase option *
-                          (Name.t * phrase) list * phrase option (* valid from *) * phrase option (* valid to *)
+  | DBUpdate         of temporal_update *
+                        Pattern.with_pos * phrase * phrase option *
+                          (Name.t * phrase) list
   | TemporalOp       of TemporalOperation.t * phrase (* Target *) * phrase list  (* Arguments *)
   | LensLit          of phrase * Lens.Type.t option
   | LensSerialLit    of phrase * string list * Lens.Type.t option
@@ -623,17 +641,35 @@ struct
     | Offer (p, cases, _) -> union (phrase p) (union_map case cases)
     | CP cp -> cp_phrase cp
     | Receive (cases, _) -> union_map case cases
-    | DBDelete (_, pat, p, where) ->
-        union (phrase p)
-          (diff (option_map phrase where)
-             (pattern pat))
-    | DBUpdate (_, pat, from, where, fields, valid_from, valid_to) ->
+    | DBDelete (upd, pat, p, where) ->
+        let del =
+          match upd with
+            | ValidTimeDeletion (SequencedDeletion { validity_from; validity_to }) ->
+                (* Note: validity periods cannot refer to the pattern. *)
+                union (phrase validity_from) (phrase validity_to)
+            | _ -> empty in
+        union del
+          (union (phrase p)
+            (diff (option_map phrase where)
+             (pattern pat)))
+    | DBUpdate (upd, pat, from, where, fields) ->
+        let upd =
+          match upd with
+            | ValidTimeUpdate (SequencedUpdate { validity_from; validity_to }) ->
+                union (phrase validity_from) (phrase validity_to)
+            | ValidTimeUpdate (NonsequencedUpdate { from_time; to_time }) ->
+                (* Nonsequenced updates *can* refer to the pattern, however. *)
+                (diff
+                  (union
+                    (option_map phrase from_time)
+                    (option_map phrase to_time))
+                  (pattern pat))
+            | _ -> empty in
         let pat_bound = pattern pat in
-          union_all [phrase from;
-                     diff (option_map phrase where) pat_bound;
-                     diff (option_map phrase valid_from) pat_bound;
-                     diff (option_map phrase valid_to) pat_bound;
-                     diff (union_map (snd ->- phrase) fields) pat_bound]
+        union_all [ upd;
+                    phrase from;
+                    diff (option_map phrase where) pat_bound;
+                    diff (union_map (snd ->- phrase) fields) pat_bound]
     | DoOperation (_, ps, _) -> union_map phrase ps
     | QualifiedVar _ -> empty
     | TryInOtherwise (p1, pat, p2, p3, _ty) ->
