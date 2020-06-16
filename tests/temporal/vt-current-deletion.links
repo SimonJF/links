@@ -3,5 +3,5 @@ var db = database "timedb";
 var timetbl = table "timetbl"
   with (foo: String) using valid_time(vt_from, vt_to) from db;
 
-delete (x <-v- timetbl)
+delete current (x <-v- timetbl)
   where (x.foo == "foo")

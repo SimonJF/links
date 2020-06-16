@@ -185,6 +185,11 @@ tests/temporal/vt-nonsequenced-update-3.links
 filemode : true
 exit : 0
 
+Valid time nonsequenced update (4)
+tests/temporal/vt-nonsequenced-update-4.links
+filemode : true
+exit : 0
+
 Valid time current update (1)
 tests/temporal/vt-current-update.links
 filemode : true
