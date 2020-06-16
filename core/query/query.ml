@@ -1755,36 +1755,40 @@ let compile_update :
     q
 
 let compile_valid_time_update :
+    Ir.valid_time_update ->
     Value.database ->
     Value.env ->
     ((Ir.var * string * Types.datatype StringMap.t) *
-      Ir.computation option * Ir.computation *
-      Ir.computation option * Ir.computation option) ->
+      Ir.computation option * Ir.computation) ->
     string (* valid from field *) ->
     string (* valid to field *) ->
     Sql.query =
-  fun db env ((x, table, field_types), where, body, valid_from, valid_to)
+  fun upd db env ((x, table, field_types), where, body)
     from_field to_field ->
     let env =
       Eval.bind
         (Eval.env_of_value_env QueryPolicy.Default env)
         (x, Q.Var (x, field_types)) in
     let where = opt_map (Eval.norm_comp env) where in
-    let valid_from = opt_map (Eval.norm_comp env) valid_from in
-    let valid_to = opt_map (Eval.norm_comp env) valid_to in
     let body = Eval.norm_comp env body in
-    let is_nonsequenced =
-      OptionUtils.is_some valid_from || OptionUtils.is_some valid_to in
 
     let q =
-      if is_nonsequenced then
-        valid_time_nonsequenced_update
-          ((x, table), where, body, valid_from, valid_to)
-          from_field to_field
-      else
-        valid_time_current_update
-          field_types
-          ((x, table), where, body) from_field to_field
+      let open Ir in
+      match upd with
+        | IrCurrentUpdate ->
+            valid_time_current_update
+              field_types
+              ((x, table), where, body) from_field to_field
+        | IrSequencedUpdate { validity_from; validity_to } ->
+            let _ = validity_from in
+            let _ = validity_to in
+            failwith "Not implemented yet."
+        | IrNonsequencedUpdate { from_time; to_time } ->
+          let from_time = opt_map (Eval.norm_comp env) from_time in
+          let to_time = opt_map (Eval.norm_comp env) to_time in
+          valid_time_nonsequenced_update
+            ((x, table), where, body, from_time, to_time)
+            from_field to_field
     in
     Debug.print ("Generated valid-time update query: " ^ (db#string_of_query None q));
     q
@@ -1802,12 +1806,13 @@ let compile_transaction_time_update :
     transaction_time_update field_types ((x, table), where, body) tt_from tt_to
 
 let compile_delete :
+  Ir.temporal_deletion ->
   Value.TemporalState.t ->
   Value.database ->
   Value.env ->
  ((Ir.var * string * Types.datatype StringMap.t) * Ir.computation option) ->
   Sql.query =
-  fun state db env ((x, table, field_types), where) ->
+  fun del state db env ((x, table, field_types), where) ->
     let open Value.TemporalState in
     let env =
       Eval.bind
@@ -1818,8 +1823,20 @@ let compile_delete :
       match state with
         | Current -> delete ((x, table), where)
         | ValidTime { from_field; to_field } ->
-            valid_time_current_delete
-              ((x, table), where) from_field to_field
+            let open Ir in
+            begin
+              match del with
+                | IrValidTimeDeletion (IrCurrentDeletion) ->
+                    valid_time_current_delete
+                      ((x, table), where) from_field to_field
+                | IrValidTimeDeletion (IrNonsequencedDeletion) ->
+                    failwith "Not implemented yet"
+                | IrValidTimeDeletion (IrSequencedDeletion { validity_from; validity_to }) ->
+                    let _ = validity_from in
+                    let _ = validity_to in
+                    failwith "Not implemented yet"
+                | _ -> assert false
+            end
         | TransactionTime { to_field; _ } ->
             transaction_time_delete
               ((x, table), where) to_field

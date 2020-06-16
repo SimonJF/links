@@ -108,16 +108,18 @@ val compile_update :
   Sql.query
 
 val compile_valid_time_update :
+  Ir.valid_time_update ->
   Value.database ->
   Value.env ->
   ((Ir.var * string * Types.datatype StringMap.t) *
-    Ir.computation option * Ir.computation * Ir.computation option *
-    Ir.computation option) ->
+    Ir.computation option * Ir.computation) ->
   string (* from field *) ->
   string (* to field *) ->
   Sql.query
 
-val compile_delete : Value.TemporalState.t -> Value.database -> Value.env ->
+val compile_delete :
+  Ir.temporal_deletion ->
+  Value.TemporalState.t -> Value.database -> Value.env ->
   ((Ir.var * string * Types.datatype StringMap.t) * Ir.computation option) ->
   Sql.query
 

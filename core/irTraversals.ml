@@ -47,6 +47,8 @@ module type IR_VISITOR = sig
 
     method tail_computation :
       tail_computation -> (tail_computation * Types.datatype * 'self_type)
+    method temporal_update : temporal_update -> (temporal_update * 'self_type)
+    method temporal_deletion : temporal_deletion -> (temporal_deletion * 'self_type)
     method special : special -> (special * Types.datatype * 'self_type)
     method bindings : binding list -> (binding list * 'self_type)
     method computation : computation -> (computation * Types.datatype * 'self_type)
@@ -163,6 +165,26 @@ struct
 
     (* method closure_var : var -> (var * datatype * 'self_type) = *)
     (*   fun var -> (var, o#lookup_closure_type var, o) *)
+
+    method temporal_update : temporal_update -> (temporal_update * 'self_type) =
+      function
+        | IrValidTimeUpdate (IrNonsequencedUpdate { from_time; to_time }) ->
+            let from_time, _, o = o#option (fun o -> o#computation) from_time in
+            let to_time, _, o = o#option (fun o -> o#computation) to_time in
+            IrValidTimeUpdate (IrNonsequencedUpdate { from_time; to_time }), o
+        | IrValidTimeUpdate (IrSequencedUpdate { validity_from; validity_to }) ->
+            let validity_from, _, o = o#value validity_from in
+            let validity_to, _, o = o#value validity_to in
+            IrValidTimeUpdate (IrSequencedUpdate { validity_from; validity_to }), o
+        | x -> x, o
+
+    method temporal_deletion : temporal_deletion -> (temporal_deletion * 'self_type) =
+      function
+        | IrValidTimeDeletion (IrSequencedDeletion { validity_from; validity_to }) ->
+            let validity_from, _, o = o#value validity_from in
+            let validity_to, _, o = o#value validity_to in
+            IrValidTimeDeletion (IrSequencedDeletion { validity_from; validity_to }), o
+        | x -> x, o
 
     method value : value -> (value * datatype * 'self_type) =
       function
@@ -367,27 +389,27 @@ struct
               Query (range, policy, e, t), t, o
         | InsertRows (source, rows) ->
             let source, _, o = o#value source in
-	    let rows, _, o = o#value rows in
-              InsertRows(source, rows), Types.unit_type, o
+            let rows, _, o = o#value rows in
+            InsertRows(source, rows), Types.unit_type, o
         | InsertReturning (source, rows, returning) ->
             let source, _, o = o#value source in
-	    let rows, _, o = o#value rows in
-	    let returning, _, o = o#value returning in
-              InsertReturning(source, rows, returning), Types.unit_type, o
-        | Update ((x, source), where, body, valid_from, valid_to) ->
+            let rows, _, o = o#value rows in
+            let returning, _, o = o#value returning in
+            InsertReturning(source, rows, returning), Types.unit_type, o
+        | Update (upd, (x, source), where, body) ->
+            let upd, o = o#temporal_update upd in
             let source, _, o = o#value source in
             let x, o = o#binder x in
             let where, _, o = o#option (fun o -> o#computation) where in
             let body, _, o = o#computation body in
-            let valid_from, _, o = o#option (fun o -> o#computation) valid_from in
-            let valid_to, _, o = o#option (fun o -> o#computation) valid_to in
-              Update ((x, source), where, body, valid_from, valid_to),
+              Update (upd, (x, source), where, body),
                 Types.unit_type, o
-        | Delete ((x, source), where) ->
+        | Delete (del, (x, source), where) ->
+            let del, o = o#temporal_deletion del in
             let source, _, o = o#value source in
             let x, o = o#binder x in
             let where, _, o = o#option (fun o -> o#computation) where in
-              Delete ((x, source), where), Types.unit_type, o
+              Delete (del, (x, source), where), Types.unit_type, o
         | CallCC v ->
             let v, t, o = o#value v in
               CallCC v, deconstruct (return_type ~overstep_quantifiers:true) t, o

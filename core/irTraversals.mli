@@ -38,6 +38,8 @@ sig
 
     method tail_computation :
       tail_computation -> (tail_computation * Types.datatype * 'self_type)
+    method temporal_update : temporal_update -> (temporal_update * 'self_type)
+    method temporal_deletion : temporal_deletion -> (temporal_deletion * 'self_type)
     method special : special -> (special * Types.datatype * 'self_type)
     method bindings : binding list -> (binding list * 'self_type)
     method computation : computation -> (computation * Types.datatype * 'self_type)

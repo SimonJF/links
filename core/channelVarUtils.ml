@@ -84,13 +84,28 @@ let variables_in_computation comp =
         traverse_value v;
         traverse_value r;
 	traverse_value s
-    | Update ((_, v), c_opt, c, v1_opt, v2_opt) ->
+    | Update (upd, (_, v), c_opt, c) ->
+        begin
+          match upd with
+            | IrValidTimeUpdate (IrSequencedUpdate { validity_from; validity_to }) ->
+                traverse_value validity_from;
+                traverse_value validity_to
+            | IrValidTimeUpdate (IrNonsequencedUpdate { from_time; to_time }) ->
+                OptionUtils.opt_iter (traverse_computation) from_time;
+                OptionUtils.opt_iter (traverse_computation) to_time
+            | _ -> ()
+        end;
         traverse_value v;
         OptionUtils.opt_iter (traverse_computation) c_opt;
-        traverse_computation c;
-        OptionUtils.opt_iter (traverse_computation) v1_opt;
-        OptionUtils.opt_iter (traverse_computation) v2_opt
-    | Delete ((_, v), c_opt) ->
+        traverse_computation c
+    | Delete (del, (_, v), c_opt) ->
+        begin
+          match del with
+            | IrValidTimeDeletion (IrSequencedDeletion { validity_from; validity_to }) ->
+                traverse_value validity_from;
+                traverse_value validity_to
+            | _ -> ()
+        end;
         traverse_value v;
         OptionUtils.opt_iter (traverse_computation) c_opt
     | Handle h -> traverse_handler h

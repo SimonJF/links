@@ -861,7 +861,7 @@ struct
                 (Database.execute_insert_returning returning insert_query db)
           | _ -> raise (internal_error "insert row into non-database")
         end
-    | Update ((xb, source), where, body, valid_from, valid_to) ->
+    | Update (upd, (xb, source), where, body) ->
       begin
         let open Value in
         value env source >>= fun source ->
@@ -893,17 +893,20 @@ struct
               let () = ignore (Database.execute_command query db) in
               apply_cont cont env (`Record [])
           | ValidTime { from_field; to_field } ->
+              let upd =
+                match upd with
+                  | IrValidTimeUpdate upd -> upd
+                  | _ -> assert false in
               let query =
-                Query.compile_valid_time_update db env
-                  ((Var.var_of_binder xb, table, field_types), where, body,
-                    valid_from, valid_to)
+                Query.compile_valid_time_update upd db env
+                  ((Var.var_of_binder xb, table, field_types), where, body)
                   from_field to_field
                 |> db#string_of_query None in
               let () = ignore (Database.execute_command query db) in
               apply_cont cont env (`Record [])
           | _ -> raise (internal_error "Valid / Bitemporal data not yet supported")
       end
-    | Delete ((xb, source), where) ->
+    | Delete (del, (xb, source), where) ->
         value env source >>= fun source ->
         begin
         let open Value in
@@ -916,7 +919,7 @@ struct
           | _ -> assert false
         end >>= fun (db, table, state, field_types) ->
       let delete_query =
-        Query.compile_delete state db env
+        Query.compile_delete del state db env
           ((Var.var_of_binder xb, table, field_types), where)
         |> db#string_of_query None in
       let () = ignore (Database.execute_command delete_query db) in
