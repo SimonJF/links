@@ -1830,7 +1830,15 @@ let compile_delete :
                     valid_time_current_delete
                       ((x, table), where) from_field to_field
                 | IrValidTimeDeletion (IrNonsequencedDeletion) ->
-                    failwith "Not implemented yet"
+                    (* TODO: I think this should be the same logic
+                     * as deletion. The difference is that the `where` clause
+                     * is operating on temporal metadata, so we need to add some
+                     * logic to ensure that vtData / vtFrom / vtTo are supported
+                     * in the evaluator.
+                     *
+                     * How to do that remains to be seen. I've had a few ideas,
+                     * but it requires more investigation. *)
+                    failwith "unimplemented"
                 | IrValidTimeDeletion (IrSequencedDeletion { validity_from; validity_to }) ->
                     let _ = validity_from in
                     let _ = validity_to in
