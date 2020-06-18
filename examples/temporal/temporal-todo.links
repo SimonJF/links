@@ -32,37 +32,48 @@ fun deleteItem(id) server {
     where (x.id == id)
 }
 
-### Note: The following two functions work, but they're rather more
-### low-level than one might hope. I plan to address this using
-### "demotion" views, which allow us to take a temporal table,
-### and time-slice it down to a current-time table.
 fun getAt(date) {
+  var tbl = ttAt(todoTbl, date);
   query {
-    for (x <-t- todoTbl)
-      where (ttFrom(x) <= date && date < ttTo(x))
-      [ttData(x)]
+    for (x <-- tbl)
+      [x]
   }
 }
 
 fun getCurrent() {
+  var tbl = ttCurrent(todoTbl);
   query {
-    for (x <-t- todoTbl)
-      where (ttTo(x) == forever())
-      [ttData(x)]
+    for (x <-- tbl)
+      [x]
   }
+}
+
+fun getTimes() {
+  var times =
+    query {
+      for (x <-t- todoTbl)
+        [ttFrom(x)]
+    };
+  var times = sortBy(fun(x) { x }, times);
+  map(show, times)
+}
+
+# Hack: Still need to implement "now()" and date formatting on the client.
+fun serverNow() server {
+  show(now())
 }
 
 # MVU Definitions
 
-typename Model = (items: [Item], newItem: String, timeBox: String);
+typename Model = (items: [Item], newItem: String, times: [String]);
 typename ID = Int;
 
 typename Message =
   [| UpdateBox:String | Submit | ToggleDone:ID | Delete:ID
-   | UpdateTime:String | SubmitTime | SubmitNow |];
+   | SubmitTime:String | SubmitNow |];
 
 fun initialModel(items) {
-  (=items, newItem="", timeBox=show(now()))
+  (=items, newItem="", times = getTimes())
 }
 
 fun updt(msg, model) {
@@ -76,17 +87,18 @@ fun updt(msg, model) {
             (x with done = not(x.done))
           } else { x }
         }, model.items);
-      (model with =items)
+      (model with =items, times = model.times ++ [serverNow()])
     case Delete(id) ->
       var items = filter(fun(x) { x.id <> id }, model.items);
       deleteItem(id);
-      (model with =items)
+      (model with =items, times = model.times ++ [serverNow()])
     case Submit ->
       var item = newItem(model.newItem);
-      (model with newItem = "", items = model.items ++ [item])
-    case UpdateTime(time) -> (model with timeBox = time)
-    case SubmitTime ->
-      redirect("/home?at=" ^^ model.timeBox);
+      (model with newItem = "",
+       items = model.items ++ [item],
+       times = model.times ++ [serverNow()])
+    case SubmitTime(time) ->
+      redirect("/home?at=" ^^ time);
       model
     case SubmitNow ->
       redirect("/home");
@@ -133,16 +145,18 @@ fun view(model) {
       div(class("form-group mx-sm-3 mb-2"),
         button(type("button") +@ class("btn btn-primary") +@ onClick(fun() { Submit }), textNode("New item"))));
 
-  var timeTravelBox =
-      h1(a0, textNode("Time-travel")) +*
-      div(class("form-inline"),
-        div(class("form-group mx-sm-8 mb-4"),
-          input(type("text") +@ class("form-control") +@ onInput(fun(str) { UpdateTime(str) }) +@ value(model.timeBox), h0)) +*
-        div(class("form-group mx-sm-3 mb-2"),
-          button(type("button") +@ class("btn btn-primary") +@ onClick(fun() { SubmitTime }), textNode("Time-travel!"))) +*
-        div(class("form-group mx-sm-3 mb-2"),
-          button(type("button") +@ class("btn btn-primary") +@ onClick(fun() { SubmitNow }), textNode("Present day!"))));
+  var timeTravelBox = {
+    fun renderTime(x) {
+      tr(a0,
+        a(href("javascript:void()") +@ onClick(fun() { SubmitTime(x) }), textNode(x)))
+    }
+    var times = 
+      tr(a0, a(href("javascript:void()") +@ onClick(fun() { SubmitNow }), textNode("Now"))) +*
+      MvuHTML.concatMap(renderTime, model.times);
 
+    div(class("form-group"), table_(class("table"), times))
+  };
+ 
   h1(a0, textNode("To-do")) +*
   renderedItems +*
   newItemBox +*
