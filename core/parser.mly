@@ -683,10 +683,15 @@ typed_expression:
 | typed_expression COLON datatype                              { with_pos $loc (TypeAnnotation ($1, datatype $3)) }
 | typed_expression COLON datatype LARROW datatype              { with_pos $loc (Upcast ($1, datatype $3, datatype $5)) }
 
+from_exp:
+| FROM exp                                                     { $2 }
+
+to_exp:
+| TO exp                                                       { $2 }
+
 valid_time_exps:
-| LPAREN labeled_exps RPAREN VALID FROM exp TO exp             { $2, Some $6, Some $8 }
-| LPAREN labeled_exps RPAREN VALID FROM exp                    { $2, Some $6, None    }
-| LPAREN labeled_exps RPAREN VALID TO exp                      { $2, None   , Some $6 }
+| LPAREN labeled_exps RPAREN VALID from_exp? to_exp?           { $2, $5, $6 }
+| VALID from_exp? to_exp?                                      { [], $2, $3 }
 | labeled_exps                                                 { $1, None   , None    }
 
 mode_not_valid:
