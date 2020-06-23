@@ -239,20 +239,15 @@ module Timestamp = struct
     | Infinity -> "'infinity'"
     | MinusInfinity -> "'-infinity'"
 
-  let from_string convert_time str =
+  let from_string is_db str =
     let bad_date msg = Errors.RuntimeError ("Ill-formed date: " ^ str ^ " ||| Message: " ^ msg) in
-    let open AngstromExtended in
+    let module AE = AngstromExtended in
+    let timestamp_parser =
+      if is_db then AE.db_timestamp else AE.user_timestamp in
     (* The next Angstrom release will require the ~consume argument. *)
     (* match parse_string ~consume:All db_timestamp str with *)
-    match parse_string db_timestamp str with
-      | Ok (`Timestamp x) ->
-          let open CalendarShow in
-          if convert_time then
-            (* Convert from local time to UTC for internal representation *)
-            convert x (CalendarLib.Time_Zone.Local) (CalendarLib.Time_Zone.UTC)
-            |> timestamp
-          else
-            timestamp x
+    match AE.parse_string timestamp_parser str with
+      | Ok (`Timestamp x) -> timestamp x
       | Ok (`Infinity) -> infinity
       | Ok (`MinusInfinity) -> minus_infinity
       | Error msg -> raise (bad_date msg)

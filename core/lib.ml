@@ -1129,7 +1129,7 @@ let env : (string * (located_primitive * Types.datatype * pure)) list = [
   "parseDate",
   (p1 (fun str ->
       Value.unbox_string str
-       |> Timestamp.from_string true
+       |> Timestamp.from_string false
        |> Value.box_datetime),
   datatype "(String) ~> DateTime",
   IMPURE);

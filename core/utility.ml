@@ -1492,10 +1492,11 @@ module AngstromExtended = struct
 
   let whitespace = take_while is_whitespace
 
-  (** Parses timestamps of the form int-int-int int:int:int(.int)?(+|-)int  *)
-  (* This is a little less precise than ISO standard notation but is OK
-   * for our purposes: any errors would be caught in calendar construction. *)
-  let db_timestamp =
+  let offset =
+    (char '+' *> integer) <|>
+    (char '-' *> integer >>= fun x -> return (-x))
+
+  let timestamp =
     let sep3 chr =
       integer >>= fun x ->
       char chr *>
@@ -1515,15 +1516,10 @@ module AngstromExtended = struct
       float >>= fun z ->
       return (x, y, z) in
 
-    let offset =
-      (char '+' *> integer) <|>
-      (char '-' *> integer >>= fun x -> return (-x)) in
-
     let datetime =
       date >>= fun (year, month, day) ->
       whitespace *>
       time >>=  fun (hour, minute, second) ->
-      (option 0 offset) >>= fun _offset ->
       return (
         `Timestamp (CalendarShow.lmake ~year ~month ~day ~hour ~minute ~second ())
       ) in
@@ -1532,4 +1528,33 @@ module AngstromExtended = struct
     let neginfinity = string "-infinity" *> (return `Infinity) in
 
     datetime <|> infinity <|> neginfinity
+
+  let db_timestamp =
+    let open CalendarLib in
+    timestamp >>= fun ts ->
+    (option 0 offset) >>= fun offs ->
+      match ts with
+        | `Timestamp ts ->
+            let ts =
+              CalendarShow.convert ts
+              (Time_Zone.UTC_Plus offs)
+              (Time_Zone.UTC) in
+            return (`Timestamp ts)
+        | x -> return x
+
+  let user_timestamp =
+    let open CalendarLib in
+    let some_offset = offset >>= fun o -> return (Some o) in
+    timestamp >>= fun ts ->
+    (option None (some_offset)) >>= fun offs ->
+      match ts with
+        | `Timestamp ts ->
+            let ts =
+              match offs with
+                | Some n ->
+                    CalendarShow.convert ts (Time_Zone.UTC_Plus n) (Time_Zone.UTC)
+                | None ->
+                    CalendarShow.convert ts (Time_Zone.Local) (Time_Zone.UTC) in
+            return (`Timestamp ts)
+        | x -> return x
 end
