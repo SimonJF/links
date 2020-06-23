@@ -91,7 +91,6 @@ let main () =
   (* Attempt to synchronise all settings. If any setting commands are
      left unhandled, then error and exit. *)
   Settings.ensure_all_synchronised ();
-  CalendarLib.Time_Zone.(change Local);
   let file_list = Settings.get_anonymous_arguments () in
   let to_evaluate = Settings.get to_evaluate in
 

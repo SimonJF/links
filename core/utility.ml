@@ -1526,13 +1526,6 @@ module AngstromExtended = struct
       (option 0 offset) >>= fun _offset ->
       return (
         `Timestamp (CalendarShow.lmake ~year ~month ~day ~hour ~minute ~second ())
-        (* So, it turns out that we need to convert when putting things *into*
-         * the database, but the output of the DB query is actually in local time,
-         * and the offset is just informational. *)
-      (*
-        `Timestamp (CalendarShow.convert cal
-          (Time_Zone.UTC_Plus offset) (Time_Zone.current ()))
-          *)
       ) in
 
     let infinity = string "infinity" *> (return `Infinity) in

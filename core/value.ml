@@ -88,9 +88,7 @@ class virtual database = object(self)
     | DateTime (Timestamp.Infinity) -> "'infinity' :: timestamp with time zone"
     | DateTime (Timestamp.MinusInfinity) -> "'-infinity' :: timestamp with time zone"
     | DateTime (Timestamp.Timestamp ts) ->
-        let open CalendarLib in
-        CalendarShow.convert ts (Time_Zone.current ()) (Time_Zone.UTC)
-        |> CalendarShow.show
+        CalendarShow.show ts
         |> Printf.sprintf "'%s UTC' :: timestamp with time zone"
     | c -> to_string c
 
@@ -903,7 +901,12 @@ let rec p_value (ppf : formatter) : t -> 'a = function
   | `Pid (`ServerPid i) -> fprintf ppf "Pid Server (%s)" (ProcessID.to_string i)
   | `Pid (`ClientPid (cid, i)) -> fprintf ppf "Pid Client num %s, process %s" (ClientID.to_string cid) (ProcessID.to_string i)
   | `Alien -> fprintf ppf "alien"
-  | `DateTime (Timestamp.Timestamp ts) -> fprintf ppf "%s" (CalendarShow.show ts)
+  | `DateTime (Timestamp.Timestamp ts) ->
+      (* Internal representation is UTC; print as local time *)
+      CalendarShow.convert ts (CalendarLib.Time_Zone.UTC)
+        (CalendarLib.Time_Zone.Local)
+      |> CalendarShow.show
+      |> fprintf ppf "%s"
   | `DateTime (Timestamp.Infinity) -> fprintf ppf "infinity"
   | `DateTime (Timestamp.MinusInfinity) -> fprintf ppf "-infinity"
 and p_record_fields ppf = function

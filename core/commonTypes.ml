@@ -231,17 +231,28 @@ module Timestamp = struct
   let minus_infinity = MinusInfinity
 
   let to_string = function
-    | Timestamp ts -> Printf.sprintf "'%s'" (CalendarShow.show ts)
+    | Timestamp ts ->
+        let open CalendarShow in
+        convert ts (CalendarLib.Time_Zone.UTC) (CalendarLib.Time_Zone.Local)
+        |> show
+        |> Printf.sprintf "%s"
     | Infinity -> "'infinity'"
     | MinusInfinity -> "'-infinity'"
 
-  let from_string str =
+  let from_string convert_time str =
     let bad_date msg = Errors.RuntimeError ("Ill-formed date: " ^ str ^ " ||| Message: " ^ msg) in
     let open AngstromExtended in
     (* The next Angstrom release will require the ~consume argument. *)
     (* match parse_string ~consume:All db_timestamp str with *)
     match parse_string db_timestamp str with
-      | Ok (`Timestamp x) -> timestamp x
+      | Ok (`Timestamp x) ->
+          let open CalendarShow in
+          if convert_time then
+            (* Convert from local time to UTC for internal representation *)
+            convert x (CalendarLib.Time_Zone.Local) (CalendarLib.Time_Zone.UTC)
+            |> timestamp
+          else
+            timestamp x
       | Ok (`Infinity) -> infinity
       | Ok (`MinusInfinity) -> minus_infinity
       | Error msg -> raise (bad_date msg)
