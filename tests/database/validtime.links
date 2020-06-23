@@ -23,8 +23,9 @@ fun fire(name) {
 }
 
 fun extendContract(name, date) {
+  var time = now();
   update nonsequenced (x <-v- employees)
-    where (vtData(x).name == name && now() >= vtFrom(x) && now() < vtTo(x))
+    where (vtData(x).name == name && time >= vtFrom(x) && time < vtTo(x))
     set (valid from vtFrom(x) to date)
 }
 
@@ -42,14 +43,14 @@ fun lookupAt(pred, time) {
   }
 }
 
-# fun currentLookupWithTime(pred) {
-#     query nested {
-#       var time = now();
-#       for (x <-v- employees)
-#         where (pred(x) && time >= vtFrom(x) && time < vtTo(x))
-#         [x]
-#   }
-# }
+fun currentLookupWithTime(pred) {
+    query nested {
+      var time = now();
+      for (x <-v- employees)
+        where (pred(x) && time >= vtFrom(x) && time < vtTo(x))
+        [x]
+  }
+}
 
 fun currentLookup(pred) {
   lookupAt(pred, now())
@@ -117,7 +118,7 @@ fun test() {
   var carol_end_date_2 = parseDate("2033-01-01 00:00:00");
   hire("Carol", 40000, positionID("Lecturer"), now(), carol_end_date);
   extendContract("Carol", carol_end_date_2);
-  var res = currentLookupWithTime(fun(x) { vtData(x).name == "Carol" })
+  var res = currentLookupWithTime(fun(x) { vtData(x).name == "Carol" });
   assertEq(vtTo(hd(res)), carol_end_date_2);
   assertEq(sortBy(fun(x) { x.name }, lookupAt(fun(x) { true }, carol_end_date_2)),
       [

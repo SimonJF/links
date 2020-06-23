@@ -1049,13 +1049,18 @@ struct
       let rec project (r, label) =
         match r with
           | Q.Record fields ->
-            assert (StringMap.mem label fields);
-            StringMap.find label fields
+              let () =
+                if not (StringMap.mem label fields) then
+                  let () = Debug.print (Lang.show r) in
+                  failwith (label ^ " not found in record") in
+              StringMap.find label fields
           | Q.If (c, t, e) ->
             Q.If (c, project (t, label), project (e, label))
           | Q.Var (_x, field_types) ->
-            assert (StringMap.mem label field_types);
-            Q.Project (r, label)
+              if not (StringMap.mem label field_types) then
+                query_error ("Error projecting from record: %s; no such field %s") (string_of_t r) label
+              else
+                Q.Project (r, label)
           | _ -> query_error ("Error projecting from record: %s") (string_of_t r)
       in
         project (norm env r, label)
@@ -1765,10 +1770,33 @@ let compile_valid_time_update :
     Sql.query =
   fun upd db env ((x, table, field_types), where, body)
     from_field to_field ->
+
+    let to_bind =
+      let open Ir in
+      match upd with
+        | IrNonsequencedUpdate _ ->
+            let extended_field_types =
+              field_types
+                |> StringMap.add from_field Types.datetime_type
+                |> StringMap.add to_field Types.datetime_type in
+            let table_var = Q.Var (x, extended_field_types) in
+            let metadata_record =
+              StringMap.from_alist [
+                (TemporalMetadata.Valid.data_field,
+                  Q.eta_expand_var (x, field_types));
+                (TemporalMetadata.Valid.from_field,
+                  Q.Project (table_var, from_field) );
+                (TemporalMetadata.Valid.to_field,
+                  Q.Project (table_var, to_field))
+              ] in
+            Q.Record metadata_record
+        | _ -> Q.Var (x, field_types) in
+
     let env =
       Eval.bind
         (Eval.env_of_value_env QueryPolicy.Default env)
-        (x, Q.Var (x, field_types)) in
+        (x, to_bind) in
+
     let where = opt_map (Eval.norm_comp env) where in
     let body = Eval.norm_comp env body in
 

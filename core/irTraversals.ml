@@ -397,9 +397,9 @@ struct
             let returning, _, o = o#value returning in
             InsertReturning(source, rows, returning), Types.unit_type, o
         | Update (upd, (x, source), where, body) ->
-            let upd, o = o#temporal_update upd in
             let source, _, o = o#value source in
             let x, o = o#binder x in
+            let upd, o = o#temporal_update upd in
             let where, _, o = o#option (fun o -> o#computation) where in
             let body, _, o = o#computation body in
               Update (upd, (x, source), where, body),
