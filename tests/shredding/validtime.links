@@ -56,6 +56,14 @@ fun currentLookup(pred) {
   lookupAt(pred, now())
 }
 
+fun nonsequencedLookup(pred) {
+  query {
+    for (x <-v- employees)
+      where (pred(x))
+      [x]
+  }
+}
+
 fun insertPositions() {
   insert positions values [(position = "PhD student")];
   insert positions values [(position = "Postdoc")];
@@ -68,6 +76,11 @@ fun getPositions() {
   query {
     for (x <-- positions) [(x.position, x.position_id)]
   }
+}
+
+fun deleteNonsequenced(pred) {
+  delete nonsequenced (x <-v- employees)
+    where (pred(x))
 }
 
 fun test() {
@@ -116,14 +129,19 @@ fun test() {
       ]);
   var carol_end_date = parseDate("2030-01-01 00:00:00");
   var carol_end_date_2 = parseDate("2033-01-01 00:00:00");
-  hire("Carol", 40000, positionID("Lecturer"), now(), carol_end_date);
+  var carol_hire_date = now();
+  hire("Carol", 40000, positionID("Lecturer"), carol_hire_date, carol_end_date);
   extendContract("Carol", carol_end_date_2);
   var res = currentLookupWithTime(fun(x) { vtData(x).name == "Carol" });
   assertEq(vtTo(hd(res)), carol_end_date_2);
   assertEq(sortBy(fun(x) { x.name }, lookupAt(fun(x) { true }, carol_end_date_2)),
       [
         (name = "Alice", salary = 30000, position_id = positionID("Postdoc"))
-      ])
+      ]);
+  assertEq(nonsequencedLookup(fun(x) { vtData(x).name == "Carol" }),
+      [withValidity((name = "Carol", salary = 40000, position_id = positionID("Lecturer")), carol_hire_date, carol_end_date_2)]);
+  deleteNonsequenced(fun(x) { vtData(x).name == "Carol" && vtTo(x) == carol_end_date_2 });
+  assertEq(nonsequencedLookup(fun(x) { vtData(x).name == "Carol" }), [])
 }
 
 test()

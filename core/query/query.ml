@@ -1674,6 +1674,24 @@ let transaction_time_update :
       With (0, sel_query, sel_var, [ins_query; upd_query])
     ])
 
+let valid_time_metadata x field_types from_field to_field =
+  let extended_field_types =
+      field_types
+        |> StringMap.add from_field Types.datetime_type
+        |> StringMap.add to_field Types.datetime_type in
+  let table_var = Q.Var (x, extended_field_types) in
+  let metadata_record =
+    StringMap.from_alist [
+      (TemporalMetadata.Valid.data_field,
+        Q.eta_expand_var (x, field_types));
+      (TemporalMetadata.Valid.from_field,
+        Q.Project (table_var, from_field) );
+      (TemporalMetadata.Valid.to_field,
+        Q.Project (table_var, to_field))
+    ] in
+  Q.Record metadata_record
+
+
 let delete : ((Ir.var * string) * Q.t option) -> Sql.query =
   fun ((_, table), where) ->
     let open Sql in
@@ -1775,21 +1793,7 @@ let compile_valid_time_update :
       let open Ir in
       match upd with
         | IrNonsequencedUpdate _ ->
-            let extended_field_types =
-              field_types
-                |> StringMap.add from_field Types.datetime_type
-                |> StringMap.add to_field Types.datetime_type in
-            let table_var = Q.Var (x, extended_field_types) in
-            let metadata_record =
-              StringMap.from_alist [
-                (TemporalMetadata.Valid.data_field,
-                  Q.eta_expand_var (x, field_types));
-                (TemporalMetadata.Valid.from_field,
-                  Q.Project (table_var, from_field) );
-                (TemporalMetadata.Valid.to_field,
-                  Q.Project (table_var, to_field))
-              ] in
-            Q.Record metadata_record
+            valid_time_metadata x field_types from_field to_field
         | _ -> Q.Var (x, field_types) in
 
     let env =
@@ -1842,38 +1846,43 @@ let compile_delete :
   Sql.query =
   fun del state db env ((x, table, field_types), where) ->
     let open Value.TemporalState in
-    let env =
+    let env to_bind =
       Eval.bind
         (Eval.env_of_value_env QueryPolicy.Default env)
-        (x, Q.Var (x, field_types)) in
-    let where = opt_map (Eval.norm_comp env) where in
+        (x, to_bind) in
     let q =
       match state with
-        | Current -> delete ((x, table), where)
+        | Current ->
+            let env = env (Q.Var (x, field_types)) in
+            let where = opt_map (Eval.norm_comp env) where in
+            delete ((x, table), where)
         | ValidTime { from_field; to_field } ->
             let open Ir in
             begin
               match del with
                 | IrValidTimeDeletion (IrCurrentDeletion) ->
+                    let env = env (Q.Var (x, field_types)) in
+                    let where = opt_map (Eval.norm_comp env) where in
                     valid_time_current_delete
                       ((x, table), where) from_field to_field
                 | IrValidTimeDeletion (IrNonsequencedDeletion) ->
-                    (* TODO: I think this should be the same logic
-                     * as deletion. The difference is that the `where` clause
-                     * is operating on temporal metadata, so we need to add some
-                     * logic to ensure that vtData / vtFrom / vtTo are supported
-                     * in the evaluator.
-                     *
-                     * How to do that remains to be seen. I've had a few ideas,
-                     * but it requires more investigation. *)
-                    failwith "unimplemented"
+                    (* Same logic as deletion -- just that the metadata
+                     * we've bound will be different *)
+                    let md =
+                      valid_time_metadata x field_types from_field to_field in
+                    let where = opt_map (Eval.norm_comp (env md)) where in
+                    delete ((x, table), where)
                 | IrValidTimeDeletion (IrSequencedDeletion { validity_from; validity_to }) ->
+                    let _env = env (Q.Var (x, field_types)) in
+                    let _where = opt_map (Eval.norm_comp _env) where in
                     let _ = validity_from in
                     let _ = validity_to in
                     failwith "Not implemented yet"
                 | _ -> assert false
             end
         | TransactionTime { to_field; _ } ->
+            let env = env (Q.Var (x, field_types)) in
+            let where = opt_map (Eval.norm_comp env) where in
             transaction_time_delete
               ((x, table), where) to_field
         | _ -> raise (internal_error "Bitemporal data not yet supported") in
