@@ -721,7 +721,7 @@ struct
                             ~keys:tbl.keys
                             ~row:tbl.row
                             ~state:(
-                              Value.TemporalState.demoteCurrent tbl.state) in
+                              Value.TemporalState.demote_current tbl.state) in
                         apply_cont cont env (`Table table)
                     | DemoteAtTime { from_time; to_time } ->
                         value env from_time >>= fun from_time ->
@@ -733,7 +733,7 @@ struct
                             ~keys:tbl.keys
                             ~row:tbl.row
                             ~state:(
-                              Value.TemporalState.demoteTime
+                              Value.TemporalState.demote_time
                                 (unbox_datetime from_time)
                                 (unbox_datetime to_time)
                                 tbl.state
@@ -886,7 +886,7 @@ struct
               apply_cont cont env (`Record [])
           | TransactionTime { from_field; to_field } ->
               let query =
-                Query.compile_transaction_time_update env
+                Query.TransactionTime.compile_update env
                   ((Var.var_of_binder xb, table, field_types), where, body)
                   from_field to_field
                 |> db#string_of_query None in
@@ -898,7 +898,7 @@ struct
                   | IrValidTimeUpdate upd -> upd
                   | _ -> assert false in
               let query =
-                Query.compile_valid_time_update upd db env
+                Query.ValidTime.compile_update upd db env
                   ((Var.var_of_binder xb, table, field_types), where, body)
                   from_field to_field
                 |> db#string_of_query None in
@@ -918,11 +918,29 @@ struct
                                         | _ -> assert false) fields))
           | _ -> assert false
         end >>= fun (db, table, state, field_types) ->
-      let delete_query =
-        Query.compile_delete del state db env
-          ((Var.var_of_binder xb, table, field_types), where)
-        |> db#string_of_query None in
-      let () = ignore (Database.execute_command delete_query db) in
+
+        let open Value.TemporalState in
+        let query =
+          match state with
+            | Current ->
+                Query.compile_delete db env
+                  ((Var.var_of_binder xb, table, field_types), where)
+            | TransactionTime { to_field; _ } ->
+                Query.TransactionTime.compile_delete db env
+                  ((Var.var_of_binder xb, table, field_types), where)
+                  to_field
+            | ValidTime { from_field; to_field } ->
+                let del =
+                  match del with
+                    | IrValidTimeDeletion del -> del
+                    | _ -> assert false in
+                Query.ValidTime.compile_delete del db env
+                  ((Var.var_of_binder xb, table, field_types), where)
+                  from_field to_field
+            | _ -> failwith "Bitemporal not yet supported"
+        in
+      let query = db#string_of_query None query in
+      let () = ignore (Database.execute_command query db) in
         apply_cont cont env (`Record [])
     | CallCC f ->
        value env f >>= fun f ->

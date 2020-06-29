@@ -93,12 +93,45 @@ sig
   val eval : QueryPolicy.t -> Value.t Value.Env.t -> Ir.computation -> Lang.t
 end
 
-val compile_transaction_time_update:
-  Value.env ->
-    ((Ir.var * string * Types.datatype StringMap.t) * Ir.computation option * Ir.computation) ->
-    string -> (* transaction time from field *)
-    string -> (* transaction time to field *)
+module ValidTime :
+sig
+  val compile_update :
+    Ir.valid_time_update ->
+    Value.database ->
+    Value.env ->
+    ((Ir.var * string * Types.datatype StringMap.t) *
+      Ir.computation option * Ir.computation) ->
+    string (* from field *) ->
+    string (* to field *) ->
     Sql.query
+
+  val compile_delete :
+    Ir.valid_time_deletion ->
+    Value.database ->
+    Value.env ->
+    ((Ir.var * string * Types.datatype StringMap.t) * Ir.computation option) ->
+    string -> (* 'from' field *)
+    string -> (* 'to' field *)
+    Sql.query
+end
+
+module TransactionTime :
+sig
+  val compile_update :
+    Value.env ->
+      ((Ir.var * string * Types.datatype StringMap.t) *
+        Ir.computation option * Ir.computation) ->
+      string -> (* transaction time from field *)
+      string -> (* transaction time to field *)
+      Sql.query
+
+  val compile_delete :
+    Value.database ->
+    Value.env ->
+    ((Ir.var * string * Types.datatype StringMap.t) * Ir.computation option) ->
+    string -> (* 'to' field *)
+    Sql.query
+end
 
 val compile_update :
   Value.database ->
@@ -107,19 +140,9 @@ val compile_update :
     Ir.computation option * Ir.computation) ->
   Sql.query
 
-val compile_valid_time_update :
-  Ir.valid_time_update ->
+val compile_delete :
   Value.database ->
   Value.env ->
-  ((Ir.var * string * Types.datatype StringMap.t) *
-    Ir.computation option * Ir.computation) ->
-  string (* from field *) ->
-  string (* to field *) ->
-  Sql.query
-
-val compile_delete :
-  Ir.temporal_deletion ->
-  Value.TemporalState.t -> Value.database -> Value.env ->
   ((Ir.var * string * Types.datatype StringMap.t) * Ir.computation option) ->
   Sql.query
 

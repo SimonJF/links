@@ -247,7 +247,7 @@ module TemporalState = struct
     | TemporalMetadata.Bitemporal { tt_from_field; tt_to_field; vt_from_field; vt_to_field } ->
         bitemporal tt_from_field tt_to_field vt_from_field vt_to_field
 
-  let demoteTime lower_bound upper_bound =
+  let demote_time lower_bound upper_bound =
     function
       | TransactionTime { from_field; to_field } ->
           Demoted { from_field; to_field;
@@ -259,7 +259,7 @@ module TemporalState = struct
       | Demoted _ ->
           raise (internal_error "Cannot demote a demoted or current table!")
 
-  let demoteCurrent =
+  let demote_current =
     function
       | TransactionTime { from_field; to_field } ->
           Demoted { from_field; to_field; demotion = AtCurrent }
@@ -269,6 +269,12 @@ module TemporalState = struct
       | Current
       | Demoted _ ->
           raise (internal_error "Cannot demote a demoted or current table!")
+
+  let period_fields = function
+    | Demoted { from_field; to_field; _ }
+    | TransactionTime { from_field; to_field }
+    | ValidTime { from_field; to_field } -> (from_field, to_field)
+    | _ -> assert false (* We'll need to handle Bitemporal later *)
 end
 
 type table = {

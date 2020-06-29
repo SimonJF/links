@@ -84,8 +84,10 @@ module TemporalState : sig
     string (* valid from field *) ->
     string (* valid to field *) -> t
 
-  val demoteTime : Timestamp.t -> Timestamp.t -> t -> t
-  val demoteCurrent : t -> t
+  val demote_time : Timestamp.t -> Timestamp.t -> t -> t
+  val demote_current : t -> t
+
+  val period_fields : t -> (string * string)
 end
 
 type table = {

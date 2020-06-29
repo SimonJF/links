@@ -130,7 +130,8 @@ fun supervisor(topic, nicks, cs) {
         }, cs);
       supervisor(newTopic, nicks, cs)
     case Leave(s) ->
-      var (nick, s) = receive(s);
+      var nick = "";
+      #var (nick, s) = receive(s);
       close(s);
       var (nicks, cs) = disconnect(nick, nicks, cs);
       var cs = linMap(
