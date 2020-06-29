@@ -875,8 +875,8 @@ struct
       end >>= fun (db, state, table, field_types) ->
       begin
         let open Value.TemporalState in
-        match state with
-          | Current ->
+        match upd with
+          | IrCurrentTimeUpdate ->
               let update_query =
                 Query.compile_update
                   db env
@@ -884,7 +884,8 @@ struct
                 |> db#string_of_query None in
               let () = ignore (Database.execute_command update_query db) in
               apply_cont cont env (`Record [])
-          | TransactionTime { from_field; to_field } ->
+          | IrTransactionTimeUpdate ->
+              let (from_field, to_field) = period_fields state in
               let query =
                 Query.TransactionTime.compile_update env
                   ((Var.var_of_binder xb, table, field_types), where, body)
@@ -892,11 +893,8 @@ struct
                 |> db#string_of_query None in
               let () = ignore (Database.execute_command query db) in
               apply_cont cont env (`Record [])
-          | ValidTime { from_field; to_field } ->
-              let upd =
-                match upd with
-                  | IrValidTimeUpdate upd -> upd
-                  | _ -> assert false in
+          | IrValidTimeUpdate upd ->
+              let (from_field, to_field) = period_fields state in
               let query =
                 Query.ValidTime.compile_update upd db env
                   ((Var.var_of_binder xb, table, field_types), where, body)
@@ -904,7 +902,6 @@ struct
                 |> db#string_of_query None in
               let () = ignore (Database.execute_command query db) in
               apply_cont cont env (`Record [])
-          | _ -> raise (internal_error "Valid / Bitemporal data not yet supported")
       end
     | Delete (del, (xb, source), where) ->
         value env source >>= fun source ->
@@ -921,23 +918,20 @@ struct
 
         let open Value.TemporalState in
         let query =
-          match state with
-            | Current ->
+          match del with
+            | IrCurrentTimeDeletion ->
                 Query.compile_delete db env
                   ((Var.var_of_binder xb, table, field_types), where)
-            | TransactionTime { to_field; _ } ->
+            | IrTransactionTimeDeletion ->
+                let (_, to_field) = period_fields state in
                 Query.TransactionTime.compile_delete db env
                   ((Var.var_of_binder xb, table, field_types), where)
                   to_field
-            | ValidTime { from_field; to_field } ->
-                let del =
-                  match del with
-                    | IrValidTimeDeletion del -> del
-                    | _ -> assert false in
+            | IrValidTimeDeletion del ->
+                let (from_field, to_field) = period_fields state in
                 Query.ValidTime.compile_delete del db env
                   ((Var.var_of_binder xb, table, field_types), where)
                   from_field to_field
-            | _ -> failwith "Bitemporal not yet supported"
         in
       let query = db#string_of_query None query in
       let () = ignore (Database.execute_command query db) in
