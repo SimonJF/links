@@ -1454,6 +1454,18 @@ let delete : ((Ir.var * string) * Q.t option) -> Sql.query =
     let del_where = OptionUtils.opt_map (base []) where in
     Delete { del_table = table; del_where }
 
+
+module OpHelpers = struct
+  let binop op x y = Sql.Apply (op, [x; y])
+  let lt = binop "<"
+  let lte = binop "<="
+  let gt = binop ">"
+  let gte = binop ">="
+  let _eq = binop "=="
+  let op_and = binop "&&"
+  let _op_or = binop "||"
+end
+
 module TransactionTime = struct
 
   let update :
@@ -1554,7 +1566,7 @@ module TransactionTime = struct
     (* Finally, construct the transaction. *)
     Sql.Transaction ([
       (* First variable of "with" is unused? *)
-      With (0, sel_query, sel_var, [ins_query; upd_query])
+      Sql.With (0, sel_query, sel_var, [ins_query; upd_query])
     ])
 
 
@@ -1728,7 +1740,7 @@ module ValidTime = struct
         (* Finally, construct the transaction. *)
         Transaction ([
           (* First variable of "with" is unused? *)
-          With (0, select, sel_var, [insert; upd_current; upd_future])
+          Sql.With (0, select, sel_var, [insert; upd_current; upd_future])
         ])
 
     let nonsequenced :
@@ -1795,6 +1807,89 @@ module ValidTime = struct
 
         let del = Delete { del_table = table; del_where } in
         Transaction [ upd; del ]
+
+    (* Note: No need for `nonsequenced` since it's the same logic
+     * as a 'regular' deletion. *)
+
+
+    let sequenced :
+      Types.datatype StringMap.t ->
+      ((Ir.var * string) * Q.t option * Q.t * Q.t) ->
+      string (* valid from field *) ->
+      string (* valid to field *) ->
+      Sql.query =
+        fun table_types ((tbl_var, table), where, app_from, app_to) from_field to_field ->
+          let open OpHelpers in
+          let open Sql in
+          let app_from = base [] app_from in
+          let app_to = base [] app_to in
+          let proj k = Sql.Project (tbl_var, k) in
+          let and_where pred =
+            match where with
+              | Some where -> op_and (base [] where) pred
+              | None -> pred in
+
+          (* Select all fields, 'start' date is end of PA *)
+          let select_fields =
+            StringMap.mapi (fun k _ ->
+              if k = from_field then app_to else proj k) table_types
+            |> StringMap.to_alist
+            (* Need to swap (col, val) pairs to (val, col) to fit select_clause AST,
+             * which mirrors "SELECT V as K" form in SQL *)
+            |> List.map (fun (k, v) -> (v, k)) in
+
+          let field_names = List.map snd select_fields in
+
+          let sel_where  =
+            op_and
+              (lt (proj from_field) app_from)
+              (gt (proj to_field) app_to)
+            |> and_where in
+
+          let sel_query =
+            Sql.Select (select_fields, [(table, tbl_var)], sel_where, []) in
+
+          (* Generate fresh variable for selection result *)
+          let sel_var = Var.fresh_raw_var () in
+
+          (* Next, we need to insert the results *)
+          let ins_query =
+            Sql.Insert { ins_table = table; ins_fields = field_names;
+              ins_records = `Query sel_var } in
+
+          (* Truncate 'end' date for records with PV starting before PA and ending in PA *)
+          let update upd_table upd_fields where =
+            Sql.Update { upd_table; upd_fields; upd_where = Some where } in
+
+          let upd1_pred =
+            op_and
+              (lt (proj from_field) app_from)
+              (gte (proj to_field) app_from) |> and_where in
+          let upd1 = update table [(to_field, app_from)] upd1_pred in
+
+          (* Truncate 'start' date for records with PV starting in PA and ending after PA *)
+          let upd2_pred =
+            op_and
+              (lt (proj from_field) app_to)
+              (gte (proj to_field) app_to) |> and_where in
+          let upd2 = update table [(from_field, app_to)] upd2_pred in
+
+          (* Delete records completely overlapped by PV *)
+          let del_pred =
+            op_and
+              (gte (proj from_field) app_from)
+              (lte (proj to_field) app_to) |> and_where in
+
+          let del =
+            Sql.Delete {
+              del_table = table;
+              del_where = Some del_pred
+            } in
+
+          (* Package everything up in a transaction *)
+          Sql.Transaction ([
+            Sql.With (0, sel_query, sel_var, [ins_query; upd1; upd2; del])
+          ])
   end
 
   let compile_update :
@@ -1875,11 +1970,11 @@ module ValidTime = struct
                   let where = opt_map (Eval.norm_comp (env md)) where in
                   delete ((x, table), where)
               | IrSequencedDeletion { validity_from; validity_to } ->
-                  let _env = env (Q.Var (x, field_types)) in
-                  let _where = opt_map (Eval.norm_comp _env) where in
-                  let _ = validity_from in
-                  let _ = validity_to in
-                  failwith "Not implemented yet"
+                  let env = env (Q.Var (x, field_types)) in
+                  let where = opt_map (Eval.norm_comp env) where in
+                  Delete.sequenced field_types
+                    ((x, table), where, Eval.xlate env validity_from, Eval.xlate env validity_to)
+                    from_field to_field
           end
         in
         Debug.print ("Generated valid time deletion query: " ^ (db#string_of_query None q));
