@@ -141,7 +141,20 @@ fun test() {
   assertEq(nonsequencedLookup(fun(x) { vtData(x).name == "Carol" }),
       [withValidity((name = "Carol", salary = 40000, position_id = positionID("Lecturer")), carol_hire_date, carol_end_date_2)]);
   deleteNonsequenced(fun(x) { vtData(x).name == "Carol" && vtTo(x) == carol_end_date_2 });
-  assertEq(nonsequencedLookup(fun(x) { vtData(x).name == "Carol" }), [])
+  assertEq(nonsequencedLookup(fun(x) { vtData(x).name == "Carol" }), []);
+
+  # Sequenced stuff
+
+  ## Sequenced update
+
+  ### Case 1: PA contained within PV
+  hire("Debbie", 70000, positionID("Professor"), now(), end_of_time());
+  sequencedUpdate("Debbie", parseDate(), parseDate(), fun(x) { TODO GO FROM HERE });
+
+  ### Case 2: PA overlaps PV to the left
+  ### Case 3: PA overlaps PV to the left
+  ### Case 4: PA overlaps PV entirely
+
 }
 
 test()

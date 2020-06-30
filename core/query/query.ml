@@ -257,7 +257,7 @@ struct
   let unbox_record =
     function
       | Record fields -> fields
-      | _ -> raise (runtime_type_error "failed to unbox pair")
+      | _ -> raise (runtime_type_error "failed to unbox record")
 
   let unbox_pair =
     function
@@ -1764,6 +1764,138 @@ module ValidTime = struct
           |> StringMap.to_alist in
         let upd_fields = upd_fields @ upd_from @ upd_to in
         Update { upd_table = table; upd_fields; upd_where }
+
+    let sequenced :
+      Types.datatype StringMap.t ->
+      ((Ir.var * string) * Q.t option * Q.t * Q.t * Q.t) ->
+      string (* valid from field *) ->
+      string (* valid to field *) ->
+      Sql.query =
+        fun table_types ((tbl_var, table), where, app_from, app_to, set) from_field to_field ->
+          let open Sql in
+          let app_from = base [] app_from in
+          let app_to = base [] app_to in
+
+          (* Preamble: Unbox, get things set up *)
+
+          (* - Add the period-stamping fields to the table types *)
+          let table_types =
+            table_types
+              |> StringMap.add from_field (`Primitive Primitive.DateTime)
+              |> StringMap.add to_field (`Primitive Primitive.DateTime) in
+
+          let field_names =
+            StringMap.to_alist table_types |> List.map fst in
+
+          let and_where pred =
+            let open OpHelpers in
+            match where with
+              | Some where -> op_and (base [] where) pred
+              | None -> pred in
+
+          let proj field = Project (tbl_var, field) in
+
+          (* 2x Selections *)
+          (*  - Select either the field name if unspecified, or the updated value
+           *    if it is. *)
+          let make_select values where =
+            let values = StringMap.from_alist values in
+            let fields =
+              StringMap.mapi (fun k _ ->
+                StringMap.lookup k values
+                |> OptionUtils.from_option (Project (tbl_var, k))) table_types
+              |> StringMap.to_alist
+              (* Need to swap (col, val) pairs to (val, col) to fit select_clause AST,
+               * which mirrors "SELECT V as K" form in SQL *)
+              |> List.map (fun (k, v) -> (v, k)) in
+            Sql.Select (fields, [(table, tbl_var)], where, []) in
+
+          let insert_select sel =
+            let var = Var.fresh_raw_var () in
+            let ins =
+              Sql.Insert {
+                ins_table = table;
+                ins_fields = field_names;
+                ins_records = `Query var
+              } in
+            Sql.With (0, sel, var, [ins]) in
+
+          (*  - Selection / insert #1: Old values at beginning of PA *)
+          let sel1 =
+            let where =
+              let open OpHelpers in
+              op_and
+                (lt (proj from_field) app_from)
+                (gt (proj to_field) app_from)
+              |> and_where in
+            make_select [(to_field, app_from)] where |> insert_select in
+
+          (* Selection / insert #2: Old values at end of PA *)
+          let sel2 =
+            let where =
+              let open OpHelpers in
+              op_and
+                (lt (proj from_field) app_to)
+                (gt (proj to_field) app_to)
+              |> and_where in
+            make_select [(from_field, app_to)] where |> insert_select in
+
+          (* Update #1: Update rows overlapping PA. *)
+          let upd1 =
+            let upd_fields =
+              Q.unbox_record set
+              |> StringMap.to_alist
+              |> List.map (fun (k, v) -> (k, base [] v)) in
+
+            let where =
+              let open OpHelpers in
+              op_and
+                (lt (proj from_field) app_to)
+                (gt (proj to_field) app_from)
+              |> and_where in
+
+            (* - Unpack fields to be updated *)
+            Sql.Update {
+              upd_table = table;
+              upd_fields;
+              upd_where = Some where
+            } in
+          (* Update #2: Set start time of updated rows to be start of PA. *)
+          let upd2 =
+            let where =
+              let open OpHelpers in
+              op_and
+                (lt (proj from_field) app_from)
+                (gt (proj to_field) app_from)
+              |> and_where in
+
+            (* - Unpack fields to be updated *)
+            Sql.Update {
+              upd_table = table;
+              upd_fields = [(from_field, app_from)];
+              upd_where = Some where
+            } in
+
+          (* Update #3: Set end time of updated rows to be end of PA. *)
+          let upd3 =
+            let where =
+              let open OpHelpers in
+              op_and
+                (lt (proj from_field) app_to)
+                (gt (proj to_field) app_to)
+              |> and_where in
+
+            (* - Unpack fields to be updated *)
+            Sql.Update {
+              upd_table = table;
+              upd_fields = [(to_field, app_to)];
+              upd_where = Some where
+            } in
+
+          (* Batch up *)
+          Transaction [
+            sel1; sel2; upd1; upd2; upd3
+          ]
   end
 
   module Delete = struct
@@ -1927,9 +2059,11 @@ module ValidTime = struct
                 field_types
                 ((x, table), where, body) from_field to_field
           | IrSequencedUpdate { validity_from; validity_to } ->
-              let _ = validity_from in
-              let _ = validity_to in
-              failwith "Not implemented yet."
+              let validity_from = Eval.xlate env validity_from in
+              let validity_to = Eval.xlate env validity_to in
+              Update.sequenced
+                field_types
+                ((x, table), where, validity_from, validity_to, body) from_field to_field
           | IrNonsequencedUpdate { from_time; to_time } ->
               let from_time = opt_map (Eval.norm_comp env) from_time in
               let to_time = opt_map (Eval.norm_comp env) to_time in
