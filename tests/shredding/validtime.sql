@@ -2,11 +2,11 @@ DROP TABLE IF EXISTS employees;
 DROP TABLE IF EXISTS positions;
 
 CREATE TABLE employees (
-    "name" text,
-    "salary" integer,
-    "position_id" integer,
-    "valid_from" timestamp with time zone,
-    "valid_to" timestamp with time zone
+    "name" text NOT NULL,
+    "salary" integer NOT NULL,
+    "position_id" integer NOT NULL,
+    "valid_from" timestamp with time zone NOT NULL,
+    "valid_to" timestamp with time zone NOT NULL
 );
 
 CREATE TABLE positions (
