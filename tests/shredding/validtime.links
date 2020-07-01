@@ -69,7 +69,8 @@ fun insertPositions() {
   insert positions values [(position = "Postdoc")];
   insert positions values [(position = "Lecturer")];
   insert positions values [(position = "Reader")];
-  insert positions values [(position = "Professor")]
+  insert positions values [(position = "Professor")];
+  insert positions values [(position = "Head of School")];
 }
 
 fun getPositions() {
@@ -82,6 +83,14 @@ fun deleteNonsequenced(pred) {
   delete nonsequenced (x <-v- employees)
     where (pred(x))
 }
+
+fun sequencedUpdate(name, pa_from, pa_to, new_position) {
+  update sequenced (x <-v- employees)
+    between (pa_from, pa_to)
+    where (x.name == name)
+    set (position_id = new_position)
+}
+
 
 fun test() {
 
@@ -148,13 +157,71 @@ fun test() {
   ## Sequenced update
 
   ### Case 1: PA contained within PV
-  hire("Debbie", 70000, positionID("Professor"), now(), end_of_time());
-  sequencedUpdate("Debbie", parseDate(), parseDate(), fun(x) { TODO GO FROM HERE });
+  var debbie_hire_date = now();
+  hire("Debbie", 70000, positionID("Professor"), debbie_hire_date, forever());
+  sequencedUpdate("Debbie", parseDate("2021-01-01 12:00:00"), parseDate("2025-01-01 12:00:00"),  positionID("Head of School"));
+  var sortedLookup = sortBy(fun(x) { vtFrom(x) }, nonsequencedLookup(fun(x) { vtData(x).name == "Debbie" }));
+  assertEq(sortedLookup,
+      [
+      withValidity((name = "Debbie", salary = 70000, position_id = positionID("Professor")), debbie_hire_date, parseDate("2021-01-01 12:00:00")),
+      withValidity((name = "Debbie", salary = 70000, position_id = positionID("Head of School")), parseDate("2021-01-01 12:00:00"), parseDate("2025-01-01 12:00:00")),
+      withValidity((name = "Debbie", salary = 70000, position_id = positionID("Professor")), parseDate("2025-01-01 12:00:00"), forever())
+      ]);
 
   ### Case 2: PA overlaps PV to the left
-  ### Case 3: PA overlaps PV to the left
-  ### Case 4: PA overlaps PV entirely
+  ### PV: 2025-05-01 --> 2030-05-01
+  ### PA: 2020-01-01 --> 2026-01-01
+  var pv_from = parseDate("2025-05-01 00:00:00");
+  var pv_to= parseDate("2030-05-01 00:00:00");
+  var pa_from = parseDate("2020-01-01 00:00:00");
+  var pa_to = parseDate("2026-01-01 00:00:00");
+  hire("Evan", 50000, positionID("Reader"), pv_from, pv_to);
 
+  # Evan was originally hired as a lecturer between 2025 and 2026
+  sequencedUpdate("Evan", pa_from, pa_to, positionID("Lecturer"));
+  var sortedLookup = sortBy(fun(x) { vtFrom(x) }, nonsequencedLookup(fun(x) { vtData(x).name == "Evan" }));
+  assertEq(sortedLookup,
+      [
+      withValidity((name = "Evan", salary = 50000, position_id = positionID("Lecturer")), pv_from, pa_to),
+      withValidity((name = "Evan", salary = 50000, position_id = positionID("Reader")), pa_to, pv_to)
+      ]);
+
+  ### Case 3: PA overlaps PV to the right
+  ### PV: 2020-01-01 --> 2030-01-01
+  ### PA: 2028-01-01 --> 2040-01-01
+  var pv_from = parseDate("2020-05-01 00:00:00");
+  var pv_to= parseDate("2030-01-01 00:00:00");
+  var pa_from = parseDate("2028-01-01 00:00:00");
+  var pa_to = parseDate("2040-01-01 00:00:00");
+  hire("Frankie", 35000, positionID("Postdoc"), pv_from, pv_to);
+
+  # Frankie got a lectureship!
+  sequencedUpdate("Frankie", pa_from, pa_to, positionID("Lecturer"));
+  var sortedLookup = sortBy(fun(x) { vtFrom(x) }, nonsequencedLookup(fun(x) { vtData(x).name == "Frankie" }));
+  assertEq(sortedLookup,
+      [
+      withValidity((name = "Frankie", salary = 35000, position_id = positionID("Postdoc")), pv_from, pa_from),
+      withValidity((name = "Frankie", salary = 35000, position_id = positionID("Lecturer")), pa_from, pv_to)
+      ]);
+
+  ### Case 4: PA overlaps PV entirely
+  ### PV: 2020-01-01 --> 2030-01-01
+  ### PA: 2028-01-01 --> 2040-01-01
+  var pv_from = parseDate("2020-05-01 00:00:00");
+  var pv_to= parseDate("2030-01-01 00:00:00");
+  var pa_from = parseDate("2010-01-01 00:00:00");
+  var pa_to = parseDate("2040-01-01 00:00:00");
+  hire("Gemma", 35000, positionID("Lecturer"), pv_from, pv_to);
+
+  # Gemma's entitled to back-pay
+  update sequenced (x <-v- employees)
+    between (pa_from, pa_to)
+    where (x.name == "Gemma")
+    set (salary = 45000);
+  assertEq(nonsequencedLookup(fun(x) { vtData(x).name == "Gemma" }),
+      [
+      withValidity((name = "Gemma", salary = 45000, position_id = positionID("Lecturer")), pv_from, pv_to)
+      ])
 }
 
 test()
