@@ -1961,6 +1961,12 @@ module ValidTime = struct
               | Some where -> op_and (base [] where) pred
               | None -> pred in
 
+          (* Add the period-stamping fields to the table types *)
+          let table_types =
+            table_types
+              |> StringMap.add from_field (`Primitive Primitive.DateTime)
+              |> StringMap.add to_field (`Primitive Primitive.DateTime) in
+
           (* Select all fields, 'start' date is end of PA *)
           let select_fields =
             StringMap.mapi (fun k _ ->
