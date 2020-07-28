@@ -378,6 +378,7 @@ and phrasenode =
   | DBUpdate         of temporal_update *
                         Pattern.with_pos * phrase * phrase option *
                           (Name.t * phrase) list
+  | DBTemporalJoin   of TableMode.t * phrase * Types.datatype option
   | TemporalOp       of TemporalOperation.t * phrase (* Target *) * phrase list  (* Arguments *)
   | LensLit          of phrase * Lens.Type.t option
   | LensSerialLit    of phrase * string list * Lens.Type.t option
@@ -580,7 +581,7 @@ struct
     | Query (None, _, p, _) -> phrase p
     | Query (Some (limit, offset), _, p, _) ->
        union_all [phrase limit; phrase offset; phrase p]
-
+    | DBTemporalJoin (_, p, _) -> phrase p
     | Escape (v, p) -> diff (phrase p) (singleton (Binder.to_name v))
     | FormletPlacement (p1, p2, p3)
     | Conditional (p1, p2, p3) -> union_map phrase [p1;p2;p3]

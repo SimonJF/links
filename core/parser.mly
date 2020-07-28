@@ -343,7 +343,7 @@ let parse_foreign_language pos lang =
 %token <string> OPERATOR
 %token VALID TO USING TTFROM TTTO TTDATA TTCURRENT TTAT VTFROM VTTO VTDATA
 %token VTSETFROM VTSETTO VTSETDATA SEQUENCED CURRENT NONSEQUENCED
-%token BETWEEN
+%token BETWEEN VTJOIN TTJOIN
 
 %start just_datatype
 %start interactive
@@ -621,6 +621,8 @@ query_policy:
 postfix_expression:
 | primary_expression | spawn_expression                        { $1 }
 | block                                                        { $1 }
+| TTJOIN block                                                 { temporal_join ~ppos:$loc TableMode.transaction $2 }
+| VTJOIN block                                                 { temporal_join ~ppos:$loc TableMode.valid $2 }
 | QUERY query_policy block                                     { query ~ppos:$loc None $2 $3 }
 | QUERY LBRACKET exp RBRACKET query_policy block               { query ~ppos:$loc (Some ($3, with_pos $loc (Constant (Constant.Int 0)))) $5 $6 }
 | QUERY LBRACKET exp COMMA exp RBRACKET query_policy block     { query ~ppos:$loc (Some ($3, $5)) $7 $8 }

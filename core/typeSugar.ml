@@ -122,6 +122,7 @@ struct
     | InfixAppl _
     | Spawn _
     | Query _
+    | DBTemporalJoin _
     | FnAppl _
     | Handle _
     | Switch _
@@ -419,6 +420,8 @@ sig
 
   val temporal_accessor: TemporalOperation.t -> griper
   val transaction_demotion_argument : TemporalOperation.t -> griper
+  val temporal_join_effects : griper
+  val temporal_join_body : griper
 
   val valid_mutator: TemporalOperation.t -> griper
   val valid_mutator_argument: TemporalOperation.t -> griper
@@ -1659,6 +1662,23 @@ end
                "but the given argument has type"  ^ nli () ^
                 code ppr_actual                   ^ nl  () ^
                "instead.")
+
+    let temporal_join_effects ~pos ~t1:(_, lt) ~t2:(_, rt) ~error:_ =
+      build_tyvar_names [lt; rt];
+      let ppr_rt = show_type rt in
+      let ppr_lt = show_type lt in
+      die pos ("The join block has effects"            ^ nli () ^
+                code ppr_rt                            ^ nl  () ^
+               "but the currently allowed effects are" ^ nli () ^
+                code ppr_lt)
+
+    let temporal_join_body ~pos ~t1:(expr,t) ~t2:_ ~error:_ =
+      build_tyvar_names [t];
+      with_but pos
+        ("The body of a temporal join must return a list")
+        (expr, t)
+
+
 end
 
 type context = Types.typing_environment = {
@@ -3369,6 +3389,33 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * Usage.t =
                             Types.fresh_row_variable (lin_any, res_base), false)) in
                      unify ~handle:Gripers.query_base_row (pos_and_typ p, no_pos shape) in
             Query (range, policy, erase p, Some (typ p)), typ p, Usage.combine (range_usages) (usages p)
+        | DBTemporalJoin (mode, body, _) ->
+            let outer_effects =
+              Types.make_empty_open_row default_effect_subkind in
+            let inner_effects = Types.make_empty_closed_row () in
+            let () = unify ~handle:Gripers.temporal_join_effects
+              (no_pos (`Record context.effect_row), no_pos (`Record outer_effects)) in
+            let body = type_check (bind_effects context inner_effects) body in
+            (* Given body type [A], tt_join should result in [TransactionTime(A)]
+             * and likewise for valid time  *)
+            let body_type = Types.fresh_type_variable (lin_any, res_any) in
+            let () = unify ~handle:Gripers.temporal_join_body
+              (pos_and_typ body, no_pos (Types.make_list_type body_type)) in
+
+            let result_type =
+              let open TableMode in
+              match mode with
+                | Transaction ->
+                    body_type
+                    |> Types.transaction_absty
+                    |> Types.make_list_type
+                | Valid ->
+                    body_type
+                    |> Types.valid_absty
+                    |> Types.make_list_type
+                | _ -> assert false (* Impossible to construct *) in
+            DBTemporalJoin (mode, erase body, Some result_type), result_type,
+            (usages body)
         (* mailbox-based concurrency *)
         | Spawn (Wait, l, p, old_inner) ->
             assert (l = NoSpawnLocation);

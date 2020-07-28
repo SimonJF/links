@@ -98,6 +98,8 @@ let keywords = [
  "insert"   , INSERT;
  "tt_insert", TTINSERT;
  "vt_insert", VTINSERT;
+ "tt_join"  , TTJOIN;
+ "vt_join"  , VTJOIN;
  "linfun"   , LINFUN;
  "module"   , MODULE;
  "mu"       , MU;

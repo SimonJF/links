@@ -204,6 +204,9 @@ class map =
                  let _x_i1 = o#phrase _x_i1 in (_x, _x_i1))
               _x in
           let _x_i1 = o#phrase _x_i1 in Query (_x, _policy, _x_i1, _x_i2)
+      | DBTemporalJoin (_mode, _block, _ty) ->
+          let _block = o#phrase _block in
+          DBTemporalJoin (_mode, _block, _ty)
       | ListLit (_x, _x_i1) ->
           let _x = o#list (fun o -> o#phrase) _x in
           let _x_i1 = o#option (fun o -> o#typ) _x_i1 in
@@ -1004,6 +1007,9 @@ class fold =
                  let o = o#phrase _x_i1 in o)
               _x in
           let o = o#phrase _x_i1 in o
+      | DBTemporalJoin (_mode, _block, _ty) ->
+          let o= o#phrase _block in
+          o
       | ListLit (_x, _x_i1) -> let o = o#list (fun o -> o#phrase) _x in o
       | Iteration ((_x, _x_i1, _x_i2, _x_i3)) ->
           let o = o#list (fun o -> o#iterpatt) _x in
@@ -1757,6 +1763,9 @@ class fold_map =
                  let (o, _x_i1) = o#phrase _x_i1 in (o, (_x, _x_i1)))
               _x in
           let (o, _x_i1) = o#phrase _x_i1 in (o, (Query (_x, _policy, _x_i1, _x_i2)))
+      | DBTemporalJoin (_mode, _block, _ty) ->
+          let (o, _block) = o#phrase _block in
+          (o, DBTemporalJoin (_mode, _block, _ty))
       | ListLit (_x, _x_i1) ->
           let (o, _x) = o#list (fun o -> o#phrase) _x in
           let (o, _x_i1) = o#option (fun o -> o#typ) _x_i1 in

@@ -264,3 +264,13 @@ tests/temporal/vt-current-deletion-bad-2.links
 filemode : true
 exit : 1
 stderr : @.*Type error:.*
+
+Valid time join
+tests/temporal/vt-join-ok.links
+filemode : true
+exit : 0
+
+Transaction time join
+tests/temporal/tt-join-ok.links
+filemode : true
+exit : 0
