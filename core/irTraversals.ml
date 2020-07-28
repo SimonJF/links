@@ -387,6 +387,9 @@ struct
                 range in
             let e, t, o = o#computation e in
               Query (range, policy, e, t), t, o
+        | TemporalJoin (mode, e, _) ->
+            let e, t, o = o#computation e in
+              TemporalJoin (mode, e, t), t, o
         | InsertRows (source, rows) ->
             let source, _, o = o#value source in
             let rows, _, o = o#value rows in

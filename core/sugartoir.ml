@@ -135,6 +135,8 @@ sig
 
   val query : (value sem * value sem) option * QueryPolicy.t * tail_computation sem -> tail_computation sem
 
+  val temporal_join : TableMode.t * tail_computation sem -> tail_computation sem
+
   val db_insert : env -> (value sem * value sem) -> tail_computation sem
   val db_insert_returning : env -> (value sem * value sem * value sem) -> tail_computation sem
 
@@ -703,6 +705,10 @@ struct
                    (fun offset ->
                       lift (Special (Query (Some (limit, offset), policy, (bs, e), sem_type s)), sem_type s)))
 
+  let temporal_join (mode, comp) =
+    let bs, e = reify comp in
+    lift (Special (TemporalJoin (mode, (bs, e), sem_type comp)), sem_type comp)
+
   let letvar (x_info, s, tyvars, body) =
     bind s
       (fun e ->
@@ -1108,6 +1114,7 @@ struct
           | Block (bs, e) -> eval_bindings Scope.Local env bs e
           | Query (range, policy, e, _) ->
               I.query (opt_map (fun (limit, offset) -> (ev limit, ev offset)) range, policy, ec e)
+          | DBTemporalJoin (mode, e, _) -> I.temporal_join (mode, ec e)
           | DBInsert (_, source, _fields, rows, None) ->
               let source = ev source in
               let rows = ev rows in

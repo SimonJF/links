@@ -101,6 +101,7 @@ and special =
   | LensPut    of value * value * Types.datatype
   | Table      of table
   | Query      of (value * value) option * QueryPolicy.t * computation * Types.datatype
+  | TemporalJoin of TableMode.t * computation * Types.datatype
   | InsertRows of value * value
   | InsertReturning of value * value * value
   | Update     of temporal_update * (binder * value) * computation option * computation

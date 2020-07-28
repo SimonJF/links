@@ -748,6 +748,7 @@ struct
                From an implementation perspective, we should check the consistency of the read, write, needed info here *)
             Table { database = db; table = table_name; keys; table_type = tt },
             `Table tt, o
+        | TemporalJoin (_, _, _) -> assert false (* nope not in the mood *)
         | Query (range, policy, e, original_t) ->
             let range, o =
               o#optionu
@@ -779,7 +780,7 @@ struct
               Query (range, policy, e, t), t, o
 
         | InsertRows (source, rows)
-	| InsertReturning (source, rows, _) ->
+        | InsertReturning (source, rows, _) ->
             (* Most logic is shared between InsertRow and InsetReturning.
                We disambiguate between the two later on. *)
 
