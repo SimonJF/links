@@ -673,6 +673,34 @@ struct
   end
 end
 
+(* By virtue of normal forms, we can do a straightforward transformation
+ * to rewrite into a temporally-joined normal form (i.e., a join where the
+ * period of validity of the returned value is the intersection of the periods
+ * of validity of all joined records).
+ *
+ * There is one restriction: temporally-joined tables must be of the same time
+ * dimension, meaning that we can't have both transaction-time and valid-time
+ * tables in the same query. This will be checked dynamically at present,
+ * however it might be possible to do so statically in future. *)
+let rewrite_temporal_join =
+  class join_visitor =
+    object(self)
+      inherit Transform.visitor as super
+      (* The `for` comprehension of a normalised queries will
+       * contain a list of all generators used within the query.
+       * The traversal object needs to record a list of pairs
+       * [(table name, start column, end column)] in order to generate
+       * the correct projections for the predicate. *)
+      val tables = []
+
+      method set_tables tbls = {< tables = tbls >}
+
+      method! query = function
+        | For (_, gens, _, body) -> ...
+        | If (i, t, e) -> ...
+        | Singleton (Record fields) -> ...
+        | q -> super#query q (* It might be worth just asserting false. *)
+
 (** Returns which database was used if any.
 
    Currently this assumes that at most one database is used.
