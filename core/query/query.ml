@@ -340,6 +340,24 @@ struct
       | Constant (Constant.Bool true)  -> Constant (Constant.Bool false)
       | _                       -> Apply  (Primitive "not", [a])
 
+  let reduce_min (a, b) =
+    match a, b with
+      | Constant (Constant.DateTime Timestamp.MinusInfinity), _
+      | _, Constant (Constant.DateTime Timestamp.MinusInfinity) ->
+          Constant (Constant.DateTime Timestamp.MinusInfinity)
+      | Constant (Constant.DateTime dt1), Constant (Constant.DateTime dt2) ->
+          Constant (Constant.DateTime (min dt1 dt2))
+      | _, _ -> Apply (Primitive "min", [a; b])
+
+  let reduce_max (a, b) =
+    match a, b with
+      | Constant (Constant.DateTime Timestamp.Infinity), _
+      | _, Constant (Constant.DateTime Timestamp.Infinity) ->
+          Constant (Constant.DateTime Timestamp.Infinity)
+      | Constant (Constant.DateTime dt1), Constant (Constant.DateTime dt2) ->
+          Constant (Constant.DateTime (max dt1 dt2))
+      | _, _ -> Apply (Primitive "max", [a; b])
+
   let rec reduce_eq (a, b) =
     let bool x = Constant (Constant.Bool x) in
     let eq_constant =
@@ -682,9 +700,9 @@ end
  * dimension, meaning that we can't have both transaction-time and valid-time
  * tables in the same query. This will be checked dynamically at present,
  * however it might be possible to do so statically in future. *)
-let rewrite_temporal_join =
-  class join_visitor =
-    object(self)
+module RewriteTemporalJoin = struct
+  class visitor mode =
+    object(o)
       inherit Transform.visitor as super
       (* The `for` comprehension of a normalised queries will
        * contain a list of all generators used within the query.
@@ -693,13 +711,95 @@ let rewrite_temporal_join =
        * the correct projections for the predicate. *)
       val tables = []
 
-      method set_tables tbls = {< tables = tbls >}
+      method private set_tables tbls = {< tables = tbls >}
 
-      method! query = function
-        | For (_, gens, _, body) -> ...
-        | If (i, t, e) -> ...
-        | Singleton (Record fields) -> ...
-        | q -> super#query q (* It might be worth just asserting false. *)
+      (* Start time: maximum of all start times *)
+      method private start_time =
+        let open Q in
+        List.fold_right (fun (tbl_var, start_time, _) expr ->
+          Apply (Primitive "max", [Project (tbl_var, start_time); expr])
+        ) tables (Constant Constant.DateTime.beginning_of_time)
+
+      (* End time: minimum of all end times *)
+      method private end_time =
+        let open Q in
+        List.fold_right (fun (tbl_var, _, end_time) expr ->
+          Apply (Primitive "min", [Project (tbl_var, end_time); expr])
+        ) tables (Constant Constant.DateTime.forever)
+
+      method! query =
+        let open Q in
+        let open Value in
+        let open TemporalState in
+        let app prim args = Apply (Primitive prim, args) in
+        function
+          | For (tag, gens, os, body) ->
+              let tables =
+                (* Restrict attention to ValidTime or TransactionTime tables *)
+                List.filter_map (function
+                  | (v, Table ({ state = TransactionTime _; _ } as t)) -> Some (v, t)
+                  | (v, Table ({ state = ValidTime _; _ } as t)) -> Some (v, t)
+                  | _ -> None) gens in
+
+              (* Ensure that all tables correspond to the given mode *)
+              let matches_mode = function
+                | { state = TransactionTime _; _  } ->
+                    mode = TableMode.Transaction
+                | { state = ValidTime _; _  } ->
+                    mode = TableMode.Valid
+                | _ -> false in
+
+              let () = List.iter (fun x ->
+                if matches_mode (snd x) then () else
+                  (* SJF: Probably worth doing a better error here. *)
+                  raise
+                    (Errors.runtime_error
+                      ("All tables in a temporal join must match the " ^
+                      "mode of the join."))) tables in
+              let tables =
+                List.map (fun (v, x) ->
+                  match x.state with
+                    | ValidTime { from_field; to_field }
+                    | TransactionTime { from_field; to_field } ->
+                        let ty =
+                          List.fold_left
+                            (fun acc (k, x) ->
+                              match x with
+                                | `Present t -> StringMap.add k t acc
+                                | _ -> assert false)
+                            (StringMap.empty)
+                            (fst3 x.row |> StringMap.to_alist) in
+                        (Var (v, ty), from_field, to_field)
+                    | _ -> assert false) tables in
+
+              let o = o#set_tables tables in
+              let (o, body) = o#query body in
+              (o, For (tag, gens, os, body))
+          | If (i, t, e) ->
+              (o, app "&&" [
+                  i; app "<" [o#start_time; o#end_time] ])
+          | Singleton ((Record fields) as data) ->
+              let (data_field, from_field, to_field) =
+                let open TemporalMetadata in
+                match mode with
+                  | TableMode.Valid ->
+                      (Valid.data_field, Valid.from_field, Valid.to_field)
+                  | TableMode.Transaction ->
+                      (Transaction.data_field, Transaction.from_field, Transaction.to_field)
+                  | _ -> assert false in
+              let record_fields =
+                [(data_field, data);
+                 (from_field, o#start_time);
+                 (to_field, o#end_time)] in
+              (o, Singleton (Record (StringMap.from_alist record_fields)))
+          | q -> super#query q (* It might be worth just asserting false. *)
+    end
+end
+
+(* External function *)
+let rewrite_temporal_join mode q =
+  snd ((new RewriteTemporalJoin.visitor mode)#query q)
+
 
 (** Returns which database was used if any.
 
@@ -784,8 +884,6 @@ struct
           Q.Primitive "Empty"
         | "sortByBase" ->
           Q.Primitive "SortBy"
-        | "forever" ->
-          Q.Primitive "Forever"
         | _ ->
           begin
             match location with
@@ -1207,6 +1305,8 @@ struct
                   end
         end
     | Q.Primitive "forever", _ -> Q.Constant (Constant.DateTime.forever)
+    | Q.Primitive "beginning_of_time", _ ->
+        Q.Constant (Constant.DateTime.beginning_of_time)
     | Q.Primitive "now", _ -> Q.Constant (Constant.DateTime.now ())
     | Q.Primitive "not", [v] ->
       Q.reduce_not (v)
@@ -1216,6 +1316,10 @@ struct
       Q.reduce_or (v, w)
     | Q.Primitive "==", [v; w] ->
       Q.reduce_eq (v, w)
+    | Q.Primitive "min", [v; w] ->
+      Q.reduce_min (v, w)
+    | Q.Primitive "max", [v; w] ->
+      Q.reduce_max (v, w)
     | Q.Primitive f, args ->
         Q.Apply (Q.Primitive f, args)
     | Q.If (c, t, e), args ->
@@ -1377,6 +1481,12 @@ and base : Sql.index -> Q.t -> Sql.base = fun index ->
         Sql.Empty (unit_query v)
     | Apply (Primitive "length", [v]) ->
         Sql.Length (unit_query v)
+    | Apply (Primitive "min", vs) ->
+        let vs = List.map (base index) vs in
+        Sql.Apply ("least", vs)
+    | Apply (Primitive "max", vs) ->
+        let vs = List.map (base index) vs in
+        Sql.Apply ("greatest", vs)
     | Apply (Primitive f, vs) ->
         Sql.Apply (f, List.map (base index) vs)
     | Project (Var (x, _field_types), name) ->

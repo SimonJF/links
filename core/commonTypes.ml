@@ -358,13 +358,19 @@ module TemporalMetadata = struct
 
   let pp fmt x = Format.pp_print_string fmt (show x)
 
-  module Transaction = struct
+  module type METADATA_FIELDS = sig
+    val data_field : string
+    val from_field : string
+    val to_field : string
+  end
+
+  module Transaction : METADATA_FIELDS = struct
     let data_field = "!ttdata"
     let from_field = "!ttfrom"
     let to_field = "!ttto"
   end
 
-  module Valid = struct
+  module Valid : METADATA_FIELDS = struct
     let data_field = "!vtdata"
     let from_field = "!vtfrom"
     let to_field = "!vtto"

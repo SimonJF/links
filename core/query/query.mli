@@ -61,6 +61,8 @@ module Transform : QUERY_VISITOR
 
 val unbox_xml : Lang.t -> Value.xmlitem
 
+val rewrite_temporal_join : TableMode.t -> Lang.t -> Lang.t
+
 val used_database : Lang.t -> Value.database option
 
 val string_of_t : Lang.t -> string
