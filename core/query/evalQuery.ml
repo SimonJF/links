@@ -298,9 +298,9 @@ let ordered_query v =
   Sql.UnionAll (List.map Q.sql_of_query vs, n)
 
 
-let compile_inner : Value.env -> (int * int) option * Ir.computation ->
-  (Value.database * Q.t * Types.datatype) option =
-    fun (range, e) ->
+let compile_inner : Value.env -> Ir.computation ->
+  (Value.database * QL.t * Types.datatype) option =
+    fun env e ->
       let v = Q.Eval.eval QueryPolicy.Flat env e in
       match Q.used_database v with
         | None -> None
@@ -314,16 +314,16 @@ let compile : Value.env -> (int * int) option * Ir.computation -> (Value.databas
       let q = ordered_query v in
       Debug.print ("Generated query: "^ (db#string_of_query range q));
       (db, q, t)
-    ) (compile_inner env (range, e))
+    ) (compile_inner env e)
 
 let compile_temporal_join :
     TableMode.t ->
     Value.env ->
-    (int * int) option * Ir.computation ->
+    Ir.computation ->
     (Value.database * Sql.query * Types.datatype) option =
-  fun mode env (range, e) ->
+  fun mode env e ->
     OptionUtils.opt_map (fun (db, v, t) ->
-      let q = Query.rewrite_temporal_query mode v |> ordered_query v in
-      Debug.print ("Generated query: "^ (db#string_of_query range q));
+      let q = Query.rewrite_temporal_join mode v |> ordered_query in
+      Debug.print ("Generated query: "^ (db#string_of_query None q));
       (db, q, t)
-    ) (compile_inner env (range, e))
+    ) (compile_inner env e)

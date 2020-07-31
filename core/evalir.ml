@@ -818,7 +818,8 @@ struct
         (* For simplicity, we should be able to get away with using the
          * standard query evaluator here. The result type is nested due to
          * the added temporal metadata, but does not require any extra queries. *)
-       match EvalQuery.compile_temporal_join mode env (None, e) with
+       begin
+       match EvalQuery.compile_temporal_join mode env e with
          | None -> computation env cont e
          | Some (db, q, t) ->
              let q = db#string_of_query None q in
@@ -837,6 +838,7 @@ struct
              (* I expect there's probably something wrong with the `fields`
               * here, but let's see... *)
              apply_cont cont env (Database.execute_select fields q db)
+       end
     | InsertRows (source, rows) ->
         begin
           value env source >>= fun source ->

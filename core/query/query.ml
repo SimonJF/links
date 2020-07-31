@@ -714,14 +714,14 @@ module RewriteTemporalJoin = struct
       method private set_tables tbls = {< tables = tbls >}
 
       (* Start time: maximum of all start times *)
-      method private start_time =
+      method start_time =
         let open Q in
         List.fold_right (fun (tbl_var, start_time, _) expr ->
           Apply (Primitive "max", [Project (tbl_var, start_time); expr])
         ) tables (Constant Constant.DateTime.beginning_of_time)
 
       (* End time: minimum of all end times *)
-      method private end_time =
+      method end_time =
         let open Q in
         List.fold_right (fun (tbl_var, _, end_time) expr ->
           Apply (Primitive "min", [Project (tbl_var, end_time); expr])
@@ -776,9 +776,14 @@ module RewriteTemporalJoin = struct
               let (o, body) = o#query body in
               (o, For (tag, gens, os, body))
           | If (i, t, e) ->
-              (o, app "&&" [
-                  i; app "<" [o#start_time; o#end_time] ])
-          | Singleton ((Record fields) as data) ->
+              let (o, i) = o#query i in
+              let (o, t) = o#query t in
+              let (o, e) = o#query e in
+              let i =
+                app "&&" [
+                  i; app "<" [o#start_time; o#end_time] ] in
+              (o, If (i, t, e))
+          | Singleton ((Record _) as data) ->
               let (data_field, from_field, to_field) =
                 let open TemporalMetadata in
                 match mode with
