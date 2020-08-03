@@ -813,39 +813,41 @@ struct
            | `Nested -> evaluate_nested ()
        end
     | TemporalJoin (mode, e, _t) ->
-        (* TODO: This is just duplicated from the Query case at present.
-         * We'll need to abstract it out later. *)
-        (* For simplicity, we should be able to get away with using the
-         * standard query evaluator here. The result type is nested due to
-         * the added temporal metadata, but does not require any extra queries. *)
-       begin
-       match EvalQuery.compile_temporal_join mode env e with
-         | None ->
-             (* TODO: Currently this behaviour is erroneous: if there's no
-              * databases in the query, we'll enter this `None` branch, and
-              * the rewriting won't take place. We need to do one of two things:
-              * 1) Error out
-              * 2) Add a continuation frame which injects the result into temporal
-              *    metadata ranging from beginning_of_time --> forever *)
-             computation env cont e
-         | Some (db, q, t) ->
-             let q = db#string_of_query None q in
-             let (fieldMap, _, _), _ =
-               Types.unwrap_row (TypeUtils.extract_row t) in
-             let fields =
-               StringMap.fold
-                 (fun name t fields ->
-                   match t with
-                   | `Present t -> (name, t)::fields
-                   | `Absent -> assert false
-                   | `Var _ -> assert false)
-                 fieldMap
-                 []
-             in
-             (* I expect there's probably something wrong with the `fields`
-              * here, but let's see... *)
-             apply_cont cont env (Database.execute_select fields q db)
-       end
+        (* TODO: Copied code from above; should abstract it out
+         * (and maybe simplify it if we can -- we shouldn't need
+         * the whole power of shredding, just the ability to handle
+         * non-flat NFs) *)
+        begin
+        match EvalNestedQuery.compile_temporal_join mode env e with
+           | None ->
+               (* FIXME: This should either be an error, or the results should
+                * have the period [beginning of time, forever) *)
+               computation env cont e
+           | Some (db, p) ->
+              if db#supports_shredding () then
+                let get_fields t =
+                  match t with
+                  | `Record fields ->
+                     StringMap.to_list (fun name p -> (name, `Primitive p)) fields
+                  | _ -> assert false
+                in
+                let execute_shredded_raw (q, t) =
+                  let q = db#string_of_query None q in
+                  Database.execute_select_result (get_fields t) q db, t in
+                let raw_results =
+                  EvalNestedQuery.Shred.pmap execute_shredded_raw p in
+                let mapped_results =
+                  EvalNestedQuery.Shred.pmap EvalNestedQuery.Stitch.build_stitch_map raw_results in
+                apply_cont cont env
+                  (EvalNestedQuery.Stitch.stitch_mapped_query mapped_results)
+              else
+                let error_msg =
+                  Printf.sprintf
+                    "The database driver '%s' does not support shredding."
+                    (db#driver_name ())
+                in
+                raise (Errors.runtime_error error_msg)
+        end
     | InsertRows (source, rows) ->
         begin
           value env source >>= fun source ->

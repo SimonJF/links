@@ -29,7 +29,7 @@ fun setup() {
           beginning_of_time(), parseDate("2012-01-01 00:00:00")),
         withValidity(
           (salary_band = "UE07", salary = 32000),
-          parseDate("2010-01-01 00:00:00"), forever()),
+          parseDate("2012-01-01 00:00:00"), forever()),
         withValidity(
           (salary_band = "UE08", salary = 40000),
           beginning_of_time(), forever())
@@ -76,7 +76,11 @@ fun lookupEmployee(name) {
 
 fun main() {
   setup();
-  lookupEmployee("Bob")
+  assertEq(lookupEmployee("Alice"),
+      [withValidity((name = "Alice", salary = 40000, department = "Classics"),
+        beginning_of_time(), forever())]);
+  # TODO: Bob
+  # lookupEmployee("Bob")
   # assertEq...
 }
 

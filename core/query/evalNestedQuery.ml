@@ -84,6 +84,7 @@ struct
      expression. *)
   let rec nested_type_of_type : Types.datatype -> nested_type =
     fun t ->
+    Debug.print ("NT: " ^ Types.string_of_datatype t);
     match TypeUtils.concrete_type t with
     | `Primitive t -> `Primitive t
     | `Record (fields, _, _) -> `Record (StringMap.map (function
@@ -797,6 +798,24 @@ let compile_shredded : Value.env -> Ir.computation
         | None    -> None
         | Some db ->
           let t = Q.type_of_expression v in
+          let p = unordered_query_package t v in
+            Some (db, p)
+
+let compile_temporal_join :
+  TableMode.t ->
+  Value.env ->
+  Ir.computation ->
+    (Value.database * (Sql.query * Shred.flat_type) Shred.package) option =
+  fun mode env e ->
+    let v =
+      Q.Eval.eval QueryPolicy.Nested env e
+        |> Q.rewrite_temporal_join mode in
+      match Q.used_database v with
+        | None    -> None
+        | Some db ->
+          Debug.print ("Query: " ^ QL.show v);
+          let t = Q.type_of_expression v in
+          Debug.print ("Type of Expr: " ^ Types.string_of_datatype t);
           let p = unordered_query_package t v in
             Some (db, p)
 

@@ -340,23 +340,23 @@ struct
       | Constant (Constant.Bool true)  -> Constant (Constant.Bool false)
       | _                       -> Apply  (Primitive "not", [a])
 
-  let reduce_min (a, b) =
+  let reduce_least (a, b) =
     match a, b with
       | Constant (Constant.DateTime Timestamp.MinusInfinity), _
       | _, Constant (Constant.DateTime Timestamp.MinusInfinity) ->
           Constant (Constant.DateTime Timestamp.MinusInfinity)
       | Constant (Constant.DateTime dt1), Constant (Constant.DateTime dt2) ->
           Constant (Constant.DateTime (min dt1 dt2))
-      | _, _ -> Apply (Primitive "min", [a; b])
+      | _, _ -> Apply (Primitive "least", [a; b])
 
-  let reduce_max (a, b) =
+  let reduce_greatest (a, b) =
     match a, b with
       | Constant (Constant.DateTime Timestamp.Infinity), _
       | _, Constant (Constant.DateTime Timestamp.Infinity) ->
           Constant (Constant.DateTime Timestamp.Infinity)
       | Constant (Constant.DateTime dt1), Constant (Constant.DateTime dt2) ->
           Constant (Constant.DateTime (max dt1 dt2))
-      | _, _ -> Apply (Primitive "max", [a; b])
+      | _, _ -> Apply (Primitive "greatest", [a; b])
 
   let rec reduce_eq (a, b) =
     let bool x = Constant (Constant.Bool x) in
@@ -717,14 +717,14 @@ module RewriteTemporalJoin = struct
       method start_time =
         let open Q in
         List.fold_right (fun (tbl_var, start_time, _) expr ->
-          Apply (Primitive "max", [Project (tbl_var, start_time); expr])
+          Apply (Primitive "greatest", [Project (tbl_var, start_time); expr])
         ) tables (Constant Constant.DateTime.beginning_of_time)
 
       (* End time: minimum of all end times *)
       method end_time =
         let open Q in
         List.fold_right (fun (tbl_var, _, end_time) expr ->
-          Apply (Primitive "min", [Project (tbl_var, end_time); expr])
+          Apply (Primitive "least", [Project (tbl_var, end_time); expr])
         ) tables (Constant Constant.DateTime.forever)
 
       method! query =
@@ -1321,10 +1321,10 @@ struct
       Q.reduce_or (v, w)
     | Q.Primitive "==", [v; w] ->
       Q.reduce_eq (v, w)
-    | Q.Primitive "min", [v; w] ->
-      Q.reduce_min (v, w)
-    | Q.Primitive "max", [v; w] ->
-      Q.reduce_max (v, w)
+    | Q.Primitive "least", [v; w] ->
+      Q.reduce_least (v, w)
+    | Q.Primitive "greatest", [v; w] ->
+      Q.reduce_greatest (v, w)
     | Q.Primitive f, args ->
         Q.Apply (Q.Primitive f, args)
     | Q.If (c, t, e), args ->
@@ -1486,10 +1486,10 @@ and base : Sql.index -> Q.t -> Sql.base = fun index ->
         Sql.Empty (unit_query v)
     | Apply (Primitive "length", [v]) ->
         Sql.Length (unit_query v)
-    | Apply (Primitive "min", vs) ->
+    | Apply (Primitive "least", vs) ->
         let vs = List.map (base index) vs in
         Sql.Apply ("least", vs)
-    | Apply (Primitive "max", vs) ->
+    | Apply (Primitive "greatest", vs) ->
         let vs = List.map (base index) vs in
         Sql.Apply ("greatest", vs)
     | Apply (Primitive f, vs) ->

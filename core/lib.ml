@@ -575,6 +575,16 @@ let env : (string * (located_primitive * Types.datatype * pure)) list = [
    datatype "([a]) ~> [|Some:a | None:()|]",
   PURE);
 
+  "least",
+  (p2 (fun x y -> if less x y then x else y),
+   datatype "(DateTime, DateTime) ~> DateTime",
+  PURE);
+
+  "greatest",
+  (p2 (fun x y -> if less x y then y else x),
+   datatype "(DateTime, DateTime) ~> DateTime",
+  PURE);
+
   (* XML *)
   "childNodes",
   (p1 (function
