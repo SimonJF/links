@@ -820,7 +820,14 @@ struct
          * the added temporal metadata, but does not require any extra queries. *)
        begin
        match EvalQuery.compile_temporal_join mode env e with
-         | None -> computation env cont e
+         | None ->
+             (* TODO: Currently this behaviour is erroneous: if there's no
+              * databases in the query, we'll enter this `None` branch, and
+              * the rewriting won't take place. We need to do one of two things:
+              * 1) Error out
+              * 2) Add a continuation frame which injects the result into temporal
+              *    metadata ranging from beginning_of_time --> forever *)
+             computation env cont e
          | Some (db, q, t) ->
              let q = db#string_of_query None q in
              let (fieldMap, _, _), _ =

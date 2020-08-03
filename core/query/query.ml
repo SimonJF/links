@@ -783,7 +783,7 @@ module RewriteTemporalJoin = struct
                 app "&&" [
                   i; app "<" [o#start_time; o#end_time] ] in
               (o, If (i, t, e))
-          | Singleton ((Record _) as data) ->
+          | Singleton data ->
               let (data_field, from_field, to_field) =
                 let open TemporalMetadata in
                 match mode with
