@@ -701,6 +701,7 @@ struct
           | _ -> eval_error "Error evaluating table handle"
       end
     | Query (range, policy, e, _t) ->
+       let rq = Value.Env.request_data env in
        begin
          match range with
            | None -> Lwt.return None
@@ -709,6 +710,10 @@ struct
               value env offset >>= fun offset ->
               Lwt.return (Some (Value.unbox_int limit, Value.unbox_int offset))
        end >>= fun range ->
+
+       let get_time () = Unix.gettimeofday () in
+       let diff_time t1 t2 =
+         (t2 -. t1) *. 1000.0 in
          begin match policy with
            | QueryPolicy.Flat ->
                begin
@@ -729,11 +734,18 @@ struct
                            fieldMap
                            []
                        in
-                       apply_cont cont env (Database.execute_select fields q db)
+                       let t1 = get_time () in
+                       let res = Database.execute_select fields q db in
+                       let t2 = get_time () in
+                       RequestData.add_flat_query_record rq q (diff_time t1 t2);
+                       apply_cont cont env res
                end
            | QueryPolicy.Nested ->
                begin
+                 let queries = ref [] in
+                 let add_query q time = queries := (q, time) :: !queries in
                  if range != None then eval_error "Range is not supported for nested queries";
+                 let start = get_time () in
                  match EvalNestedQuery.compile_shredded env e with
                    | None -> computation env cont e
                    | Some (db, p) when db#supports_shredding () ->
@@ -746,13 +758,20 @@ struct
                        let execute_shredded_raw (q, t) =
                          let q = Sql.inline_outer_with q in
                          let q = db#string_of_query ~range q in
-                         Database.execute_select_result (get_fields t) q db, t in
+                         let t1 = get_time () in
+                         let res = Database.execute_select_result (get_fields t) q db, t in
+                         let t2 = get_time () in
+                         add_query q (diff_time t1 t2);
+                         res in
                        let raw_results =
                          EvalNestedQuery.Shred.pmap execute_shredded_raw p in
                        let mapped_results =
                          EvalNestedQuery.Shred.pmap EvalNestedQuery.Stitch.build_stitch_map raw_results in
-                       apply_cont cont env
-                         (EvalNestedQuery.Stitch.stitch_mapped_query mapped_results)
+                       let res = EvalNestedQuery.Stitch.stitch_mapped_query mapped_results in
+                       let finish = get_time () in
+                       let overall_time = diff_time start finish in
+                       RequestData.add_nested_query_record rq !queries overall_time;
+                       apply_cont cont env res
                    | Some(db,_) ->
                        let error_msg =
                          Printf.sprintf

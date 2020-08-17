@@ -147,8 +147,14 @@ struct
           ("text/plain",
             Utility.base64encode jsonized_val)
       | EvalMain ->
+         let rq = Value.Env.request_data valenv in
          Debug.print("Doing EvalMain");
-         run ()
+         Logging.time_lwt run >>= fun (res, time) ->
+         let log_entry =
+           Printf.sprintf "%s,%f" (RequestData.get_request_uri rq) time in
+         Logging.(log page_time_logfile log_entry);
+         RequestData.dump_query_metrics rq;
+         Lwt.return res
 
   let do_request ((valenv, _, _) as env) cgi_args run render_cont render_servercont_cont response_printer =
     let request = parse_request env cgi_args in
