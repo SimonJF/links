@@ -313,6 +313,12 @@ and pr_base quote one_table ppf b =
           Format.fprintf ppf "%s(%a)"
             (unary_map uop)
             pr_b_one_table v
+      (* HACK HACK *)
+      | Apply ("LIKE", [v; (Project (_, _) as w)]) ->
+      (* select allele_id from allele, structural_info as si where allele.accessions like '%' || si.official_gene_id || '%' and si.object_id = 2497; *)
+         Format.fprintf ppf "(%a) LIKE ('%%' || %a || '%%')"
+            pr_b_one_table v
+            pr_b_one_table w
       | Apply (op, [v; w]) when StringSet.mem op binary_ops ->
           Format.fprintf ppf "(%a) %s (%a)"
             pr_b_one_table v

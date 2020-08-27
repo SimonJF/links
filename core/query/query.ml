@@ -160,7 +160,9 @@ struct
             `Record (List.rev (StringMap.fold (fun name v fields ->
                                                  (name, ve v)::fields)
                                  fields []))
-        | _ -> assert false
+        | x ->
+            Debug.print ("UNHANDLED: " ^ (show x));
+            assert false
 
   let rec expression_of_base_value : Value.t -> t = function
     | `Bool b -> Constant (Constant.Bool b)
@@ -1102,14 +1104,21 @@ and base : Sql.index -> Q.t -> Sql.base = fun index ->
           | Some r ->
             Sql.Apply ("LIKE", [base index s; Sql.Constant (Constant.String r)])
           | None ->
-            let r =
-                  (* HACK:
-
-                     this only works if the regexp doesn't include any variables bound by the query
-                  *)
-                  Sql.Constant (Constant.String (Regex.string_of_regex (Linksregex.Regex.ofLinks (value_of_expression r))))
-                in
-                  Sql.Apply ("RLIKE", [base index s; r])
+              begin
+                let () = Debug.print ("R IS: " ^ (show r)) in
+                match r with
+                  (* HACK HACK *)
+                  | Variant ("Seq", Singleton (Variant ("Quote", Variant ("Simply", Project (Var (x, _t), field))))) ->
+                      Sql.Apply ("LIKE", [base index s; Sql.Project (x, field)])
+                  | _ ->
+                    let r =
+                      (* HACK:
+                         this only works if the regexp doesn't include any variables bound by the query
+                      *)
+                      Sql.Constant (Constant.String (Regex.string_of_regex (Linksregex.Regex.ofLinks (value_of_expression r))))
+                    in
+                      Sql.Apply ("RLIKE", [base index s; r])
+              end
         end
     | Apply (Primitive "Empty", [v]) ->
         Sql.Empty (unit_query v)
