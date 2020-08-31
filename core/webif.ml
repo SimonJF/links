@@ -15,6 +15,13 @@ struct
   module U = Serialisation.UnsafeJsonSerialiser
   module Eval = Evalir.Eval(Webs)
 
+  let count = ref 0
+  let gc () =
+    let () =
+      if !count mod 100 = 0 then
+        Gc.compact () in
+    incr count
+
   type web_request =
     | ServerCont of
         Value.t                (* thunk *)
@@ -154,6 +161,7 @@ struct
            Printf.sprintf "%s,%f" (RequestData.get_request_uri rq) time in
          Logging.(log page_time_logfile log_entry);
          RequestData.dump_query_metrics rq;
+         gc ();
          Lwt.return res
 
   let do_request ((valenv, _, _) as env) cgi_args run render_cont render_servercont_cont response_printer =

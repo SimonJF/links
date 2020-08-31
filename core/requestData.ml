@@ -72,15 +72,15 @@ let set_http_response_code req_data x = req_data.http_response_code := x
 let get_client_id req_data = !(req_data.client_id)
 let set_client_id req_data x = req_data.client_id := x
 
-let query_record query_string query_time = { query_string; query_time }
+let query_record _query_string query_time = { query_string = ""; query_time }
 
 (*
 let string_of_flat_query_record qr =
   qr.query_string ^ " " ^ (Int64.to_string qr.query_time)
   *)
 
-let add_flat_query_record rq query_string query_time =
-  let fqr = Flat {query_string; query_time} in
+let add_flat_query_record rq _query_string query_time =
+  let fqr = Flat {query_string = ""; query_time} in
   rq.queries := fqr :: !(rq.queries)
 
 let add_nested_query_record rq fqrs overall_time =

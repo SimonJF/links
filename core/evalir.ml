@@ -743,7 +743,7 @@ struct
            | QueryPolicy.Nested ->
                begin
                  let queries = ref [] in
-                 let add_query q time = queries := (q, time) :: !queries in
+                 let add_query q time = queries := ("", time) :: !queries in
                  if range != None then eval_error "Range is not supported for nested queries";
                  let start = get_time () in
                  match EvalNestedQuery.compile_shredded env e with
