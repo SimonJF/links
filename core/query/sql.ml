@@ -256,7 +256,7 @@ and pr_base quote one_table ppf b =
                        "floatToString"; "stringToFloat"; "floatToInt";
                        "not"; "negate"; "negatef"] in
   let binary_ops =
-    StringSet.of_list ["&&"; "||"; "=="; "<>"; "<"; ">"; "<="; ">="; "RLIKE"; "LIKE"] in
+    StringSet.of_list ["&&"; "||"; "=="; "<>"; "<"; ">"; "<="; ">="; "RLIKE"; "LIKE"; "ILIKE"] in
   let binary_map op =
     match op with
       | "&&" -> "and"
@@ -314,11 +314,12 @@ and pr_base quote one_table ppf b =
             (unary_map uop)
             pr_b_one_table v
       (* HACK HACK *)
-      | Apply ("LIKE", [v; (Project (_, _) as w)]) ->
-      (* select allele_id from allele, structural_info as si where allele.accessions like '%' || si.official_gene_id || '%' and si.object_id = 2497; *)
-         Format.fprintf ppf "(%a) LIKE ('%%' || %a || '%%')"
+      (*
+      | Apply ("ILIKE", [v; (Project (_, _) as w)]) ->
+         Format.fprintf ppf "(%a) ILIKE ('%%' || %a || '%%')"
             pr_b_one_table v
             pr_b_one_table w
+            *)
       | Apply (op, [v; w]) when StringSet.mem op binary_ops ->
           Format.fprintf ppf "(%a) %s (%a)"
             pr_b_one_table v

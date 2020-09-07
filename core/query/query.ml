@@ -976,6 +976,7 @@ end
 (* convert a regexp to a like if possible *)
 let rec likeify v =
   let open Q in
+  (* let () = Printf.printf "LIKEIFY: %s\n%!"  (show v) in *)
   let quote = Str.global_replace (Str.regexp_string "%") "\\%" in
     match v with
       | Variant ("Repeat", pair) ->
@@ -985,6 +986,8 @@ let rec likeify v =
               | _ -> None
           end
       | Variant ("Simply", Constant (Constant.String s)) -> Some (quote s)
+      | Variant ("Simply", Project (Var (v, _), field)) ->
+          Some (Printf.sprintf "t%d.\"%s\"" v field)
       | Variant ("Quote", Variant ("Simply", v)) ->
           (* TODO:
 
@@ -995,6 +998,11 @@ let rec likeify v =
             function
               | Constant (Constant.String s) -> Some s
               | Singleton (Constant (Constant.Char c)) -> Some (string_of_char c)
+              (* HACKY: Very special-cased *)
+              | Project (Var (v, _), field) ->
+                  Some (Printf.sprintf "t%d.\"%s\"" v field)
+              | Apply (Primitive "intToString", [Constant (Constant.Int x)]) ->
+                  Some (string_of_int x)
               | Concat vs ->
                   let rec concat =
                     function
@@ -1102,22 +1110,16 @@ and base : Sql.index -> Q.t -> Sql.base = fun index ->
       begin
         match likeify r with
           | Some r ->
-            Sql.Apply ("LIKE", [base index s; Sql.Constant (Constant.String r)])
+            Sql.Apply ("ILIKE", [base index s; Sql.Constant (Constant.String r)])
           | None ->
               begin
-                let () = Debug.print ("R IS: " ^ (show r)) in
-                match r with
-                  (* HACK HACK *)
-                  | Variant ("Seq", Singleton (Variant ("Quote", Variant ("Simply", Project (Var (x, _t), field))))) ->
-                      Sql.Apply ("LIKE", [base index s; Sql.Project (x, field)])
-                  | _ ->
-                    let r =
-                      (* HACK:
-                         this only works if the regexp doesn't include any variables bound by the query
-                      *)
-                      Sql.Constant (Constant.String (Regex.string_of_regex (Linksregex.Regex.ofLinks (value_of_expression r))))
-                    in
-                      Sql.Apply ("RLIKE", [base index s; r])
+                let r =
+                  (* HACK:
+                     this only works if the regexp doesn't include any variables bound by the query
+                  *)
+                  Sql.Constant (Constant.String (Regex.string_of_regex (Linksregex.Regex.ofLinks (value_of_expression r))))
+                in
+                  Sql.Apply ("RLIKE", [base index s; r])
               end
         end
     | Apply (Primitive "Empty", [v]) ->
