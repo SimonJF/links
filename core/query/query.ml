@@ -974,6 +974,20 @@ struct
 end
 
 (* convert a regexp to a like if possible *)
+(* TODO: Returning a string is too restrictive, since SQL doesn't allow
+ * splicing. Realistically we need another datatype of the form:
+ *
+ * type sql_like =
+ *   | LikeString of string
+ *   | LikeProject of (var, field)
+ *   | LikeConcat of sql_like list
+ *
+ * Then, we'd have an extra thing in the SQL DSL:
+ * type sql = ... | SqlLike of sql_like
+ *
+ * And then we'd implement the printing logic.
+ * But I should do the stuff I'm paid to do for a bit!
+ * *)
 let rec likeify v =
   let open Q in
   (* let () = Printf.printf "LIKEIFY: %s\n%!"  (show v) in *)
@@ -998,7 +1012,8 @@ let rec likeify v =
             function
               | Constant (Constant.String s) -> Some s
               | Singleton (Constant (Constant.Char c)) -> Some (string_of_char c)
-              (* HACKY: Very special-cased *)
+              (* HACKY: Very special-cased (doesn't work -- table name ends up
+               * being a literal part of the string) *)
               | Project (Var (v, _), field) ->
                   Some (Printf.sprintf "t%d.\"%s\"" v field)
               | Apply (Primitive "intToString", [Constant (Constant.Int x)]) ->
