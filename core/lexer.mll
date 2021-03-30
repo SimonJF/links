@@ -255,6 +255,8 @@ rule lex ctxt nl = parse
   | "prefix"                            { FIXITY Associativity.Right }
   | "postfix"                           { FIXITY Associativity.Left }
   | "to"                                { TO }
+  | "vtCurrent"                         { VTCURRENT }
+  | "vtAt"                              { VTAT }
   | "ttCurrent"                         { TTCURRENT }
   | "ttAt"                              { TTAT }
   | "ttData"                            { TTDATA }

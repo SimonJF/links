@@ -249,23 +249,23 @@ module TemporalState = struct
 
   let demote_time lower_bound upper_bound =
     function
+      | ValidTime { from_field; to_field }
       | TransactionTime { from_field; to_field } ->
           Demoted { from_field; to_field;
             demotion = AtTime { lower_bound; upper_bound } }
-      | Bitemporal _
-      | ValidTime _ ->
-          raise (internal_error "Bitemporal / ValidTime tables not yet supported")
+      | Bitemporal _ ->
+          raise (internal_error "Bitemporal tables not yet supported")
       | Current
       | Demoted _ ->
           raise (internal_error "Cannot demote a demoted or current table!")
 
   let demote_current =
     function
+      | ValidTime { from_field; to_field }
       | TransactionTime { from_field; to_field } ->
           Demoted { from_field; to_field; demotion = AtCurrent }
-      | Bitemporal _
-      | ValidTime _ ->
-          raise (internal_error "Bitemporal / ValidTime tables not yet supported")
+      | Bitemporal _ ->
+          raise (internal_error "Bitemporal tables not yet supported")
       | Current
       | Demoted _ ->
           raise (internal_error "Cannot demote a demoted or current table!")

@@ -1161,7 +1161,7 @@ struct
                   | ValidTimeDeletion (SequencedDeletion { validity_from; validity_to }) ->
                       `ValidSequencedDelete (ev validity_from, ev validity_to) in
                 I.db_delete env (del, p, source, where)
-          | TemporalOp (TemporalOperation.Demotion d, phr, args) ->
+          | TemporalOp (TemporalOperation.Demotion (_, d), phr, args) ->
               let phr = ev phr in
               let args = evs args in
               I.temporal_demotion (d, phr, args)

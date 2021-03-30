@@ -244,9 +244,7 @@ module Timestamp = struct
     let module AE = AngstromExtended in
     let timestamp_parser =
       if is_db then AE.db_timestamp else AE.user_timestamp in
-    (* The next Angstrom release will require the ~consume argument. *)
-    (* match parse_string ~consume:All db_timestamp str with *)
-    match AE.parse_string timestamp_parser str with
+    match AE.(parse_string ~consume:Consume.All timestamp_parser str) with
       | Ok (`Timestamp x) -> timestamp x
       | Ok (`Infinity) -> infinity
       | Ok (`MinusInfinity) -> minus_infinity
@@ -396,7 +394,7 @@ module TemporalOperation = struct
   type t =
     | Accessor of table_type * field
     | Mutator  of field (* Mutators only apply to valid-time tables *)
-    | Demotion of demotion
+    | Demotion of (table_type * demotion)
     [@@deriving show]
 
   let name = function
@@ -421,11 +419,17 @@ module TemporalOperation = struct
             | To -> "vtSetFrom"
             | Data -> "vtSetData"
         end
-    | Demotion d ->
+    | Demotion (Transaction, d) ->
         begin
           match d with
             | AtCurrent -> "ttCurrent"
             | AtTime -> "ttAt"
+        end
+    | Demotion (Valid, d) ->
+        begin
+          match d with
+            | AtCurrent -> "vtCurrent"
+            | AtTime -> "vtAt"
         end
 
   let field = function

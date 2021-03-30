@@ -2936,12 +2936,16 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * Usage.t =
             in
 
             let result_ty =
-              let check_table_ty () =
+              let check_table_ty dimension =
+                let unifier =
+                    match dimension with
+                        | TemporalOperation.Transaction -> `Transaction
+                        | TemporalOperation.Valid -> `Valid in
                 let expected =
                   `Table (data_ty,
                     `Record (Types.make_empty_open_row (lin_any, res_base)),
                     `Record (Types.make_empty_open_row (lin_any, res_base)),
-                    Types.make_table_metadata_unifier (`Transaction))
+                    Types.make_table_metadata_unifier unifier)
                 in
                 unify ~handle:(Gripers.temporal_accessor op)
                       (pos_and_typ target, no_pos expected)
@@ -2949,10 +2953,10 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * Usage.t =
               match op with
                 | Accessor (tbl, field) -> accessor_ty tbl field
                 | Mutator field -> mutator_ty field
-                | Demotion AtCurrent  ->
-                    check_table_ty (); table_view_ty
-                | Demotion AtTime ->
-                    let () = check_table_ty () in
+                | Demotion (table_ty, AtCurrent)  ->
+                    check_table_ty table_ty; table_view_ty
+                | Demotion (table_ty, AtTime) ->
+                    let () = check_table_ty table_ty in
                     (* Verify that the argument is a DateTime. *)
                     (* List.hd is safe since the parser only constructs
                      * singleton lists for atTime. If it's snuck in, it's
