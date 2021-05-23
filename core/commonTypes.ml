@@ -223,17 +223,54 @@ module ForeignLanguage = struct
 end
 
 module Primitive = struct
-  type t = Bool | Int | Char | Float | XmlItem | DB | String
+  type t = Bool | Int | Char | Float | XmlItem | DB | String | DateTime
     [@@deriving show]
 
   let to_string = function
-    | Bool    -> "Bool"
-    | Int     -> "Int"
-    | Char    -> "Char"
-    | Float   -> "Float"
-    | XmlItem -> "XmlItem"
-    | DB      -> "Database"
-    | String  -> "String"
+    | Bool     -> "Bool"
+    | Int      -> "Int"
+    | Char     -> "Char"
+    | Float    -> "Float"
+    | XmlItem  -> "XmlItem"
+    | DB       -> "Database"
+    | String   -> "String"
+    | DateTime -> "DateTime"
+end
+
+module Timestamp = struct
+  type t = Timestamp of CalendarShow.t | MinusInfinity | Infinity
+  [@@deriving show, ord]
+
+  let timestamp ts = Timestamp ts
+  let now () = Timestamp (CalendarShow.now ())
+  let infinity = Infinity
+  let minus_infinity = MinusInfinity
+
+  let to_string = function
+    | Timestamp ts ->
+        let open CalendarShow in
+        convert ts (CalendarLib.Time_Zone.UTC) (CalendarLib.Time_Zone.Local)
+        |> show
+        |> Printf.sprintf "%s"
+    | Infinity -> "'infinity'"
+    | MinusInfinity -> "'-infinity'"
+
+  let from_string is_db str = failwith "TODO"
+      (*
+        TODO: Fill me in -- looking back on it, I have no idea why I used
+        Angstrom instead of sticking with Menhir.
+       *)
+      (*
+    let bad_date msg = Errors.RuntimeError ("Ill-formed date: " ^ str ^ " ||| Message: " ^ msg) in
+    let module AE = AngstromExtended in
+    let timestamp_parser =
+      if is_db then AE.db_timestamp else AE.user_timestamp in
+    match AE.(parse_string ~consume:Consume.All timestamp_parser str) with
+      | Ok (`Timestamp x) -> timestamp x
+      | Ok (`Infinity) -> infinity
+      | Ok (`MinusInfinity) -> minus_infinity
+      | Error msg -> raise (bad_date msg)
+      *)
 end
 
 module Constant = struct
@@ -243,14 +280,22 @@ module Constant = struct
     | Bool   of bool
     | String of string
     | Char   of char
+    | DateTime of Timestamp.t
       [@@deriving show, ord]
 
   let type_of = function
-    | Float  _ -> Primitive.Float
-    | Int    _ -> Primitive.Int
-    | Bool   _ -> Primitive.Bool
-    | Char   _ -> Primitive.Char
-    | String _ -> Primitive.String
+    | Float    _ -> Primitive.Float
+    | Int      _ -> Primitive.Int
+    | Bool     _ -> Primitive.Bool
+    | Char     _ -> Primitive.Char
+    | String   _ -> Primitive.String
+    | DateTime _ -> Primitive.DateTime
+
+  module DateTime = struct
+    let now () = DateTime (Timestamp.timestamp (CalendarShow.now()))
+    let beginning_of_time = DateTime (Timestamp.minus_infinity)
+    let forever = DateTime (Timestamp.infinity)
+  end
 
   (* SQL standard for escaping single quotes in a string *)
   let escape_string s =
@@ -264,6 +309,7 @@ module Constant = struct
     | Char c      -> "'"^ Char.escaped c ^"'"
     | String s    -> "'" ^ escape_string s ^ "'"
     | Float value -> string_of_float' value
+    | DateTime ts -> Timestamp.to_string ts
 end
 
 module QueryPolicy = struct
