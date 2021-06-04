@@ -385,7 +385,7 @@ module Constant = struct
     | Char c      -> "'"^ Char.escaped c ^"'"
     | String s    -> "'" ^ escape_string s ^ "'"
     | Float value -> string_of_float' value
-    | DateTime ts -> Timestamp.to_string ts
+    | DateTime ts -> Timestamp.show ts
 end
 
 module QueryPolicy = struct
