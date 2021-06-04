@@ -237,42 +237,6 @@ module Primitive = struct
     | DateTime -> "DateTime"
 end
 
-module Timestamp = struct
-  type t = Timestamp of CalendarShow.t | MinusInfinity | Infinity
-  [@@deriving show, ord]
-
-  let timestamp ts = Timestamp ts
-  let now () = Timestamp (CalendarShow.now ())
-  let infinity = Infinity
-  let minus_infinity = MinusInfinity
-
-  let to_string = function
-    | Timestamp ts ->
-        let open CalendarShow in
-        convert ts (CalendarLib.Time_Zone.UTC) (CalendarLib.Time_Zone.Local)
-        |> show
-        |> Printf.sprintf "%s"
-    | Infinity -> "'infinity'"
-    | MinusInfinity -> "'-infinity'"
-
-  let from_string is_db str = failwith "TODO"
-      (*
-        TODO: Fill me in -- looking back on it, I have no idea why I used
-        Angstrom instead of sticking with Menhir.
-       *)
-      (*
-    let bad_date msg = Errors.RuntimeError ("Ill-formed date: " ^ str ^ " ||| Message: " ^ msg) in
-    let module AE = AngstromExtended in
-    let timestamp_parser =
-      if is_db then AE.db_timestamp else AE.user_timestamp in
-    match AE.(parse_string ~consume:Consume.All timestamp_parser str) with
-      | Ok (`Timestamp x) -> timestamp x
-      | Ok (`Infinity) -> infinity
-      | Ok (`MinusInfinity) -> minus_infinity
-      | Error msg -> raise (bad_date msg)
-      *)
-end
-
 module Constant = struct
   type t =
     | Float  of float

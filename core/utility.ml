@@ -1521,3 +1521,17 @@ struct
 
   let to_list buf = List.init (length buf) (get buf)
 end
+
+module CalendarShow = struct
+  include CalendarLib.Fcalendar.Precise
+
+  let pp ppf x =
+    Format.fprintf ppf "%04d-%02d-%02d %02d:%02d:%f"
+      (year x) (month x |> CalendarLib.Date.int_of_month)
+      (day_of_month x) (hour x) (minute x) (second x)
+
+  let show x =
+      let open Format in
+      pp str_formatter x;
+      flush_str_formatter ()
+end

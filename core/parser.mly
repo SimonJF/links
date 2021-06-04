@@ -1201,36 +1201,3 @@ multi_args:
 
 arg_lists:
 | multi_args+                                                  { $1 }
-
-float_or_int:
-| UFLOAT                                                       { $1 }
-| UINTEGER                                                     { float_of_int $1 }
-
-date:
-| UINTEGER COLON UINTEGER COLON UINTEGER                       { $1, $3, $5 }
-
-time:
-| UINTEGER COLON UINTEGER COLON float_or_int                   { $1, $3, $5 }
-
-infinity_string:
-| VARIABLE                                                     { match $1 with
-                                                                    | "infinity" -> ()
-                                                                    | _ -> raise (ConcreteSyntaxError $loc "Expected 'infinity'") }
-
-infinity:
-| MINUS infinity_string                                        { Timestamp.MinusInfinity }
-| infinity_string                                              { Timestamp.Infinity }
-
-datetime:
-| date time {
-    let year, month, day = date in
-    let hour, minute, second = time in
-    Timestamp.Timestamp (CalendarShow.lmake ~year ~month ~day ~hour ~minute ~second ()) }
-
-timestamp:
-| datetime { $1 }
-| infinity { $1 }
-
-offset:
-| PLUS UINTEGER                                                { $2 }
-| MINUS UINTEGER                                               { (-$2) }
