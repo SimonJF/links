@@ -1541,6 +1541,12 @@ fun localMonth(dt) { dateMonth(dt, utcOffset()) }
 sig localHour : (DateTime) ~> Int
 fun localHour(dt) { dateHour(dt, utcOffset()) }
 
+sig localMinute : (DateTime) ~> Int
+fun localMinute(dt) { dateMinute(dt) }
+
+sig localSecond : (DateTime) ~> Float
+fun localSecond(dt) { dateSecond(dt) }
+
 # Default serialisation of DTs at the moment is in local time,
 # so `showLocal` is just a specialisation of the default `show`
 # function.
