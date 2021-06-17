@@ -128,6 +128,26 @@ and jsonize_primitive : Value.primitive_value -> Yojson.Basic.t  = function
   | `Table t -> json_of_table t
   | `XML xmlitem -> json_of_xmlitem xmlitem
   | `String s -> `String s
+  | `DateTime (Timestamp.Infinity) ->
+      `Assoc [("_dateTime",
+        `Assoc [("type", `String "infinity");
+                ("value", `Int (-1))
+      ])]
+  | `DateTime (Timestamp.MinusInfinity) ->
+        `Assoc [("_dateTime",
+          `Assoc [("type", `String "-infinity");
+                  ("value", `Int (-1))
+        ])]
+  (* NOTE: An important invariant that it's only ever the *UTC* timestamp
+     that is transferred between client and server. *)
+  | `DateTime (Timestamp.Timestamp ts) ->
+      let utc_timestamp =
+        UnixTimestamp.of_calendar ts |> int_of_float in
+      `Assoc [("_dateTime",
+        `Assoc [
+          ("type", `String "timestamp");
+          ("value", `Int utc_timestamp)
+        ])]
 and json_of_xmlitem = function
   | Value.Text s ->
       `Assoc [("type", `String "TEXT"); ("text", `String s)]

@@ -1115,34 +1115,20 @@ let env : (string * (located_primitive * Types.datatype * pure)) list = [
                 * For now, just throwing a runtime exception. *)
                raise (runtime_error "Cannot convert 'forever' or 'beginning_of_time' into an integer")
            | `DateTime (Timestamp.Timestamp dt) ->
-               let tm = {
-                Unix.tm_sec = CalendarShow.second dt |> int_of_float;
-                Unix.tm_min = CalendarShow.minute dt;
-                Unix.tm_hour = CalendarShow.hour dt;
-                Unix.tm_mday = CalendarShow.day_of_month dt;
-                Unix.tm_mon = (CalendarShow.month dt |> CalendarLib.Date.int_of_month) - 1;
-                Unix.tm_year = (CalendarShow.year dt) - 1900;
-                Unix.tm_wday = 0; (* ignored *)
-                Unix.tm_yday =  0; (* ignored *)
-                Unix.tm_isdst = false } in
-               let t, _ = Unix.mktime tm in
-                 Value.box_int (int_of_float t)
+               UnixTimestamp.of_calendar dt
+                   |> int_of_float
+                   |> Value.box_int
            | _ -> assert false),
    datatype "(DateTime) ~> Int",
    IMPURE);
 
   "intToDate",
   (p1 (fun t ->
-         let tm = Unix.localtime(float_of_int (Value.unbox_int t)) in
-           (CalendarShow.lmake
-             ~year:(tm.Unix.tm_year + 1900)
-             ~month:(tm.Unix.tm_mon + 1)
-             ~day:tm.Unix.tm_mday
-             ~hour:tm.Unix.tm_hour
-             ~minute:tm.Unix.tm_min
-             ~second:(float_of_int tm.Unix.tm_sec) ())
-           |> Timestamp.timestamp
-           |> Value.box_datetime),
+       Value.unbox_int t
+       |> float_of_int
+       |> UnixTimestamp.to_local_calendar
+       |> Timestamp.timestamp
+       |> Value.box_datetime),
   datatype "(Int) ~> DateTime",
   IMPURE);
 
@@ -1151,8 +1137,7 @@ let env : (string * (located_primitive * Types.datatype * pure)) list = [
   "dateMonth", project_datetime_conv (fun dt -> CalendarShow.month dt |> CalendarLib.Date.int_of_month);
   "dateHour", project_datetime_conv (fun dt -> CalendarShow.hour dt);
   "dateMinute", project_datetime (fun dt -> CalendarShow.minute dt);
-
-  "dateSeconds",
+  "dateSecond",
   (p1 (fun dt ->
     match Value.unbox_datetime dt with
       | Timestamp.Infinity -> raise (runtime_error "Cannot project from 'forever'")
@@ -1183,12 +1168,6 @@ let env : (string * (located_primitive * Types.datatype * pure)) list = [
       |> Value.box_int),
     datatype "() ~> Int",
     IMPURE);
-
-    (*
-  (p1 (fun v -> Value.box_string (Value.string_of_value v)),
-   datatype "(a) ~> String",
-   IMPURE);
-*)
 
   "showUTC",
   (p1 (fun dt -> 

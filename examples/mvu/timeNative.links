@@ -1,0 +1,76 @@
+# A time example which uses the native DateTime type.
+# Showcases that DateTime can be used on the client.
+
+import Mvu;
+import MvuHTML;
+open import MvuSubscriptions;
+
+typename Model = (initial: DateTime, timestamp: DateTime);
+
+typename Msg = [| Tick |];
+
+sig updt : (Msg, Model) ~> Model
+fun updt(msg, model) {
+    switch (msg) {
+        case Tick ->
+            # Update timestamp on every tick
+            (model with timestamp = now())
+    }
+}
+
+sig view : (Model) ~> MvuHTML.HTML(Msg)
+fun view(model) {
+    open MvuHTML;
+    open MvuAttrs;
+
+    var a0 = MvuAttrs.empty;
+    fun entry(title, text) {
+        p(a0,
+            b(a0, textNode(text ^^ ": ")) +*
+            textNode(text))
+    }
+
+    var ts = model.timestamp;
+
+    entry("Initial time", showLocal(model.initial)) +*
+    entry("Initial time (UTC)", showLocal(model.initial)) +*
+    entry("Local time", showLocal(ts)) +*
+    entry("UTC time", showUTC(ts)) +*
+    entry("Local year", intToString(localYear(ts))) +*
+    entry("Local month", intToString(localMonth(ts))) +*
+    entry("Local hour", intToString(localHour(ts))) +*
+    entry("Local minute", intToString(localMinute(ts))) +*
+    entry("Local seconds", floatToString(localSecond(ts)))
+}
+
+sig subscriptions : (Model) ~> MvuSubscriptions.Sub(Msg)
+fun subscriptions(model) {
+    getEvery(1000, fun() {
+      Tick
+    })
+}
+
+
+fun mainPage(_) {
+  var initialModel = (initial = now(), timestamp = now());
+  var evtHandler = Mvu.run("placeholder", initialModel, view,
+      fun(msg, model) { (updt(msg, model), MvuCommands.empty) },
+      subscriptions, MvuCommands.empty);
+  page
+  <html>
+    <head>
+      <title>Stopwatch</title>
+    </head>
+    <body>
+      <div id="placeholder"></div>
+    </body>
+  </html>
+}
+
+fun main() {
+  addRoute("/", mainPage);
+  servePages()
+}
+
+main()
+
