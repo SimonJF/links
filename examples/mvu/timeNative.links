@@ -26,14 +26,14 @@ fun view(model) {
     var a0 = MvuAttrs.empty;
     fun entry(title, text) {
         p(a0,
-            b(a0, textNode(text ^^ ": ")) +*
+            b(a0, textNode(title ^^ ": ")) +*
             textNode(text))
     }
 
     var ts = model.timestamp;
 
     entry("Initial time", showLocal(model.initial)) +*
-    entry("Initial time (UTC)", showLocal(model.initial)) +*
+    entry("Initial time (UTC)", showUTC(model.initial)) +*
     entry("Local time", showLocal(ts)) +*
     entry("UTC time", showUTC(ts)) +*
     entry("Local year", intToString(localYear(ts))) +*
