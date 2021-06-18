@@ -1,6 +1,8 @@
 (* Serialisation of Value.t inhabitants. *)
 module E = Env
 open Value
+open CommonTypes
+open Utility
 
 let internal_error message =
   Errors.internal_error ~filename:"serialisation.ml" ~message
@@ -91,6 +93,13 @@ module Compressible = struct
     (* module V = Value *)
     (* include V *)
 
+    type compressed_timestamp = [
+      |`Infinity
+      | `MinusInfinity
+      | `Timestamp of float (* UTC UNIX timestamp *)
+    ]
+    [@@deriving yojson]
+
     (** {1 Compressed values for more efficient pickling} *)
     type compressed_primitive_value = [
       | `Bool of bool
@@ -100,7 +109,9 @@ module Compressible = struct
       | `XML of xmlitem
       | `String of string
       | `Table of string * string * string list list * string
-      | `Database of string ]
+      | `Database of string
+      | `DateTime of compressed_timestamp
+      ]
       [@@deriving yojson]
 
     type compressed_t = [
@@ -129,6 +140,10 @@ module Compressible = struct
       | `Table ((_database, db), table, keys, row) ->
          `Table (db, table, keys, Types.string_of_datatype (Types.Record (Types.Row row)))
       | `Database (_database, s) -> `Database s
+      | `DateTime Timestamp.Infinity -> `DateTime `Infinity
+      | `DateTime Timestamp.MinusInfinity -> `DateTime `MinusInfinity
+      | `DateTime (Timestamp.Timestamp ts) ->
+          `DateTime (`Timestamp (CalendarShow.to_unixfloat ts))
 
     let rec compress : t -> compressed_t = function
       | #primitive_value as v -> compress_primitive_value v
@@ -166,6 +181,10 @@ module Compressible = struct
          let driver, params = parse_db_string s in
          let database = db_connect driver params in
          `Database database
+      | `DateTime `Infinity -> `DateTime Timestamp.Infinity
+      | `DateTime `MinusInfinity -> `DateTime Timestamp.MinusInfinity
+      | `DateTime (`Timestamp ts) ->
+          `DateTime (Timestamp.timestamp (CalendarShow.from_unixfloat ts))
 
     let rec decompress ?(globals=Env.empty) (compressed : compressed_t) : Value.t =
       let decompress x = decompress ~globals x in
