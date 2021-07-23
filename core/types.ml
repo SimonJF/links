@@ -723,7 +723,7 @@ module Base : Constraint = struct
         | (Application _ | RecursiveApplication _) -> false
         | Meta _ as t  -> super#type_satisfies vars t
         (* Type *)
-        | Primitive (Bool | Int | Char | Float | String) -> true
+        | Primitive (Bool | Int | Char | Float | String | DateTime) -> true
         | Primitive _ -> false
         | (Function _ | Lolli _ | Record _ | Variant _ | Table _ | Lens _ | ForAll (_::_, _)) -> false
         | ForAll ([], t) -> super#type_satisfies vars t

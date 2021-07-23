@@ -1531,9 +1531,7 @@ module CalendarShow = struct
       (day_of_month x) (hour x) (minute x) (second x)
 
   let show x =
-      let open Format in
-      pp str_formatter x;
-      flush_str_formatter ()
+      Format.asprintf "%a" pp x
 end
 
 module UnixTimestamp = struct
