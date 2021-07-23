@@ -3,18 +3,35 @@
 
 import Mvu;
 import MvuHTML;
+import MvuCommands;
 open import MvuSubscriptions;
 
 typename Model = (initial: DateTime, timestamp: DateTime);
 
-typename Msg = [| Tick |];
+typename Msg = [| Tick | NoOp |];
 
-sig updt : (Msg, Model) ~> Model
+fun printClientTimeOnServer(time) server {
+    print("Client local time: " ^^ showLocal(time) ^^ "\n");
+    print("Client UTC time: " ^^ showUTC(time) ^^ "\n")
+}
+
+sig updt : (Msg, Model) {}~> (Model, MvuCommands.Command(Msg))
 fun updt(msg, model) {
     switch (msg) {
         case Tick ->
+            var dt = now();
+
+            # Print the time out on the server every 10 seconds.
+            var cmd =
+                if (mod(floatToInt(localSecond(dt)), 10) == 0) {
+                    MvuCommands.spawnProc(fun() { printClientTimeOnServer(dt); NoOp })
+                } else {
+                    MvuCommands.empty
+                };
+                
             # Update timestamp on every tick
-            (model with timestamp = now())
+            ((model with timestamp = now()), cmd)
+        case NoOp -> (model, MvuCommands.empty)
     }
 }
 
@@ -50,11 +67,9 @@ fun subscriptions(model) {
     })
 }
 
-
 fun mainPage(_) {
   var initialModel = (initial = now(), timestamp = now());
-  var evtHandler = Mvu.run("placeholder", initialModel, view,
-      fun(msg, model) { (updt(msg, model), MvuCommands.empty) },
+  Mvu.run("placeholder", initialModel, view, updt,
       subscriptions, MvuCommands.empty);
   page
   <html>

@@ -423,10 +423,27 @@ module UnsafeJsonSerialiser : SERIALISER with type s := Yojson.Basic.t = struct
         | _ -> None in
 
       let parse_record xs = `Record (List.map (fun (k, v) -> (k, from_json v)) xs) in
+
+      let parse_date xs () =
+          match (List.assoc_opt "_type" xs, List.assoc_opt "_value" xs) with
+            | (Some (`String "infinity"), _) -> 
+                Some (Timestamp.infinity |> Value.box_datetime)
+            | (Some (`String "-infinity"), _) ->
+                Some (Timestamp.minus_infinity |> Value.box_datetime)
+            | (Some (`String "timestamp"), Some (`Int utc_time)) ->
+                Some 
+                  (utc_time
+                    |> float_of_int
+                    |> UnixTimestamp.to_utc_calendar
+                    |> Timestamp.timestamp
+                    |> Value.box_datetime)
+            | _, _ -> None
+      in
       let (<|>) (o1: unit -> t option) (o2: unit -> t option) : unit -> t option =
         match o1 () with
         | Some x -> (fun () -> Some x)
         | None -> o2 in
+
       match json with
       | `Null -> `List []
       | `Int i -> box_int i
@@ -535,7 +552,7 @@ module UnsafeJsonSerialiser : SERIALISER with type s := Yojson.Basic.t = struct
          raise (error (
                     "dom ref key should be an integer. Got: " ^ (Yojson.Basic.to_string nonsense)))
       | `Assoc xs ->
-         (* For non-singleton assoc lists, try each () of these in turn.
+         (* For non-singleton assoc lists, try each of these in turn.
           * If all else fails, parse as a record. *)
          let result =
            (parse_list xs)
@@ -543,7 +560,9 @@ module UnsafeJsonSerialiser : SERIALISER with type s := Yojson.Basic.t = struct
            <|> (parse_client_ap xs)
            <|> (parse_client_pid xs)
            <|> (parse_session_channel xs)
-           <|> (parse_server_func xs) in
+           <|> (parse_server_func xs)
+           <|> (parse_date xs)
+         in
          begin
            match result () with
            | Some v -> v
