@@ -57,7 +57,8 @@ fun view(model) {
     entry("Local month", intToString(localMonth(ts))) +*
     entry("Local hour", intToString(localHour(ts))) +*
     entry("Local minute", intToString(localMinute(ts))) +*
-    entry("Local seconds", floatToString(localSecond(ts)))
+    entry("Local seconds", floatToString(localSecond(ts))) +*
+    entry("Client-parsed date", show(parseDate("2021-07-26 10:10:10+1")))
 }
 
 sig subscriptions : (Model) ~> MvuSubscriptions.Sub(Msg)
