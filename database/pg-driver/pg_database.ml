@@ -134,9 +134,9 @@ let pg_printer = object(self)
       "insert into %s %s" table_name body
 
     method! pp_base one_table ppf = function
-      | Constant (DateTime (CommonTypes.Timestamp.Infinity)) ->
+      | Sql.Constant (CommonTypes.Constant.DateTime (CommonTypes.Timestamp.Infinity)) ->
           Format.pp_print_string ppf "'infinity' :: timestamp with time zone"
-      | Constant (DateTime (CommonTypes.Timestamp.MinusInfinity)) ->
+      | Sql.Constant (CommonTypes.Constant.DateTime (CommonTypes.Timestamp.MinusInfinity)) ->
           Format.pp_print_string ppf "'-infinity' :: timestamp with time zone"
       | b -> super#pp_base one_table ppf b
 
