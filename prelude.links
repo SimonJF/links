@@ -1523,8 +1523,14 @@ fun utcDay(dt) { dateDay(dt, 0) }
 sig utcMonth : (DateTime) -> Int
 fun utcMonth(dt) { dateMonth(dt, 0) }
 
-sig utcHour : (DateTime) -> Int
-fun utcHour(dt) { dateHour(dt, 0) }
+sig utcHours : (DateTime) -> Int
+fun utcHours(dt) { dateHours(dt, 0) }
+
+sig utcMinutes : (DateTime) -> Int
+fun utcMinutes(dt) { dateMinutes(dt) }
+
+sig utcSeconds : (DateTime) -> Float
+fun utcSeconds(dt) { dateSeconds(dt) }
 
 # Local time accessors (Note that these are impure since we use utcOffset() to
 # get the currently-set UTC offset to convert from UTC to local time)
@@ -1538,14 +1544,14 @@ fun localDay(dt) { dateDay(dt, utcOffset()) }
 sig localMonth : (DateTime) ~> Int
 fun localMonth(dt) { dateMonth(dt, utcOffset()) }
 
-sig localHour : (DateTime) ~> Int
-fun localHour(dt) { dateHour(dt, utcOffset()) }
+sig localHours : (DateTime) ~> Int
+fun localHours(dt) { dateHours(dt, utcOffset()) }
 
-sig localMinute : (DateTime) ~> Int
-fun localMinute(dt) { dateMinute(dt) }
+sig localMinutes : (DateTime) ~> Int
+fun localMinutes(dt) { dateMinutes(dt) }
 
-sig localSecond : (DateTime) ~> Float
-fun localSecond(dt) { dateSecond(dt) }
+sig localSeconds : (DateTime) ~> Float
+fun localSeconds(dt) { dateSeconds(dt) }
 
 # Default serialisation of DTs at the moment is in local time,
 # so `showLocal` is just a specialisation of the default `show`

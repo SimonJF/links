@@ -157,7 +157,7 @@ let rec less l r =
     | `List (l), `List (r) -> less_lists (l,r)
     | `DateTime _, `DateTime (Timestamp.Infinity) -> true
     | `DateTime (Timestamp.Infinity), `DateTime _ -> false
-    | `DateTime (Timestamp.MinusInfinity), _ -> false
+    | `DateTime (Timestamp.MinusInfinity), _ -> true
     | `DateTime (Timestamp.Timestamp dt1), `DateTime (Timestamp.Timestamp dt2) ->
         let f1 = CalendarShow.to_unixfloat dt1 in
         let f2 = CalendarShow.to_unixfloat dt2 in
@@ -1138,7 +1138,7 @@ let env : (string * (located_primitive * Types.datatype * pure)) list = [
   (p1 (fun t ->
        Value.unbox_int t
        |> float_of_int
-       |> UnixTimestamp.to_local_calendar
+       |> UnixTimestamp.to_utc_calendar
        |> Timestamp.timestamp
        |> Value.box_datetime),
   datatype "(Int) ~> DateTime",
@@ -1147,9 +1147,9 @@ let env : (string * (located_primitive * Types.datatype * pure)) list = [
   "dateYear", (project_datetime_conv (fun dt -> CalendarShow.year dt));
   "dateDay", project_datetime_conv (fun dt -> CalendarShow.day_of_month dt);
   "dateMonth", project_datetime_conv (fun dt -> CalendarShow.month dt |> CalendarLib.Date.int_of_month);
-  "dateHour", project_datetime_conv (fun dt -> CalendarShow.hour dt);
-  "dateMinute", project_datetime (fun dt -> CalendarShow.minute dt);
-  "dateSecond",
+  "dateHours", project_datetime_conv (fun dt -> CalendarShow.hour dt);
+  "dateMinutes", project_datetime (fun dt -> CalendarShow.minute dt);
+  "dateSeconds",
   (p1 (fun dt ->
     match Value.unbox_datetime dt with
       | Timestamp.Infinity -> raise (runtime_error "Cannot project from 'forever'")
