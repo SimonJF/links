@@ -1,4 +1,4 @@
-DROP TABLE IF EXISTS dates;
+DROP TABLE IF EXISTS conferences;
 
 CREATE TABLE conferences (
     name text,

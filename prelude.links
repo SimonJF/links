@@ -1395,9 +1395,9 @@ fun assertEq (actual, expected) server {
       ()
   else {
       print("Assertion failed.");
-      print("Expected:");
+      print("Expected:\n");
       print(show(expected));
-      print("but got:");
+      print("\nbut got:\n");
       print(show(actual));
       sysexit(2)
   }

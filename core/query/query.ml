@@ -577,6 +577,7 @@ struct
       | `Char c   -> Constant (Constant.Char c)
       | `Float f  -> Constant (Constant.Float f)
       | `String s -> Constant (Constant.String s)
+      | `DateTime dt -> Constant (Constant.DateTime dt)
       | `Table t -> Table t
       | `Database db -> Database db
       | `List vs ->
