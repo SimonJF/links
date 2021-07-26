@@ -1,7 +1,8 @@
 {"databases" :
  [ "pgsql" ],
  "setups" :
- [ "factorials",
+ [ "dates",
+   "factorials",
    "jrules",
    "organisation",
    "travel_portal" ],
