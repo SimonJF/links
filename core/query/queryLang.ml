@@ -182,9 +182,7 @@ let table_field_types Value.{ row = (fields, _, _); temporal_fields; _ } =
     in
     let declared_fields = field_types_of_spec_map fields in
     (* Add metadata fields *)
-    List.fold_left
-      (fun acc (k, v) -> StringMap.add k v acc)
-      declared_fields metadata_fields
+    StringMap.superimpose (StringMap.from_alist metadata_fields) declared_fields
 
 let unbox_xml =
   function
@@ -542,75 +540,75 @@ let check_policies_compatible env_policy block_policy =
     raise (Errors.runtime_error error)
 
 (* convert a regexp to a like if possible *)
-let rec likeify v =
-  let quote = Str.global_replace (Str.regexp_string "%") "\\%" in
-  let append x y = Apply (Primitive "^^",  [x; y]) in
-  let str x = Constant (Constant.String x) in
-    match v with
-      | Variant ("Repeat", pair) ->
-          begin
-            match unbox_pair pair with
-              | Variant ("Star", _), Variant ("Any", _) ->
-                  Some (str "%")
-              | _ -> None
-          end
-      | Variant ("Simply", Constant (Constant.String s)) ->
-          Some (str (quote s))
-      | Variant ("Simply", Project (v, field)) ->
-          Some (Project (v, field))
-      | Variant ("Quote", Variant ("Simply", v)) ->
-         let rec string =
-            function
-              | Constant (Constant.String s) -> Some (str (quote s))
-              | Singleton (Constant (Constant.Char c)) ->
-                  Some (str (string_of_char c))
-              | Project (v, field) ->
-                  Some (Project (v, field))
-              | Apply (Primitive "intToString", [Constant (Constant.Int x)]) ->
-                  Some (str (string_of_int x))
-              | Concat vs ->
-                  let rec concat =
-                    function
-                      | [] -> Some (str "")
-                      | v::vs ->
-                          begin
-                            match string v with
-                              | None -> None
-                              | Some s ->
-                                  begin
-                                    match concat vs with
-                                      | None -> None
-                                      | Some s' ->
-                                          Some (append s s')
-                                  end
-                          end
-                  in
-                    concat vs
-              | _ -> None
-          in
-            string v
-      | Variant ("Seq", rs) ->
-          let rec seq =
-            function
-              | [] -> Some (str "")
-              | r::rs ->
-                  begin
-                    match likeify r with
-                      | None -> None
-                      | Some s ->
-                          begin
-                            match seq rs with
-                              | None -> None
-                              | Some s' -> Some (append s s')
-                          end
-                  end
-          in
-            seq (unbox_list rs)
-      | Variant ("StartAnchor", _) -> Some (str "")
-      | Variant ("EndAnchor", _) -> Some (str "")
-      | e ->
-          Debug.print ("Could not likeify: " ^ (string_of_t e));
-          assert false
+  let rec likeify v =
+    let quote = Str.global_replace (Str.regexp_string "%") "\\%" in
+    let append x y = Apply (Primitive "^^",  [x; y]) in
+    let str x = Constant (Constant.String x) in
+      match v with
+        | Variant ("Repeat", pair) ->
+            begin
+              match unbox_pair pair with
+                | Variant ("Star", _), Variant ("Any", _) ->
+                    Some (str "%")
+                | _ -> None
+            end
+        | Variant ("Simply", Constant (Constant.String s)) ->
+            Some (str (quote s))
+        | Variant ("Simply", Project (v, field)) ->
+            Some (Project (v, field))
+        | Variant ("Quote", Variant ("Simply", v)) ->
+           let rec string =
+              function
+                | Constant (Constant.String s) -> Some (str (quote s))
+                | Singleton (Constant (Constant.Char c)) ->
+                    Some (str (string_of_char c))
+                | Project (v, field) ->
+                    Some (Project (v, field))
+                | Apply (Primitive "intToString", [Constant (Constant.Int x)]) ->
+                    Some (str (string_of_int x))
+                | Concat vs ->
+                    let rec concat =
+                      function
+                        | [] -> Some (str "")
+                        | v::vs ->
+                            begin
+                              match string v with
+                                | None -> None
+                                | Some s ->
+                                    begin
+                                      match concat vs with
+                                        | None -> None
+                                        | Some s' ->
+                                            Some (append s s')
+                                    end
+                            end
+                    in
+                      concat vs
+                | _ -> None
+            in
+              string v
+        | Variant ("Seq", rs) ->
+            let rec seq =
+              function
+                | [] -> Some (str "")
+                | r::rs ->
+                    begin
+                      match likeify r with
+                        | None -> None
+                        | Some s ->
+                            begin
+                              match seq rs with
+                                | None -> None
+                                | Some s' -> Some (append s s')
+                            end
+                    end
+            in
+              seq (unbox_list rs)
+        | Variant ("StartAnchor", _) -> Some (str "")
+        | Variant ("EndAnchor", _) -> Some (str "")
+        | e ->
+            Debug.print ("Could not likeify: " ^ (string_of_t e));
+            assert false
 
 let rec select_clause : Sql.index -> bool -> t -> Sql.select_clause =
   fun index unit_query v ->
