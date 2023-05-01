@@ -156,8 +156,9 @@ module TransactionTime = struct
     Sql.Transaction ([
       (* Note: Modified this to treat child queries as a transaction, for
          consistency. *)
-      Sql.With (Sql.string_of_table_var sel_var,
-        sel_query, [ins_query; upd_query])
+      Sql.With (
+        [Sql.string_of_table_var sel_var, sel_query],
+        [ins_query; upd_query])
     ])
 
 
@@ -378,8 +379,9 @@ module ValidTime = struct
 
         (* Finally, construct the transaction. *)
         Transaction ([
-          Sql.With (Sql.string_of_table_var sel_var,
-            select, [insert; upd_current; upd_future])
+          Sql.With (
+            [Sql.string_of_table_var sel_var, select],
+            [insert; upd_current; upd_future])
         ])
 
     let nonsequenced :
@@ -412,8 +414,15 @@ module ValidTime = struct
       Sql.query =
         fun table_types ((tbl_var, table), where, app_from, app_to, set) from_field to_field ->
           let open Sql in
-          let app_from = base [] app_from in
-          let app_to = base [] app_to in
+          (* Period of applicability *)
+          let pa_from = base [] app_from in
+          let pa_to = base [] app_to in
+
+          let proj field = Project (tbl_var, field) in
+
+          (* Period of validity*)
+          let pv_from = proj from_field in
+          let pv_to   = proj to_field in
 
           (* Preamble: Unbox, get things set up *)
 
@@ -432,7 +441,6 @@ module ValidTime = struct
               | Some where -> op_and (base [] where) pred
               | None -> pred in
 
-          let proj field = Project (tbl_var, field) in
 
           (* 2x Selections *)
           (*  - Select either the field name if unspecified, or the updated value
@@ -449,6 +457,7 @@ module ValidTime = struct
               |> List.map (fun (k, v) -> (v, k)) in
             Sql.Select (All, Fields fields, [TableRef (table, tbl_var)], where, []) in
 
+          (*
           let insert_select sel =
             let var = Var.fresh_raw_var () in
             let ins =
@@ -458,6 +467,14 @@ module ValidTime = struct
                 ins_records = TableQuery var
               } in
             Sql.With (Sql.string_of_table_var var, sel, [ins]) in
+          *)
+          let sql_with sels inners =
+            let sels =
+              List.map (fun (var, sel) -> (Sql.string_of_table_var var, sel)) sels
+            in
+            Sql.With (sels, inners)
+          in
+
 
           (*  - Selection / insert #1: Old values at beginning of period of
                 applicability *)
@@ -465,76 +482,66 @@ module ValidTime = struct
             let where =
               let open OpHelpers in
               op_and
-                (lt (proj from_field) app_from)
-                (gt (proj to_field) app_from)
+                (lt pv_from pa_from)
+                (gt pv_to pa_from)
               |> and_where in
-            make_select [(to_field, app_from)] where |> insert_select in
+            make_select [(to_field, pa_from)] where
+          in
+
+          let insert_query var =
+              Sql.Insert {
+                ins_table = table;
+                ins_fields = field_names;
+                ins_records = TableQuery var
+              }
+          in
 
           (* Selection / insert #2: Old values at end of period of applicability *)
           let sel2 =
             let where =
               let open OpHelpers in
               op_and
-                (lt (proj from_field) app_to)
-                (gt (proj to_field) app_to)
+                (lt pv_from pa_to)
+                (gt pv_to pa_to)
               |> and_where in
-            make_select [(from_field, app_to)] where |> insert_select in
+            make_select [(from_field, pa_to)] where in
 
-          (* Update #1: Update rows overlapping PA. *)
-          let upd1 =
+          (* Update: Set start field to greatest(pa-start, pv-start) and end field to
+             least(pa-end, pv-end)*)
+          let upd =
+            let greatest b1 b2 = Apply ("greatest", [b1; b2]) in
+            let least b1 b2 = Apply ("least", [b1; b2]) in
+            let where =
+              let open OpHelpers in
+              op_and
+                (lt pv_from pa_to)
+                (gt pv_to pa_from)
+              |> and_where in
+
+            let new_from = greatest pa_from pv_from in
+            let new_to = least pa_to pv_to in
             let upd_fields =
               Q.unbox_record set
               |> StringMap.to_alist
               |> List.map (fun (k, v) -> (k, base [] v)) in
 
-            let where =
-              let open OpHelpers in
-              op_and
-                (lt (proj from_field) app_to)
-                (gt (proj to_field) app_from)
-              |> and_where in
-
-            (* - Unpack fields to be updated *)
             Sql.Update {
               upd_table = table;
-              upd_fields;
-              upd_where = Some where
-            } in
-          (* Update #2: Set start time of updated rows to be start of PA. *)
-          let upd2 =
-            let where =
-              let open OpHelpers in
-              op_and
-                (lt (proj from_field) app_from)
-                (gt (proj to_field) app_from)
-              |> and_where in
-
-            (* - Unpack fields to be updated *)
-            Sql.Update {
-              upd_table = table;
-              upd_fields = [(from_field, app_from)];
+              upd_fields = upd_fields @ [(from_field, new_from); (to_field, new_to)];
               upd_where = Some where
             } in
 
-          (* Update #3: Set end time of updated rows to be end of PA. *)
-          let upd3 =
-            let where =
-              let open OpHelpers in
-              op_and
-                (lt (proj from_field) app_to)
-                (gt (proj to_field) app_to)
-              |> and_where in
-
-            (* - Unpack fields to be updated *)
-            Sql.Update {
-              upd_table = table;
-              upd_fields = [(to_field, app_to)];
-              upd_where = Some where
-            } in
-
-          (* Batch up *)
+          (* Overall query:
+               WITH sel1
+                 WITH sel2
+                   Transaction [update to set greatest / least; ins1, ins2 ]
+           *)
+          let v1 = Var.fresh_raw_var () in
+          let v2 = Var.fresh_raw_var () in
           Transaction [
-            sel1; sel2; upd1; upd2; upd3
+            sql_with
+              [(v1, sel1); (v2, sel2)]
+              [upd; insert_query v1; insert_query v2]
           ]
   end
 
@@ -664,7 +671,7 @@ module ValidTime = struct
 
           (* Package everything up in a transaction *)
           Sql.Transaction [
-              Sql.With (Sql.string_of_table_var sel_var, sel_query,
+            Sql.With ([Sql.string_of_table_var sel_var, sel_query],
                 [ins_query; upd1; upd2; del])
           ]
   end

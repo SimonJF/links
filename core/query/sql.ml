@@ -21,7 +21,7 @@ type query =
       upd_where: base option
     }
   | Delete    of { del_table: table_name; del_where: base option }
-  | With      of table_name * query * query list
+  | With      of (table_name * query) list * query list
   | Transaction of query list (* SQL Transaction: Complete atomically*)
 (* Values: list of values to insert.
    TableQuery: allows us to insert result of previous query, bound to a variable. *)
@@ -322,11 +322,16 @@ class virtual printer =
           self#pp_update ppf upd_table upd_fields upd_where
       | Insert { ins_table; ins_fields; ins_records } ->
           self#pp_insert ppf ins_table ins_fields ins_records
-      | With (z, q, qs) ->
-          Format.fprintf ppf "with %s as (@[<v>%a@])\n%a"
-            z
-            pr_q q
-            pp_qs qs
+      | With (qs, qs_inner) ->
+          assert (List.length qs > 0);
+          let print_subquery ppf (var, sel) =
+            Format.fprintf ppf "%s as (@[<v>%a@])\n"
+                var
+                pr_q sel
+          in
+          Format.fprintf ppf "with %a\n%a"
+            (self#pp_comma_separated print_subquery) qs
+            pp_qs qs_inner
       | Transaction qs ->
           Format.fprintf ppf "BEGIN; %a COMMIT;" pp_qs qs
 
@@ -448,7 +453,7 @@ let rec inline_outer_with q =
     | fromclause -> fromclause
   in
   match q with
-    | With (z, q, [Select (fSet, fields, tables, condition, os)]) ->
+    | With ([(z, q)], [Select (fSet, fields, tables, condition, os)]) ->
         Select(fSet, fields, List.map (replace_subquery z q) tables, condition, os)
     | Union (fSet, qs,n) -> Union (fSet, List.map inline_outer_with qs,n)
     | q -> q
