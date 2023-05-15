@@ -6,6 +6,8 @@ Links: Linking Theory to Practice for the Web
 Links helps to build modern Ajax-style applications: those with
 significant client- and server-side components.
 
+It is awesome.
+
 A typical, modern web program involves many "tiers": part of the
 program runs in the web browser, part runs on a web server, and part
 runs in specialized systems such as a relational database. To create
